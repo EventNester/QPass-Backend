@@ -4,6 +4,10 @@ const logger = require("./logger");
 let redis;
 
 function createRedisClient() {
+  if (redis) {
+    return redis;
+  }
+
   const config = {
     host: process.env.REDIS_HOST || "localhost",
     port: parseInt(process.env.REDIS_PORT, 10) || 6379,
@@ -17,7 +21,6 @@ function createRedisClient() {
   };
 
   redis = new Redis(config);
-
   redis.on("connect", () => {
     logger.info("Redis client connected");
   });

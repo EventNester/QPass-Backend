@@ -83,7 +83,8 @@ The API will be available at `http://localhost:3000`
 |---------|-------------|
 | `npm run dev` | Start development server with hot reload |
 | `npm start` | Start production server |
-| `npm test` | Run tests |
+| `npm test` | Run tests (watch mode) |
+| `npm run test:run` | Run tests once |
 | `npm run test:coverage` | Run tests with coverage |
 | `npm run migrate` | Run database migrations |
 | `npm run migrate:prod` | Deploy migrations (production) |
