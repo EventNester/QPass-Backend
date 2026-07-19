@@ -1,27 +1,11 @@
-const express = require("express");
-const checkinController = require("./checkins.controller");
-const validate = require("../../middlewares/validation.middleware");
-const { scanQrSchema } = require("./checkins.schema");
-const { authenticate } = require("../../middlewares/auth.middleware");
-const { authorize } = require("../../middlewares/rbac.middleware");
+import { Router } from "express";
+import * as checkinController from "./checkins.controller.js";
+import { scanQrSchema } from "./checkins.schema.js";
 
-const router = express.Router();
+const router = Router();
 
-router.post(
-  "/:eventId/scan",
-  authenticate,
-  authorize("STAFF", "ADMIN"),
-  validate(scanQrSchema),
-  checkinController.scanQr
-);
+router.post("/:eventId/scan", checkinController.scanQr);
+router.get("/:eventId/checkins", checkinController.getCheckins);
+router.post("/:eventId/checkins/:checkInId/undo", checkinController.undoCheckin);
 
-router.get("/:eventId/checkins", authenticate, checkinController.getCheckins);
-
-router.post(
-  "/:eventId/checkins/:checkInId/undo",
-  authenticate,
-  authorize("ADMIN"),
-  checkinController.undoCheckin
-);
-
-module.exports = router;
+export default router;
