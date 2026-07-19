@@ -87,14 +87,28 @@ export async function getCheckins(eventId) {
   });
 }
 
-export async function undoCheckin(checkInId) {
+export async function undoCheckin(eventId, checkInId, staffId) {
   const checkin = await prisma.checkIn.findUnique({ where: { id: checkInId } });
   if (!checkin) throw new NotFoundError("Check-in not found");
+  if (checkin.eventId !== eventId) throw new NotFoundError("Check-in not found");
 
-  await prisma.checkIn.update({
-    where: { id: checkInId },
-    data: { result: "INVALID" },
-  });
+  await prisma.$transaction([
+    prisma.auditLog.create({
+      data: {
+        actorId: staffId,
+        action: "UNDO_CHECKIN",
+        entity: "CheckIn",
+        entityId: checkInId,
+        beforeSnapshot: {
+          eventId: checkin.eventId,
+          registrationId: checkin.registrationId,
+          result: checkin.result,
+          scannedAt: checkin.scannedAt.toISOString(),
+        },
+      },
+    }),
+    prisma.checkIn.delete({ where: { id: checkInId } }),
+  ]);
 
   return { success: true };
 }

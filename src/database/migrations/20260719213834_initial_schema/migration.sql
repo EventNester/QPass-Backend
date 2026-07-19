@@ -253,6 +253,9 @@ CREATE UNIQUE INDEX "invoices_payment_id_key" ON "invoices"("payment_id");
 CREATE UNIQUE INDEX "invoices_invoice_number_key" ON "invoices"("invoice_number");
 
 -- CreateIndex
+CREATE INDEX "invoices_event_id_idx" ON "invoices"("event_id");
+
+-- CreateIndex
 CREATE INDEX "notifications_recipient_idx" ON "notifications"("recipient");
 
 -- CreateIndex

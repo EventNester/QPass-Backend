@@ -243,6 +243,7 @@ model Invoice {
   event   Event   @relation(fields: [eventId], references: [id])
   payment Payment @relation(fields: [paymentId], references: [id])
 
+  @@index([eventId])
   @@map("invoices")
 }
 

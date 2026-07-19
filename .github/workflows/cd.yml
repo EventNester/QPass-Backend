@@ -83,6 +83,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Add deployment steps here
-      # - name: Deploy to production
-      #   run: echo "Add your deployment commands here"
+      - name: Deploy to production
+        run: echo "Deployment not yet configured — add your deploy command here (e.g., docker push, fly deploy, rsync) and remove this step."
