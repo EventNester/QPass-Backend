@@ -154,7 +154,7 @@ model TicketCode {
 model Registration {
   id             String             @id @default(cuid())
   eventId        String             @map("event_id")
-  ticketCodeId   String             @map("ticket_code_id")
+  ticketCodeId   String             @unique @map("ticket_code_id")
   attendeeEmail  String             @map("attendee_email")
   attendeeName   String             @map("attendee_name")
   qrIssued       Boolean            @default(false) @map("qr_issued")
@@ -203,6 +203,7 @@ model CheckIn {
   registration Registration @relation(fields: [registrationId], references: [id])
   staff        User         @relation(fields: [staffId], references: [id])
 
+  @@unique([eventId, registrationId])
   @@index([eventId])
   @@index([registrationId])
   @@map("check_ins")

@@ -18,8 +18,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "docs": "swagger-jsdoc -o docs/swagger.yaml",
-    "prepare": "node -e \"try{require('fs').accessSync('./src/database/schema.prisma');require('child_process').execSync('prisma generate',{stdio:'inherit'})}catch(e){}\""
-  },
+    "prepare": "node -e \"const fs=require('fs');const cp=require('child_process');if(fs.existsSync('./src/database/schema.prisma')) cp.execSync('prisma generate',{stdio:'inherit'});\""  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EventNester/EventNester-backend.git"
