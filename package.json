@@ -38,6 +38,9 @@
     "url": "https://github.com/EventNester/EventNester-backend/issues"
   },
   "homepage": "https://github.com/EventNester/EventNester-backend#readme",
+  "overrides": {
+    "glob": "13.0.6"
+  },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "axios": "^1.8.4",
