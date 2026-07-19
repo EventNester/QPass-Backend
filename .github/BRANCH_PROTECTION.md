@@ -39,23 +39,6 @@
 | Rule | Setting | Enabled |
 |------|---------|---------|
 | Require status checks to pass | Choose which status checks must pass before the ref is updated | ✅ |
-| Status checks to add | `build (20.x)`, `build (22.x)`, `lint`, `test` | — |
+| Status checks to add | `build`, `lint`, `test`, `validate` | — |
 | Require branches to be up to date before merging | Pull requests must be tested with the latest code | ✅ |
 | Do not require status checks on creation | Leave unchecked | ❌ |
-
-## Skipped Rules
-
-These are intentionally skipped unless you plan to configure them later:
-
-- Require linear history
-- Require merge queue
-- Require deployments to succeed
-- Require signed commits
-- Require review from specific teams
-- Require code scanning results
-- Require code quality results
-- Restrict code coverage
-- Automatically request Copilot code review
-- Restrictions (enterprise)
-- Restrict commit metadata
-- Restrict branch names
