@@ -1,0 +1,68 @@
+{
+  "name": "eventnester-backend",
+  "version": "1.0.0",
+  "description": "QR Code-Based Event Attendance & Ticket Verification System",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
+    "migrate:reset": "prisma migrate reset",
+    "seed": "node src/database/seed.js",
+    "studio": "prisma studio",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "docs": "swagger-jsdoc -o docs/swagger.yaml",
+    "prepare": "prisma generate"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EventNester/EventNester-backend.git"
+  },
+  "keywords": [
+    "event",
+    "attendance",
+    "qr-code",
+    "ticketing",
+    "verification"
+  ],
+  "author": "EventNester Team",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/EventNester/EventNester-backend/issues"
+  },
+  "homepage": "https://github.com/EventNester/EventNester-backend#readme",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "axios": "^1.8.4",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.1",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@prisma/config": "^6.2.0",
+    "eslint": "^9.17.0",
+    "nodemon": "^3.1.9",
+    "prisma": "^6.19.3",
+    "supertest": "^7.0.0",
+    "vitest": "^2.1.8"
+  }
+}

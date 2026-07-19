@@ -1,15 +1,53 @@
+# Dependencies
 node_modules/
-.env
-.env.local
-.env.*.local
+
+# Build output
 dist/
 build/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+
+# Prisma
+src/database/migrations/**/migration_lock.toml
+
+# Coverage
 coverage/
+
+# Uploads
 uploads/*
 !uploads/.gitkeep
+
+# Logs
+logs/
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+.directory
+
+# IDEs
 .vscode/
 .idea/
+
+# ESLint
+.eslintcache
+
+# Test outputs
+test-results/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
