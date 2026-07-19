@@ -1,6 +1,5 @@
 import { Router } from "express";
 import * as checkinController from "./checkins.controller.js";
-import { scanQrSchema } from "./checkins.schema.js";
 
 const router = Router();
 
