@@ -6,12 +6,16 @@ QR Code-Based Event Attendance & Ticket Verification System
 
 - **Runtime:** Node.js 22 LTS
 - **Framework:** Express.js 5.x
+- **Module System:** ES Modules
 - **Database:** PostgreSQL 15+ with Prisma ORM
-- **Cache:** Redis
+- **Cache:** Redis 7+
 - **Real-time:** Socket.IO
 - **Validation:** Zod
 - **Logging:** Pino
 - **Testing:** Vitest + Supertest
+- **Email:** Brevo
+- **Payments:** Paystack
+- **Error Tracking:** Sentry
 
 ## Prerequisites
 
@@ -30,6 +34,8 @@ cd EventNester-backend
 npm install
 ```
 
+`npm install` automatically runs `prisma generate` via the `prepare` script.
+
 ### 2. Set up environment variables
 
 ```bash
@@ -39,20 +45,22 @@ cp .env.example .env
 Edit `.env` with your configuration. Required variables:
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/event_nester?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/event_nester?schema=public"
 JWT_SECRET=your_secret_key_min_32_bytes_long_here
 JWT_REFRESH_SECRET=your_refresh_secret_key_min_32_bytes
 ```
 
+> **Note:** The default Docker Compose maps Postgres to port `5433` and Redis to port `6380` on your host to avoid conflicts with locally installed instances. Update your `.env` accordingly.
+
 ### 3. Start services with Docker
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts:
-- PostgreSQL on port 5432
-- Redis on port 6379
+- PostgreSQL on host port `5433` (container port `5432`)
+- Redis on host port `6380` (container port `6379`)
 
 ### 4. Run database migrations
 
@@ -66,16 +74,7 @@ npm run migrate
 npm run dev
 ```
 
-The API will be available at `http://localhost:3000`
-
-## API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /ready` | Readiness check |
-| `GET /api-docs` | Swagger documentation |
-| `GET /api/v1/health` | API health check |
+The API will be available at `http://localhost:3000`.
 
 ## Available Scripts
 
@@ -83,64 +82,92 @@ The API will be available at `http://localhost:3000`
 |---------|-------------|
 | `npm run dev` | Start development server with hot reload |
 | `npm start` | Start production server |
-| `npm test` | Run tests (watch mode) |
-| `npm run test:run` | Run tests once |
-| `npm run test:coverage` | Run tests with coverage |
+| `npm run generate` | Generate Prisma client |
 | `npm run migrate` | Run database migrations |
 | `npm run migrate:prod` | Deploy migrations (production) |
 | `npm run migrate:reset` | Reset database |
 | `npm run seed` | Seed database |
 | `npm run studio` | Open Prisma Studio |
+| `npm test` | Run tests (watch mode) |
+| `npm run test:run` | Run tests once |
+| `npm run test:coverage` | Run tests with coverage |
 | `npm run lint` | Run ESLint |
 | `npm run lint:fix` | Fix ESLint errors |
 | `npm run docs` | Generate Swagger docs |
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check (verifies DB connection) |
+
+> Additional endpoints will be available as modules are implemented. Swagger documentation will be served at `/api-docs` when enabled.
 
 ## Project Structure
 
 ```
 src/
-├── config/          # Configuration files
-├── database/        # Prisma schema and client
-├── modules/         # Domain modules
-│   ├── auth/        # Authentication
-│   ├── events/      # Event management
-│   ├── tickets/     # Ticket codes & QR
-│   ├── checkins/    # Check-in tracking
-│   ├── payments/    # Paystack integration
-│   ├── notifications/ # Email notifications
-│   ├── reports/     # Analytics & reports
-│   └── admin/       # Admin operations
-├── integrations/    # External services
-├── middlewares/     # Express middlewares
-├── realtime/        # Socket.IO handlers
-├── routes/          # API routes
-└── utils/           # Utility functions
+├── app.js              # Express app setup
+├── server.js           # HTTP server, bootstrap, graceful shutdown
+├── config/             # Configuration & environment validation
+├── database/           # Prisma schema, client, seed, migrations
+├── modules/            # Domain modules (controller/service/routes/schema)
+│   ├── auth/           # Authentication & authorization
+│   ├── events/         # Event management
+│   ├── tickets/        # Ticket codes & QR generation
+│   ├── checkins/       # Check-in tracking & verification
+│   ├── payments/       # Paystack integration
+│   ├── notifications/  # Email notifications (Brevo)
+│   ├── reports/        # Analytics & reports
+│   └── admin/          # Admin operations & audit logs
+├── integrations/       # External services (Paystack, Brevo, Sentry)
+├── middlewares/        # Express middlewares (auth, RBAC, validation, error)
+├── realtime/           # Socket.IO handlers & rooms
+├── routes/             # API route registration
+└── utils/              # Utility functions (crypto, errors, validators)
 ```
 
 ## Docker
 
-### Build and run
-
 ```bash
-docker-compose up --build
+# Start services
+docker compose up -d
+
+# Rebuild and start
+docker compose up --build -d
+
+# Stop services
+docker compose down
+
+# Stop and remove volumes
+docker compose down -v
 ```
 
-### Stop services
+## Database
+
+The Prisma schema is located at `src/database/schema.prisma` (not the default `./prisma/schema.prisma`). All Prisma commands use `--schema=./src/database/schema.prisma`.
 
 ```bash
-docker-compose down
-```
+# Generate Prisma client
+npm run generate
 
-### Stop and remove volumes
+# Create migration
+npm run migrate
 
-```bash
-docker-compose down -v
+# Deploy migrations (production)
+npm run migrate:prod
+
+# Reset database
+npm run migrate:reset
+
+# Open Prisma Studio
+npm run studio
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (watch mode)
 npm test
 
 # Run tests once
@@ -148,32 +175,6 @@ npm run test:run
 
 # Run with coverage
 npm run test:coverage
-```
-
-## Database
-
-### Generate Prisma client
-
-```bash
-npm run generate
-```
-
-### Create migration
-
-```bash
-npm run migrate -- --name migration_name
-```
-
-### Reset database
-
-```bash
-npm run migrate:reset
-```
-
-### Open Prisma Studio
-
-```bash
-npm run studio
 ```
 
 ## Deployment
@@ -184,10 +185,7 @@ npm run studio
 
 ## Contributing
 
-1. Create a feature branch
-2. Make your changes
-3. Run tests and lint
-4. Submit a pull request
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## License
 

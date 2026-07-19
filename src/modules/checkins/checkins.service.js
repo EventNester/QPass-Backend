@@ -1,9 +1,9 @@
-const prisma = require("../../database");
-const { getRedisClient } = require("../../config/redis");
-const { hashToken } = require("../../utils/crypto");
-const { NotFoundError, ConflictError } = require("../../utils/error");
+import prisma from "../../database/index.js";
+import { getRedisClient } from "../../config/redis.js";
+import { hashToken } from "../../utils/crypto.js";
+import { NotFoundError, ConflictError } from "../../utils/error.js";
 
-async function scanQr(eventId, data, staffId) {
+export async function scanQr(eventId, data, staffId) {
   const redis = getRedisClient();
   const tokenHash = hashToken(data.token);
 
@@ -76,7 +76,7 @@ async function scanQr(eventId, data, staffId) {
   }
 }
 
-async function getCheckins(eventId) {
+export async function getCheckins(eventId) {
   return prisma.checkIn.findMany({
     where: { eventId },
     include: {
@@ -87,7 +87,7 @@ async function getCheckins(eventId) {
   });
 }
 
-async function undoCheckin(checkInId) {
+export async function undoCheckin(checkInId) {
   const checkin = await prisma.checkIn.findUnique({ where: { id: checkInId } });
   if (!checkin) throw new NotFoundError("Check-in not found");
 
@@ -98,5 +98,3 @@ async function undoCheckin(checkInId) {
 
   return { success: true };
 }
-
-module.exports = { scanQr, getCheckins, undoCheckin };

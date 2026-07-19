@@ -1,4 +1,4 @@
-const { z } = require("zod");
+import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -38,7 +38,7 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().optional().default(""),
 });
 
-function validateEnv() {
+export function validateEnv() {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
@@ -50,4 +50,4 @@ function validateEnv() {
   return parsed.data;
 }
 
-module.exports = { validateEnv, envSchema };
+export { envSchema };

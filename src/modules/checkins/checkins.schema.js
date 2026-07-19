@@ -1,8 +1,6 @@
-const z = require("zod");
+import { z } from "zod";
 
-const scanQrSchema = z.object({
+export const scanQrSchema = z.object({
   token: z.string().min(1),
   deviceInfo: z.string().optional(),
 });
-
-module.exports = { scanQrSchema };

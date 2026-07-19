@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   ROLES: {
     ATTENDEE: "ATTENDEE",
     STAFF: "STAFF",

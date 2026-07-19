@@ -1,7 +1,7 @@
-const checkinService = require("./checkins.service");
-const { success } = require("../../utils/response");
+import * as checkinService from "./checkins.service.js";
+import { success } from "../../utils/response.js";
 
-async function scanQr(req, res, next) {
+export async function scanQr(req, res, next) {
   try {
     const result = await checkinService.scanQr(req.params.eventId, req.body, req.user.id);
     return success(res, result, result.message);
@@ -10,7 +10,7 @@ async function scanQr(req, res, next) {
   }
 }
 
-async function getCheckins(req, res, next) {
+export async function getCheckins(req, res, next) {
   try {
     const result = await checkinService.getCheckins(req.params.eventId);
     return success(res, result);
@@ -19,13 +19,11 @@ async function getCheckins(req, res, next) {
   }
 }
 
-async function undoCheckin(req, res, next) {
+export async function undoCheckin(req, res, next) {
   try {
     const result = await checkinService.undoCheckin(req.params.checkInId);
-    return success(res, result, "Check-in undone successfully");
+    return success(res, result);
   } catch (err) {
     next(err);
   }
 }
-
-module.exports = { scanQr, getCheckins, undoCheckin };

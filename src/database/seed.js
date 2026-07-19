@@ -1,21 +1,10 @@
-const { PrismaClient } = require("@prisma/client");
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("Seeding database...");
-
-  // Add your seed data here
-  // Example:
-  // await prisma.user.create({
-  //   data: {
-  //     name: "Admin User",
-  //     email: "admin@eventnester.com",
-  //     passwordHash: "hashed_password_here",
-  //     role: "ADMIN",
-  //   },
-  // });
-
+  // Add seed data here
   console.log("Database seeded successfully");
 }
 

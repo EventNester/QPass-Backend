@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   SUCCESS: {
     AUTH: {
       REGISTER: "Account created successfully",
@@ -66,10 +66,13 @@ module.exports = {
     },
     GENERAL: {
       NOT_FOUND: "Resource not found",
+      ROUTE_NOT_FOUND: "Route not found",
       VALIDATION_ERROR: "Validation error",
       INTERNAL_ERROR: "Internal server error",
       SERVICE_UNAVAILABLE: "Service temporarily unavailable",
       TOO_MANY_REQUESTS: "Too many requests, please try again later",
+      DB_CONNECTION_FAILED: "Database connection failed",
+      SERVER_START_FAILED: "Failed to start server",
     },
   },
 
@@ -77,6 +80,12 @@ module.exports = {
     HEALTH: {
       OK: "Service is healthy",
       DEGRADED: "Service is running in degraded mode",
+    },
+    SERVER: {
+      RUNNING: "Server running on port",
+      DB_CONNECTED: "Database connected",
+      REDIS_CONNECTED: "Redis initialized",
+      SHUTTING_DOWN: "Shutting down",
     },
   },
 };
