@@ -21,7 +21,7 @@ export async function getCheckins(req, res, next) {
 
 export async function undoCheckin(req, res, next) {
   try {
-    const result = await checkinService.undoCheckin(req.params.checkInId);
+    const result = await checkinService.undoCheckin(req.params.eventId, req.params.checkInId, req.user.id);
     return success(res, result);
   } catch (err) {
     next(err);

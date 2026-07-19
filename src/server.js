@@ -18,18 +18,19 @@ server.listen(config.PORT, async () => {
   }
 });
 
-process.on("SIGTERM", async () => {
+async function gracefulShutdown() {
   server.close(async () => {
-    await prisma.$disconnect();
-    await closeRedisClient();
-    process.exit(0);
+    try {
+      await prisma.$disconnect();
+      await closeRedisClient();
+      process.exit(0);
+    } catch (error) {
+      logger.error(systemMessages.ERROR.GENERAL.SERVER_START_FAILED, error.message);
+      process.exit(1);
+    }
   });
-});
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
 
-process.on("SIGINT", async () => {
-  server.close(async () => {
-    await prisma.$disconnect();
-    await closeRedisClient();
-    process.exit(0);
-  });
-});
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
