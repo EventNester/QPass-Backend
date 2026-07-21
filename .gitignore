@@ -15,6 +15,9 @@ build/
 # Prisma
 src/database/migrations/**/migration_lock.toml
 
+# Generated docs
+docs/swagger.yaml
+
 # Coverage
 coverage/
 
