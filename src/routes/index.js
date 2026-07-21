@@ -9,13 +9,11 @@ const router = Router();
 router.use("/health", healthRouter);
 router.use("/api/v1", v1Router);
 
-router.get("/api-docs.json", (req, res) => {
-  res.json(swaggerSpec);
-});
-
 const config = getConfig();
 if (config.SWAGGER_ENABLED) {
+  router.get("/api-docs.json", (req, res) => {
+    res.json(swaggerSpec);
+  });
   router.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
-
 export default router;

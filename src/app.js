@@ -23,9 +23,10 @@ app.use((req, res) => {
 
 app.use((err, req, res, _next) => {
   logger.error(err.message);
-  res.status(err.status || 500).json({
+  const isValidStatus = typeof err.status === "number" && err.status >= 400 && err.status < 600;
+  res.status(isValidStatus ? err.status : 500).json({
     status: "error",
-    message: err.message || systemMessages.ERROR.GENERAL.INTERNAL_ERROR,
+    message: systemMessages.ERROR.GENERAL.INTERNAL_ERROR,
   });
 });
 
