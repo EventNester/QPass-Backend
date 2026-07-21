@@ -99,9 +99,12 @@ The API will be available at `http://localhost:3000`.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Health check (verifies DB connection) |
+| `GET /health` | Health check (verifies DB + Redis connectivity) |
+| `POST /api/v1/checkins/:eventId/scan` | Scan QR code for event check-in |
+| `GET /api/v1/checkins/:eventId/checkins` | List check-ins for an event |
+| `POST /api/v1/checkins/:eventId/checkins/:checkInId/undo` | Undo a check-in |
 
-> Additional endpoints will be available as modules are implemented. Swagger documentation will be served at `/api-docs` when enabled.
+> Swagger documentation will be served at `/api-docs` when enabled.
 
 ## Project Structure
 
@@ -113,18 +116,17 @@ src/
 ├── database/           # Prisma schema, client, seed, migrations
 ├── modules/            # Domain modules (controller/service/routes/schema)
 │   ├── auth/           # Authentication & authorization
-│   ├── events/         # Event management
-│   ├── tickets/        # Ticket codes & QR generation
-│   ├── checkins/       # Check-in tracking & verification
+│   ├── checkins/       # Check-in tracking & verification (implemented)
 │   ├── payments/       # Paystack integration
 │   ├── notifications/  # Email notifications (Brevo)
 │   ├── reports/        # Analytics & reports
+│   ├── tickets/        # Ticket codes & QR generation
 │   └── admin/          # Admin operations & audit logs
 ├── integrations/       # External services (Paystack, Brevo, Sentry)
-├── middlewares/        # Express middlewares (auth, RBAC, validation, error)
+├── middlewares/        # Express middlewares (logging, rate-limit, RBAC)
 ├── realtime/           # Socket.IO handlers & rooms
 ├── routes/             # API route registration
-└── utils/              # Utility functions (crypto, errors, validators)
+└── utils/              # Utility functions (crypto, errors, response, validators)
 ```
 
 ## Docker
