@@ -6,6 +6,7 @@ export const globalLimiter = rateLimit({
   max: constants.RATE_LIMIT.MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.url === "/health",
   message: {
     status: "error",
     message: "Too many requests, please try again later",
