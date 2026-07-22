@@ -1,4 +1,4 @@
-# Contributing to EventNester Backend
+# Contributing to QPass Backend
 
 Thank you for contributing! This guide covers setup, conventions, and the PR workflow.
 
@@ -7,9 +7,9 @@ Thank you for contributing! This guide covers setup, conventions, and the PR wor
 ### 1. Fork and clone
 
 ```bash
-git clone https://github.com/<your-username>/EventNester-backend.git
-cd EventNester-backend
-git remote add upstream https://github.com/EventNester/EventNester-backend.git
+git clone https://github.com/<your-username>/QPass-Backend.git
+cd QPass-Backend
+git remote add upstream https://github.com/EventNester/QPass-Backend.git
 ```
 
 ### 2. Install dependencies
