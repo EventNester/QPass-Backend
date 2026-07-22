@@ -1,3 +1,5 @@
+name: qpass
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -6,7 +8,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=event_nester
+      - POSTGRES_DB=qpass
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - eventnester
+      - qpass
 
   redis:
     image: redis:7-alpine
@@ -29,12 +31,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - eventnester
+      - qpass
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  eventnester:
+  qpass:
     driver: bridge

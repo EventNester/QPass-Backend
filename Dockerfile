@@ -23,7 +23,7 @@ WORKDIR /app
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S eventnester -u 1001
+RUN adduser -S qpass -u 1001
 
 # Copy built application
 COPY --from=builder /app/node_modules ./node_modules
@@ -31,9 +31,9 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/package.json ./
 
 # Set ownership
-RUN chown -R eventnester:nodejs /app
+RUN chown -R qpass:nodejs /app
 
-USER eventnester
+USER qpass
 
 # Expose port
 EXPOSE 3000

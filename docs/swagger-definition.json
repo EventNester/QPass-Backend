@@ -1,12 +1,12 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "EventNester API",
+    "title": "QPass API",
     "version": "1.0.0",
     "description": "QR Code-Based Event Attendance & Ticket Verification System API",
     "contact": {
-      "name": "EventNester Team",
-      "email": "support@eventnester.com"
+      "name": "QPass Team",
+      "email": "support@qpass.com"
     }
   },
   "servers": [
