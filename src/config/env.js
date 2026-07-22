@@ -14,7 +14,7 @@ const envSchema = z.object({
   DB_PORT: z.coerce.number().default(5432),
   DB_USER: z.string().default("postgres"),
   DB_PASSWORD: z.string().default("postgres"),
-  DB_NAME: z.string().default("event_nester"),
+  DB_NAME: z.string().default("qpass"),
   DATABASE_URL: z.string(),
 
   REDIS_HOST: z.string().default("localhost"),
@@ -32,8 +32,8 @@ const envSchema = z.object({
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
   BREVO_API_KEY: z.string().optional().default(""),
-  BREVO_SENDER_EMAIL: z.string().optional().default("noreply@eventnester.com"),
-  BREVO_SENDER_NAME: z.string().optional().default("EventNester"),
+  BREVO_SENDER_EMAIL: z.string().optional().default("noreply@qpass.com"),
+  BREVO_SENDER_NAME: z.string().optional().default("QPass"),
 
   SENTRY_DSN: z.string().optional().default(""),
 });
