@@ -1,4 +1,4 @@
-# EventNester Backend
+# QPass Backend
 
 QR Code-Based Event Attendance & Ticket Verification System
 
@@ -29,8 +29,8 @@ QR Code-Based Event Attendance & Ticket Verification System
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/EventNester/EventNester-backend.git
-cd EventNester-backend
+git clone https://github.com/EventNester/QPass-Backend.git
+cd QPass-Backend
 npm install
 ```
 
@@ -45,7 +45,7 @@ cp .env.example .env
 Edit `.env` with your configuration. Required variables:
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5433/event_nester?schema=public"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/qpass?schema=public"
 JWT_SECRET=your_secret_key_min_32_bytes_long_here
 JWT_REFRESH_SECRET=your_refresh_secret_key_min_32_bytes
 ```

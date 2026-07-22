@@ -1,5 +1,5 @@
 {
-  "name": "eventnester-backend",
+  "name": "qpass-backend",
   "version": "1.0.0",
   "description": "QR Code-Based Event Attendance & Ticket Verification System",
   "main": "src/server.js",
@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/EventNester/EventNester-backend.git"
+    "url": "git+https://github.com/EventNester/QPass-Backend.git"
   },
   "keywords": [
     "event",
@@ -31,13 +31,13 @@
     "ticketing",
     "verification"
   ],
-  "author": "EventNester Team",
+  "author": "QPass Team",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/EventNester/EventNester-backend/issues"
+    "url": "https://github.com/EventNester/QPass-Backend/issues"
   },
-  "homepage": "https://github.com/EventNester/EventNester-backend#readme",
+  "homepage": "https://github.com/EventNester/QPass-Backend#readme",
   "overrides": {
     "glob": "13.0.6",
     "yaml": "2.9.0",
