@@ -1,9 +1,13 @@
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import prisma from '../../database/index.js';
+import { ConflictError, UnauthorizedError } from '../../utils/error.js';
+import { getRedisClient } from "../../config/redis.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'supersecretrefreshkey';
-const ACCESS_TOKEN_EXPIRY = '15m';
-const REFRESH_TOKEN_EXPIRY = '7d';
+import { getConfig } from "../../config/index.js";
+
+const config = getConfig();
+const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } = config;
 
 /**
  * Generate Access and Refresh JWT Tokens
@@ -11,14 +15,13 @@ const REFRESH_TOKEN_EXPIRY = '7d';
 export const generateTokens = (user) => {
   const payload = {
     sub: user.id,
-    firstName: user.firstName,
-    lastName: user.lastName,
+    name: user.name,
     email: user.email,
     role: user.role,
   };
 
-  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
-  const refreshToken = jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const refreshToken = jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
 
   return { accessToken, refreshToken };
 };
@@ -41,18 +44,74 @@ export const refreshToken = (token) => {
   try {
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     const newAccessToken = jwt.sign(
-      {
-        sub: decoded.sub,
-        firstName: decoded.firstName,
-        lastName: decoded.lastName,
-        email: decoded.email,
-        role: decoded.role,
-      },
+      { sub: decoded.sub, name: decoded.name, email: decoded.email, role: decoded.role },
       JWT_SECRET,
-      { expiresIn: ACCESS_TOKEN_EXPIRY }
+      { expiresIn: JWT_EXPIRES_IN }
     );
-    return { accessToken: newAccessToken };
+    const newRefreshToken = jwt.sign(
+      { sub: decoded.sub, name: decoded.name, email: decoded.email, role: decoded.role },
+      JWT_REFRESH_SECRET,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN }
+    );
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   } catch {
     throw new Error('Invalid or expired refresh token');
   }
 };
+
+const SALT_ROUNDS = 12;
+
+export async function hashPassword(plainPassword) {
+  return bcrypt.hash(plainPassword, SALT_ROUNDS);
+}
+
+export async function comparePassword(plainPassword, passwordHash) {
+  return bcrypt.compare(plainPassword, passwordHash);
+}
+
+export async function registerUser({ name, email, password, role }) {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    throw new ConflictError("Account already exists with this email");
+  }
+
+  const passwordHash = await hashPassword(password);
+  const user = await prisma.user.create({
+    data: { name, email, passwordHash, role },
+  });
+
+  return user;
+}
+
+export async function authenticateUser(email, plainPassword) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new UnauthorizedError("Invalid email or password");
+  }
+
+  const isMatch = await comparePassword(plainPassword, user.passwordHash);
+  if (!isMatch) {
+    throw new UnauthorizedError("Invalid email or password");
+  }
+
+  return user;
+}
+
+export async function blacklistRefreshToken(token) {
+  try {
+    const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
+    const redis = getRedisClient();
+    const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+    if (ttl > 0) {
+      await redis.set(`blackedlist:refresh:${token}`, "1", "EX", ttl);
+    }
+  } catch {
+    // Token already invalid — nothing to blacklist
+  }
+}
+
+export async function isTokenBlacklisted(token) {
+  const redis = getRedisClient();
+  const result = await redis.get(`blackedlist:refresh:${token}`);
+  return result !== null;
+}
