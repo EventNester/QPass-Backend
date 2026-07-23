@@ -3,7 +3,7 @@
   "info": {
     "title": "QPass API",
     "version": "1.0.0",
-    "description": "QR Code-Based Event Attendance & Ticket Verification System API",
+    "description": "QR Code-Based Event Attendance & Ticket Verification System API.\n\n## Authentication\nMost endpoints require a JWT bearer token. Get one via `/api/v1/auth/login`,\nthen click **Authorize** at the top and paste `Bearer <your-token>`.\n\n## Conventions\n- All responses follow `{ status, message?, data }`\n- Errors use standard HTTP status codes (400, 401, 403, 404, 409, 422, 500)\n- Timestamps are ISO-8601 strings",
     "contact": {
       "name": "QPass Team",
       "email": "support@qpass.com"
@@ -15,12 +15,99 @@
       "description": "Development server"
     }
   ],
+  "tags": [
+    { "name": "Health", "description": "Service health & readiness" },
+    { "name": "Auth", "description": "Registration, login, refresh, logout" },
+    { "name": "Checkins", "description": "QR scanning and attendance tracking" }
+  ],
   "components": {
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "JWT access token from /auth/login"
+      }
+    },
+    "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "message": { "type": "string" },
+          "data": { "type": "object" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "error" },
+          "message": { "type": "string" }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["name", "email", "password"],
+        "properties": {
+          "name":     { "type": "string", "minLength": 1, "maxLength": 100, "example": "Ada Lovelace" },
+          "email":    { "type": "string", "format": "email", "example": "ada@example.com" },
+          "password": { "type": "string", "minLength": 8, "maxLength": 128, "format": "password" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email":    { "type": "string", "format": "email" },
+          "password": { "type": "string", "format": "password" }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refreshToken"],
+        "properties": {
+          "refreshToken": { "type": "string" }
+        }
+      },
+      "LogoutRequest": {
+        "type": "object",
+        "required": ["refreshToken"],
+        "properties": {
+          "refreshToken": { "type": "string" }
+        }
+      },
+      "AuthUser": {
+        "type": "object",
+        "properties": {
+          "id":        { "type": "string" },
+          "name":      { "type": "string" },
+          "email":     { "type": "string", "format": "email" },
+          "role":      { "type": "string", "enum": ["ATTENDEE", "STAFF", "ORGANIZER", "ADMIN"] },
+          "status":    { "type": "string", "enum": ["ACTIVE", "INACTIVE", "SUSPENDED"] },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuthTokens": {
+        "type": "object",
+        "properties": {
+          "accessToken":  { "type": "string", "description": "Short-lived JWT for the Authorization header" },
+          "refreshToken": { "type": "string", "description": "Long-lived JWT used to mint new access tokens" },
+          "expiresIn":    { "type": "string", "example": "30m" }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "status":  { "type": "string", "example": "success" },
+          "message": { "type": "string" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user":   { "$ref": "#/components/schemas/AuthUser" },
+              "tokens": { "$ref": "#/components/schemas/AuthTokens" }
+            }
+          }
+        }
       }
     }
   }
