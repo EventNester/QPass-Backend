@@ -1,62 +1,25 @@
 import { Router } from 'express';
-import { generateTokens, refreshToken } from './auth.service.js';
+import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken } from './auth.service.js';
+import { success, created } from '../../utils/response.js';
+import { systemMessages } from '../../config/index.js';
+import { registerSchema, loginSchema, refreshSchema } from './auth.schema.js';
 
 const router = Router();
-
-// Password Validation Helper: Min 8 chars, uppercase, lowercase, number
-const isPasswordValid = (password) => {
-  const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-  return regex.test(password);
-};
-
-// Valid Roles Enum
-const VALID_ROLES = ['ORGANIZER', 'STAFF', 'ATTENDEE', 'PLATFORM_ADMIN'];
 
 // POST /api/v1/auth/register
 router.post('/register', async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password, role } = req.body;
-
-    // Check required fields
-    if (!firstName || !lastName || !email || !password || !role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: firstName, lastName, email, password, and role are required.',
-      });
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
     }
+    const { name, email, password, role } = parsed.data;
 
-    // Validate role enum
-    if (!VALID_ROLES.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`,
-      });
-    }
-
-    // Validate password complexity
-    if (!isPasswordValid(password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number.',
-      });
-    }
-
-    // Mock created user
-    const user = {
-      id: 'usr_123',
-      firstName,
-      lastName,
-      email,
-      role,
-    };
+    const user = await registerUser({ name, email, password, role });
 
     const tokens = generateTokens(user);
 
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      data: { user, ...tokens },
-    });
+    return created(res, { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens }, systemMessages.SUCCESS.AUTH.REGISTER);
   } catch (error) {
     next(error);
   }
@@ -65,30 +28,17 @@ router.post('/register', async (req, res, next) => {
 // POST /api/v1/auth/login
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required',
-      });
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
     }
+    const { email, password } = parsed.data;
 
-    const user = {
-      id: 'usr_123',
-      firstName: 'Lucas',
-      lastName: 'Nash',
-      email,
-      role: 'ATTENDEE',
-    };
+    const user = await authenticateUser(email, password);
     
     const tokens = generateTokens(user);
 
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: tokens,
-    });
+    return success(res, tokens, systemMessages.SUCCESS.AUTH.LOGIN);
   } catch (error) {
     next(error);
   }
@@ -97,21 +47,30 @@ router.post('/login', async (req, res, next) => {
 // POST /api/v1/auth/refresh
 router.post('/refresh', async (req, res) => {
   try {
-    const { refreshToken: token } = req.body;
-    if (!token) {
-      return res.status(400).json({ success: false, message: 'Refresh token required' });
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
     }
+    const { refreshToken: token } = parsed.data;
 
     const newTokens = refreshToken(token);
-    res.status(200).json({ success: true, data: newTokens });
+    return success(res, newTokens, systemMessages.SUCCESS.AUTH.TOKEN_REFRESHED);
   } catch (error) {
-    res.status(401).json({ success: false, message: error.message });
+    res.status(401).json({ status: 'error', message: error.message });
   }
 });
 
 // POST /api/v1/auth/logout
-router.post('/logout', async (req, res) => {
-  res.status(200).json({ success: true, message: 'Logged out successfully' });
+router.post('/logout', async (req, res, next) => {
+  try {
+    const { refreshToken: token } = req.body;
+    if (token) {
+      await blacklistRefreshToken(token);
+    }
+    return success(res, null, systemMessages.SUCCESS.AUTH.LOGOUT);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 export default router;
