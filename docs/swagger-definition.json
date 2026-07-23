@@ -3,24 +3,70 @@
   "info": {
     "title": "QPass API",
     "version": "1.0.0",
-    "description": "QR Code-Based Event Attendance & Ticket Verification System API",
+    "description": "QR Code-Based Event Attendance & Ticket Verification System.\n\n## Authentication\nMost endpoints require a JWT bearer token. Get one via `/api/v1/auth/login` (when implemented), then click **Authorize** at the top and paste `Bearer <your-token>`.\n\n## Conventions\n- All responses follow `{ status, message?, data }`\n- Errors use standard HTTP status codes (400, 401, 403, 404, 409, 422, 500)\n- Timestamps are ISO-8601 strings",
     "contact": {
       "name": "QPass Team",
       "email": "support@qpass.com"
+    },
+    "license": {
+      "name": "ISC"
     }
   },
   "servers": [
     {
       "url": "http://localhost:3000",
       "description": "Development server"
+    },
+    {
+      "url": "https://api.qpass.app",
+      "description": "Production (placeholder)"
     }
+  ],
+  "tags": [
+    { "name": "Health", "description": "Service health & readiness" },
+    { "name": "Checkins", "description": "QR scanning and attendance tracking" }
   ],
   "components": {
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "JWT access token from /auth/login"
+      }
+    },
+    "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "message": { "type": "string", "example": "Operation completed" },
+          "data": { "type": "object" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "error" },
+          "message": { "type": "string", "example": "Something went wrong" }
+        }
+      },
+      "ScanRequest": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": { "type": "string", "description": "Raw QR token (will be hashed server-side)" },
+          "deviceInfo": { "type": "string", "description": "Optional device fingerprint" }
+        }
+      },
+      "ScanResult": {
+        "type": "object",
+        "properties": {
+          "result": { "type": "string", "enum": ["VALID", "DUPLICATE", "INVALID"] },
+          "message": { "type": "string" },
+          "attendeeName": { "type": "string" },
+          "checkinId": { "type": "string" }
+        }
       }
     }
   }
