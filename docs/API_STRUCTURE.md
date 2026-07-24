@@ -1,5 +1,8 @@
 # Phase 2 API Structure & Documentation Template
 
+> **⚠️ DISCLAIMER: ASPIRATIONAL DOCUMENT**
+> The endpoints outlined in Sections 2 (Event Management), 3 (Ticket Code Management), and 4 (Attendee Verification) are currently **planned and not yet implemented** in the codebase. This document serves as a roadmap for Phase 2 development.
+
 This document outlines the planned API structure for Phase 2 of the QPass-Backend project.
 
 ## 1. Authentication & Authorization
