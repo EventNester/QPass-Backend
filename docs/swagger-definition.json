@@ -108,6 +108,23 @@
             }
           }
         }
+      },
+      "ScanRequest": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token":      { "type": "string", "description": "Raw QR token (hashed server-side)" },
+          "deviceInfo": { "type": "string" }
+        }
+      },
+      "ScanResult": {
+        "type": "object",
+        "properties": {
+          "result":       { "type": "string", "enum": ["VALID", "DUPLICATE", "INVALID"] },
+          "message":      { "type": "string" },
+          "attendeeName": { "type": "string" },
+          "checkinId":    { "type": "string" }
+        }
       }
     }
   }
