@@ -42,7 +42,9 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/register", (req, res) => {});
+router.post("/register", (req, res) => {
+  res.status(501).json({ status: 'error', message: 'Not implemented' });
+});
 
 /**
  * @swagger
@@ -84,7 +86,9 @@ router.post("/register", (req, res) => {});
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/login", (req, res) => {});
+router.post("/login", (req, res) => {
+  res.status(501).json({ status: 'error', message: 'Not implemented' });
+});
 
 /**
  * @swagger
@@ -117,7 +121,9 @@ router.post("/login", (req, res) => {});
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/refresh", (req, res) => {});
+router.post("/refresh", (req, res) => {
+  res.status(501).json({ status: 'error', message: 'Not implemented' });
+});
 
 /**
  * @swagger
@@ -148,6 +154,8 @@ router.post("/refresh", (req, res) => {});
  *                   properties:
  *                     success: { type: boolean, example: true }
  */
-router.post("/logout", (req, res) => {});
+router.post("/logout", (req, res) => {
+  res.status(501).json({ status: 'error', message: 'Not implemented' });
+});
 
 export default router;
