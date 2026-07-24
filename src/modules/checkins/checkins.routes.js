@@ -4,6 +4,12 @@ import { requireAuth } from "../../middlewares/rbac.middleware.js";
 
 const router = Router();
 
+// Note on Routing Design: 
+// This router is mounted at /api/v1/checkins.
+// Some endpoints below include an additional /checkins namespace segment 
+// (e.g., /:eventId/checkins/:checkInId/undo). This is intentional to prevent 
+// ambiguous route parameters and ensure the paths remain self-documenting.
+
 /**
  * @swagger
  * /api/v1/checkins/{eventId}/scan:
@@ -55,7 +61,7 @@ router.post("/:eventId/scan", requireAuth, checkinController.scanQr);
 
 /**
  * @swagger
- * /api/v1/checkins/{eventId}:
+ * /api/v1/checkins/{eventId}/checkins:
  *   get:
  *     summary: List all check-ins for an event
  *     tags: [Checkins]
@@ -80,11 +86,11 @@ router.post("/:eventId/scan", requireAuth, checkinController.scanQr);
  *                       type: array
  *                       items: { type: object }
  */
-router.get("/:eventId", requireAuth, checkinController.getCheckins);
+router.get("/:eventId/checkins", requireAuth, checkinController.getCheckins);
 
 /**
  * @swagger
- * /api/v1/checkins/{eventId}/{checkInId}/undo:
+ * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
  *   post:
  *     summary: Undo a check-in
  *     tags: [Checkins]
@@ -105,37 +111,6 @@ router.get("/:eventId", requireAuth, checkinController.getCheckins);
  *       404:
  *         description: Check-in not found
  */
-router.post("/:eventId/:checkInId/undo", requireAuth, checkinController.undoCheckin);
-
-// Legacy backward-compatibility redirects for older consumers
-/**
- * @swagger
- * /api/v1/checkins/{eventId}/checkins:
- *   get:
- *     summary: Legacy redirect to /api/v1/checkins/{eventId}
- *     tags: [Checkins]
- *     deprecated: true
- *     responses:
- *       301:
- *         description: Redirects to the new endpoint
- */
-router.get("/:eventId/checkins", (req, res) => {
-  res.redirect(301, `/api/v1/checkins/${req.params.eventId}`);
-});
-
-/**
- * @swagger
- * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
- *   post:
- *     summary: Legacy redirect to /api/v1/checkins/{eventId}/{checkInId}/undo
- *     tags: [Checkins]
- *     deprecated: true
- *     responses:
- *       308:
- *         description: Redirects to the new endpoint (preserving POST method)
- */
-router.post("/:eventId/checkins/:checkInId/undo", (req, res) => {
-  res.redirect(308, `/api/v1/checkins/${req.params.eventId}/${req.params.checkInId}/undo`);
-});
+router.post("/:eventId/checkins/:checkInId/undo", requireAuth, checkinController.undoCheckin);
 
 export default router;
