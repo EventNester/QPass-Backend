@@ -9,9 +9,21 @@ vi.mock('../auth.service.js', () => ({
   generateTokens: vi.fn(),
   refreshToken: vi.fn(),
   blacklistRefreshToken: vi.fn(),
+  hashPassword: vi.fn(),
 }));
 
-import { registerUser, authenticateUser, generateTokens, refreshToken, blacklistRefreshToken } from '../auth.service.js';
+vi.mock('../auth.middleware.js', () => ({
+  requireAuth: (req, res, next) => {
+    req.user = { id: 'user_1', role: 'ATTENDEE' };
+    next();
+  }
+}));
+
+vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
+  authLimiter: (req, res, next) => next()
+}));
+
+import { registerUser, authenticateUser, generateTokens, refreshToken, blacklistRefreshToken, hashPassword } from '../auth.service.js';
 
 describe('Auth Routes', () => {
   beforeEach(() => {
@@ -37,6 +49,7 @@ describe('Auth Routes', () => {
     });
 
     it('should return 201 on successful registration', async () => {
+      hashPassword.mockResolvedValue('hashed_pass');
       registerUser.mockResolvedValue({ id: 'user_1', name: 'John', email: 'john@example.com', role: 'ATTENDEE' });
       generateTokens.mockReturnValue({ accessToken: 'access', refreshToken: 'refresh' });
 
@@ -72,6 +85,7 @@ describe('Auth Routes', () => {
       
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
+      expect(res.body.data.user.id).toBe('user_1');
       expect(res.body.data.accessToken).toBe('access');
     });
   });
@@ -83,7 +97,7 @@ describe('Auth Routes', () => {
     });
 
     it('should return 200 on successful refresh', async () => {
-      refreshToken.mockReturnValue({ accessToken: 'new_access', refreshToken: 'new_refresh' });
+      refreshToken.mockResolvedValue({ accessToken: 'new_access', refreshToken: 'new_refresh' });
 
       const res = await request(app).post('/api/v1/auth/refresh').send({
         refreshToken: 'valid_refresh'
@@ -96,6 +110,12 @@ describe('Auth Routes', () => {
   });
 
   describe('POST /api/v1/auth/logout', () => {
+    it('should return 400 if refreshToken is missing', async () => {
+      const res = await request(app).post('/api/v1/auth/logout').send({});
+      expect(res.status).toBe(400);
+      expect(res.body.status).toBe('error');
+    });
+
     it('should call blacklistRefreshToken and return 200', async () => {
       blacklistRefreshToken.mockResolvedValue();
 
