@@ -101,8 +101,8 @@ The API will be available at `http://localhost:3000`.
 |----------|-------------|
 | `GET /health` | Health check (verifies DB + Redis connectivity) |
 | `POST /api/v1/checkins/:eventId/scan` | Scan QR code for event check-in |
-| `GET /api/v1/checkins/:eventId` | List check-ins for an event |
-| `POST /api/v1/checkins/:eventId/:checkInId/undo` | Undo a check-in |
+| `GET /api/v1/checkins/:eventId/checkins` | List check-ins for an event |
+| `POST /api/v1/checkins/:eventId/checkins/:checkInId/undo` | Undo a check-in |
 
 > Swagger documentation will be served at `/api-docs` when enabled.
 
