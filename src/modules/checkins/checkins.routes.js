@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as checkinController from "./checkins.controller.js";
+import { requireAuth } from "../../middlewares/rbac.middleware.js";
 
 const router = Router();
 
@@ -50,7 +51,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/:eventId/scan", checkinController.scanQr);
+router.post("/:eventId/scan", requireAuth, checkinController.scanQr);
 
 /**
  * @swagger
@@ -79,7 +80,7 @@ router.post("/:eventId/scan", checkinController.scanQr);
  *                       type: array
  *                       items: { type: object }
  */
-router.get("/:eventId", checkinController.getCheckins);
+router.get("/:eventId", requireAuth, checkinController.getCheckins);
 
 /**
  * @swagger
@@ -104,6 +105,6 @@ router.get("/:eventId", checkinController.getCheckins);
  *       404:
  *         description: Check-in not found
  */
-router.post("/:eventId/:checkInId/undo", checkinController.undoCheckin);
+router.post("/:eventId/:checkInId/undo", requireAuth, checkinController.undoCheckin);
 
 export default router;
