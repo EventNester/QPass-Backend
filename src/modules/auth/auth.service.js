@@ -69,13 +69,12 @@ export async function comparePassword(plainPassword, passwordHash) {
   return bcrypt.compare(plainPassword, passwordHash);
 }
 
-export async function registerUser({ name, email, password, role }) {
+export async function registerUser({ name, email, passwordHash, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw new ConflictError("Account already exists with this email");
   }
 
-  const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
     data: { name, email, passwordHash, role },
   });

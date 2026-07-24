@@ -106,7 +106,7 @@ describe('Auth Service Tests', () => {
       bcrypt.hash.mockResolvedValue('hashed_password');
       prisma.user.create.mockResolvedValue(mockUser);
 
-      const result = await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', password: 'password123', role: 'ORGANIZER' });
+      const result = await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' });
       expect(result).toEqual(mockUser);
       expect(prisma.user.create).toHaveBeenCalled();
     });
@@ -114,7 +114,7 @@ describe('Auth Service Tests', () => {
     test('should throw ConflictError if email exists', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       
-      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', password: 'password123', role: 'ORGANIZER' }))
+      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' }))
         .rejects
         .toThrow(ConflictError);
     });

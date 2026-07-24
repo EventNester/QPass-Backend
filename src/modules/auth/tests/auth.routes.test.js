@@ -9,9 +9,10 @@ vi.mock('../auth.service.js', () => ({
   generateTokens: vi.fn(),
   refreshToken: vi.fn(),
   blacklistRefreshToken: vi.fn(),
+  hashPassword: vi.fn(),
 }));
 
-import { registerUser, authenticateUser, generateTokens, refreshToken, blacklistRefreshToken } from '../auth.service.js';
+import { registerUser, authenticateUser, generateTokens, refreshToken, blacklistRefreshToken, hashPassword } from '../auth.service.js';
 
 describe('Auth Routes', () => {
   beforeEach(() => {
@@ -37,6 +38,7 @@ describe('Auth Routes', () => {
     });
 
     it('should return 201 on successful registration', async () => {
+      hashPassword.mockResolvedValue('hashed_pass');
       registerUser.mockResolvedValue({ id: 'user_1', name: 'John', email: 'john@example.com', role: 'ATTENDEE' });
       generateTokens.mockReturnValue({ accessToken: 'access', refreshToken: 'refresh' });
 
