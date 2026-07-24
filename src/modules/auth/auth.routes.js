@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken } from './auth.service.js';
+import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken, hashPassword } from './auth.service.js';
 import { success, created } from '../../utils/response.js';
 import { systemMessages } from '../../config/index.js';
+import { UnauthorizedError } from '../../utils/error.js';
 import { registerSchema, loginSchema, refreshSchema } from './auth.schema.js';
 
 const router = Router();
@@ -15,7 +16,8 @@ router.post('/register', async (req, res, next) => {
     }
     const { name, email, password, role } = parsed.data;
 
-    const user = await registerUser({ name, email, password, role });
+    const passwordHash = await hashPassword(password);
+    const user = await registerUser({ name, email, passwordHash, role });
 
     const tokens = generateTokens(user);
 
@@ -45,7 +47,7 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/v1/auth/refresh
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -56,7 +58,10 @@ router.post('/refresh', async (req, res) => {
     const newTokens = refreshToken(token);
     return success(res, newTokens, systemMessages.SUCCESS.AUTH.TOKEN_REFRESHED);
   } catch (error) {
-    res.status(401).json({ status: 'error', message: error.message });
+    if (!error.status) {
+      return next(new UnauthorizedError(systemMessages.ERROR.AUTH.TOKEN_INVALID));
+    }
+    return next(error);
   }
 });
 
