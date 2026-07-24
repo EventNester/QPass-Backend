@@ -18,15 +18,23 @@ app.use(express.json());
 app.use(router);
 
 app.use((req, res) => {
-  res.status(404).json({ status: "error", message: systemMessages.ERROR.GENERAL.ROUTE_NOT_FOUND });
+  res.status(404).json({
+    status: "error",
+    message: systemMessages.ERROR.GENERAL.ROUTE_NOT_FOUND,
+  });
 });
 
 app.use((err, req, res, _next) => {
-  logger.error(err.message);
-  const isValidStatus = typeof err.status === "number" && err.status >= 400 && err.status < 600;
+  logger.error(err);
+
+  const isValidStatus =
+    typeof err.status === "number" &&
+    err.status >= 400 &&
+    err.status < 600;
+
   res.status(isValidStatus ? err.status : 500).json({
     status: "error",
-    message: systemMessages.ERROR.GENERAL.INTERNAL_ERROR,
+    message: err.message,
   });
 });
 
