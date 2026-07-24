@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authLimiter } from "../../middlewares/rate-limit.middleware.js";
 
 const router = Router();
 
@@ -42,7 +43,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/register", (req, res) => {
+router.post("/register", authLimiter, (req, res) => {
   res.status(501).json({ status: 'error', message: 'Not implemented' });
 });
 
@@ -86,7 +87,7 @@ router.post("/register", (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/login", (req, res) => {
+router.post("/login", authLimiter, (req, res) => {
   res.status(501).json({ status: 'error', message: 'Not implemented' });
 });
 
