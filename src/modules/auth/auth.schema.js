@@ -12,7 +12,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, "Password must contain a lowercase letter")
     .regex(/[A-Z]/, "Password must contain an uppercase letter")
     .regex(/\d/, "Password must contain a number"),
-  role: z.enum(VALID_ROLES),
+  role: z.enum(VALID_ROLES).optional(),
 });
 
 export const loginSchema = z.object({
@@ -22,4 +22,8 @@ export const loginSchema = z.object({
 
 export const refreshSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
+});
+
+export const logoutSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
 });

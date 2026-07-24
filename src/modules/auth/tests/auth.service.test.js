@@ -77,11 +77,18 @@ describe('Auth Service Tests', () => {
       expect(decoded.role).toBe('ORGANIZER');
     });
 
-    test('should refresh access token correctly', () => {
+    test('should refresh access token correctly', async () => {
       const { refreshToken: token } = generateTokens(mockUser);
-      const result = refreshToken(token);
+      mRedisClient.get.mockResolvedValue(null);
+      const result = await refreshToken(token);
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
+    });
+
+    test('should throw error if refresh token is blacklisted', async () => {
+      const { refreshToken: token } = generateTokens(mockUser);
+      mRedisClient.get.mockResolvedValue('1');
+      await expect(refreshToken(token)).rejects.toThrow(UnauthorizedError);
     });
   });
 
@@ -106,7 +113,7 @@ describe('Auth Service Tests', () => {
       bcrypt.hash.mockResolvedValue('hashed_password');
       prisma.user.create.mockResolvedValue(mockUser);
 
-      const result = await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', password: 'password123', role: 'ORGANIZER' });
+      const result = await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' });
       expect(result).toEqual(mockUser);
       expect(prisma.user.create).toHaveBeenCalled();
     });
@@ -114,7 +121,7 @@ describe('Auth Service Tests', () => {
     test('should throw ConflictError if email exists', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       
-      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', password: 'password123', role: 'ORGANIZER' }))
+      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' }))
         .rejects
         .toThrow(ConflictError);
     });

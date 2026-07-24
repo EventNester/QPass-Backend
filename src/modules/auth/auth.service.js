@@ -40,8 +40,12 @@ export const validateToken = (token) => {
 /**
  * Refresh Access Token using Refresh Token
  */
-export const refreshToken = (token) => {
+export const refreshToken = async (token) => {
   try {
+    const blacklisted = await isTokenBlacklisted(token);
+    if (blacklisted) {
+      throw new Error('Refresh token has been revoked');
+    }
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     const newAccessToken = jwt.sign(
       { sub: decoded.sub, name: decoded.name, email: decoded.email, role: decoded.role },
@@ -54,7 +58,10 @@ export const refreshToken = (token) => {
       { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
-  } catch {
+  } catch (error) {
+    if (error.message === 'Refresh token has been revoked') {
+      throw new UnauthorizedError(error.message);
+    }
     throw new Error('Invalid or expired refresh token');
   }
 };
@@ -69,13 +76,12 @@ export async function comparePassword(plainPassword, passwordHash) {
   return bcrypt.compare(plainPassword, passwordHash);
 }
 
-export async function registerUser({ name, email, password, role }) {
+export async function registerUser({ name, email, passwordHash, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     throw new ConflictError("Account already exists with this email");
   }
 
-  const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
     data: { name, email, passwordHash, role },
   });
