@@ -107,4 +107,35 @@ router.get("/:eventId", requireAuth, checkinController.getCheckins);
  */
 router.post("/:eventId/:checkInId/undo", requireAuth, checkinController.undoCheckin);
 
+// Legacy backward-compatibility redirects for older consumers
+/**
+ * @swagger
+ * /api/v1/checkins/{eventId}/checkins:
+ *   get:
+ *     summary: Legacy redirect to /api/v1/checkins/{eventId}
+ *     tags: [Checkins]
+ *     deprecated: true
+ *     responses:
+ *       301:
+ *         description: Redirects to the new endpoint
+ */
+router.get("/:eventId/checkins", (req, res) => {
+  res.redirect(301, `/api/v1/checkins/${req.params.eventId}`);
+});
+
+/**
+ * @swagger
+ * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
+ *   post:
+ *     summary: Legacy redirect to /api/v1/checkins/{eventId}/{checkInId}/undo
+ *     tags: [Checkins]
+ *     deprecated: true
+ *     responses:
+ *       308:
+ *         description: Redirects to the new endpoint (preserving POST method)
+ */
+router.post("/:eventId/checkins/:checkInId/undo", (req, res) => {
+  res.redirect(308, `/api/v1/checkins/${req.params.eventId}/${req.params.checkInId}/undo`);
+});
+
 export default router;
