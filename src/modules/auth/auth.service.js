@@ -3,16 +3,25 @@ import bcrypt from 'bcryptjs';
 import prisma from '../../database/index.js';
 import { ConflictError, UnauthorizedError } from '../../utils/error.js';
 import { getRedisClient } from "../../config/redis.js";
-
 import { getConfig } from "../../config/index.js";
 
-const config = getConfig();
-const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } = config;
+const SALT_ROUNDS = 12;
+
+function getJwtConfig() {
+  const config = getConfig();
+  return {
+    JWT_SECRET: config.JWT_SECRET,
+    JWT_REFRESH_SECRET: config.JWT_REFRESH_SECRET,
+    JWT_EXPIRES_IN: config.JWT_EXPIRES_IN,
+    JWT_REFRESH_EXPIRES_IN: config.JWT_REFRESH_EXPIRES_IN,
+  };
+}
 
 /**
  * Generate Access and Refresh JWT Tokens
  */
 export const generateTokens = (user) => {
+  const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } = getJwtConfig();
   const payload = {
     sub: user.id,
     name: user.name,
@@ -30,10 +39,11 @@ export const generateTokens = (user) => {
  * Validate Access Token
  */
 export const validateToken = (token) => {
+  const { JWT_SECRET } = getJwtConfig();
   try {
     return jwt.verify(token, JWT_SECRET);
   } catch {
-    throw new Error('Invalid or expired token');
+    throw new UnauthorizedError('Invalid or expired token');
   }
 };
 
@@ -41,10 +51,11 @@ export const validateToken = (token) => {
  * Refresh Access Token using Refresh Token
  */
 export const refreshToken = async (token) => {
+  const { JWT_SECRET, JWT_REFRESH_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } = getJwtConfig();
   try {
     const blacklisted = await isTokenBlacklisted(token);
     if (blacklisted) {
-      throw new Error('Refresh token has been revoked');
+      throw new UnauthorizedError('Refresh token has been revoked');
     }
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     const newAccessToken = jwt.sign(
@@ -57,16 +68,15 @@ export const refreshToken = async (token) => {
       JWT_REFRESH_SECRET,
       { expiresIn: JWT_REFRESH_EXPIRES_IN }
     );
+    await blacklistRefreshToken(token);
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   } catch (error) {
-    if (error.message === 'Refresh token has been revoked') {
-      throw new UnauthorizedError(error.message);
+    if (error instanceof UnauthorizedError) {
+      throw error;
     }
-    throw new Error('Invalid or expired refresh token', { cause: error });
+    throw new UnauthorizedError('Invalid or expired refresh token');
   }
 };
-
-const SALT_ROUNDS = 12;
 
 export async function hashPassword(plainPassword) {
   return bcrypt.hash(plainPassword, SALT_ROUNDS);
@@ -105,11 +115,12 @@ export async function authenticateUser(email, plainPassword) {
 
 export async function blacklistRefreshToken(token) {
   try {
+    const { JWT_REFRESH_SECRET } = getJwtConfig();
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     const redis = getRedisClient();
     const ttl = decoded.exp - Math.floor(Date.now() / 1000);
     if (ttl > 0) {
-      await redis.set(`blackedlist:refresh:${token}`, "1", "EX", ttl);
+      await redis.set(`blacklist:refresh:${token}`, "1", "EX", ttl);
     }
   } catch {
     // Token already invalid — nothing to blacklist
@@ -118,6 +129,6 @@ export async function blacklistRefreshToken(token) {
 
 export async function isTokenBlacklisted(token) {
   const redis = getRedisClient();
-  const result = await redis.get(`blackedlist:refresh:${token}`);
+  const result = await redis.get(`blacklist:refresh:${token}`);
   return result !== null;
 }

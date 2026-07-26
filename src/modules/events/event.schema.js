@@ -55,11 +55,26 @@ export const updateEventSchema = z
       if (data.startTime && data.endTime) {
         return data.endTime > data.startTime;
       }
-
       return true;
     },
     {
-      message: "End time must be after start time",
+      message: "End time must be after start time when both are provided",
       path: ["endTime"],
     }
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (data.startTime && !data.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "endTime is required when startTime is provided",
+        path: ["endTime"],
+      });
+    }
+    if (data.endTime && !data.startTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "startTime is required when endTime is provided",
+        path: ["startTime"],
+      });
+    }
+  });

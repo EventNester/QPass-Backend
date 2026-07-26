@@ -1,5 +1,6 @@
 import prisma from "../../database/index.js";
-import { NotFoundError } from "../../utils/error.js";
+import { NotFoundError, ForbiddenError } from "../../utils/error.js";
+import { constants } from "../../config/index.js";
 
 // Create an event
 export const createEvent = async (eventData, ownerId) => {
@@ -33,18 +34,30 @@ export const getEvent = async (eventId) => {
   return event;
 };
 
-// List all events
-export const listEvents = async () => {
-  const events = await prisma.event.findMany({
-    where: {
-      deletedAt: null,
-    },
-    orderBy: {
-      startTime: "asc",
-    },
-  });
+// List all events with pagination
+export const listEvents = async (page = constants.PAGINATION.DEFAULT_PAGE, limit = constants.PAGINATION.DEFAULT_LIMIT) => {
+  const take = Math.min(limit, constants.PAGINATION.MAX_LIMIT);
+  const skip = (page - 1) * take;
 
-  return events;
+  const [events, total] = await Promise.all([
+    prisma.event.findMany({
+      where: { deletedAt: null },
+      orderBy: { startTime: "asc" },
+      skip,
+      take,
+    }),
+    prisma.event.count({ where: { deletedAt: null } }),
+  ]);
+
+  return {
+    events,
+    pagination: {
+      page,
+      limit: take,
+      total,
+      totalPages: Math.ceil(total / take),
+    },
+  };
 };
 
 // Update an event (atomic ownership check)
@@ -59,7 +72,9 @@ export const updateEvent = async (eventId, eventData, ownerId) => {
   });
 
   if (updatedEvent.count === 0) {
-    throw new NotFoundError("Event not found or you are not the owner");
+    const exists = await prisma.event.findFirst({ where: { id: eventId, deletedAt: null } });
+    if (!exists) throw new NotFoundError("Event not found");
+    throw new ForbiddenError("You are not the owner of this event");
   }
 
   return getEvent(eventId);
@@ -79,8 +94,10 @@ export const deleteEvent = async (eventId, ownerId) => {
   });
 
   if (deletedEvent.count === 0) {
-    throw new NotFoundError("Event not found or you are not the owner");
+    const exists = await prisma.event.findFirst({ where: { id: eventId, deletedAt: null } });
+    if (!exists) throw new NotFoundError("Event not found");
+    throw new ForbiddenError("You are not the owner of this event");
   }
 
-  return getEvent(eventId);
+  return { id: eventId };
 };

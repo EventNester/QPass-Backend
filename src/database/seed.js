@@ -2,7 +2,7 @@ import prisma from "./index.js";
 import bcrypt from "bcryptjs";
 
 const seed = async () => {
-  const passwordHash = await bcrypt.hash("test-password-123", 10);
+  const passwordHash = await bcrypt.hash("test-password-123", 12);
 
   const user = await prisma.user.upsert({
     where: {

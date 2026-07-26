@@ -1,6 +1,6 @@
 import { Router } from "express";
 import prisma from "../database/index.js";
-import { getConfig } from "../config/index.js";
+import { getConfig, getRedisClient } from "../config/index.js";
 
 const router = Router();
 
@@ -17,7 +17,6 @@ router.get("/", async (req, res) => {
   }
 
   try {
-    const { getRedisClient } = await import("../config/index.js");
     const redis = getRedisClient();
     await redis.ping();
   } catch {

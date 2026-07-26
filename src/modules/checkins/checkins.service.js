@@ -2,6 +2,7 @@ import prisma from "../../database/index.js";
 import { getRedisClient } from "../../config/redis.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError } from "../../utils/error.js";
+import { constants } from "../../config/index.js";
 
 export async function scanQr(eventId, data, staffId) {
   const redis = getRedisClient();
@@ -21,15 +22,15 @@ export async function scanQr(eventId, data, staffId) {
     });
 
     if (!qrToken) {
-      return { result: "INVALID", message: "Invalid QR code" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: "Invalid QR code" };
     }
 
     if (new Date(qrToken.expiresAt) < new Date()) {
-      return { result: "INVALID", message: "QR code has expired" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: "QR code has expired" };
     }
 
     if (qrToken.registration.eventId !== eventId) {
-      return { result: "INVALID", message: "QR code is not valid for this event" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: "QR code is not valid for this event" };
     }
 
     const existingCheckin = await prisma.checkIn.findUnique({
@@ -46,7 +47,7 @@ export async function scanQr(eventId, data, staffId) {
           afterSnapshot: { tokenHash, attemptTime: new Date().toISOString() },
         },
       });
-      return { result: "DUPLICATE", message: "Duplicate check-in detected" };
+      return { result: constants.CHECKIN_RESULT.DUPLICATE, message: "Duplicate check-in detected" };
     }
 
     const checkin = await prisma.checkIn.create({
@@ -54,7 +55,7 @@ export async function scanQr(eventId, data, staffId) {
         eventId,
         registrationId: qrToken.registrationId,
         staffId,
-        result: "VALID",
+        result: constants.CHECKIN_RESULT.VALID,
         deviceInfo: data.deviceInfo,
       },
       include: { registration: true },
@@ -66,7 +67,7 @@ export async function scanQr(eventId, data, staffId) {
     });
 
     return {
-      result: "VALID",
+      result: constants.CHECKIN_RESULT.VALID,
       message: "Check-in successful",
       attendeeName: checkin.registration.attendeeName,
       checkinId: checkin.id,

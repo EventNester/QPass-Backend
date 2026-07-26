@@ -49,7 +49,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
 });
 
 // POST /api/v1/auth/refresh
-router.post('/refresh', requireAuth, async (req, res, next) => {
+router.post('/refresh', async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
