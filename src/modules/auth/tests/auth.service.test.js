@@ -11,7 +11,7 @@ import {
   comparePassword
 } from '../auth.service.js';
 import prisma from '../../../database/index.js';
-import { getRedisClient } from "../../../config/redis.js";
+
 import bcrypt from 'bcryptjs';
 import { ConflictError, UnauthorizedError } from '../../../utils/error.js';
 

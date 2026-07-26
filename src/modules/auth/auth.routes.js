@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken, hashPassword } from './auth.service.js';
 import { success, created } from '../../utils/response.js';
 import { systemMessages } from '../../config/index.js';
-import { UnauthorizedError } from '../../utils/error.js';
+
 import { registerSchema, loginSchema, refreshSchema, logoutSchema } from './auth.schema.js';
 import { requireAuth } from './auth.middleware.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
