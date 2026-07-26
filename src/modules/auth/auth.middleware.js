@@ -13,7 +13,7 @@ export const requireAuth = async (req, res, next) => {
     const decoded = validateToken(token);
     req.user = decoded;
     next();
-  } catch (_error) {
+  } catch {
     return res.status(401).json({ status: "error", message: systemMessages.ERROR.AUTH.UNAUTHORIZED });
   }
 };
