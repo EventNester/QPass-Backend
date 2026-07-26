@@ -1,6 +1,7 @@
 import {
   createEvent,
   getEvent,
+  listEvents,
   updateEvent,
   deleteEvent,
 } from "./event.service.js";
@@ -10,27 +11,39 @@ import {
   updateEventSchema,
 } from "./event.schema.js";
 
+import { success, created } from "../../utils/response.js";
+import { ValidationError } from "../../utils/error.js";
+
+const getOwnerId = (req) => req.user?.id || process.env.DEFAULT_OWNER_ID;
+
+const parseOrNext = (schema, body, next) => {
+  try {
+    return schema.parse(body);
+  } catch (err) {
+    if (err.name === "ZodError") {
+      return next(new ValidationError(err.errors.map((e) => e.message).join(", ")));
+    }
+    return next(err);
+  }
+};
+
 // Create event
 export const createEventController = async (req, res, next) => {
   try {
-    const validatedData = createEventSchema.parse(req.body);
-
-    const { ownerId } = req.body;
-
+    const ownerId = getOwnerId(req);
     if (!ownerId) {
-      return res.status(400).json({
-        success: false,
-        message: "ownerId is required until authentication is implemented",
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
       });
     }
 
+    const validatedData = parseOrNext(createEventSchema, req.body, next);
+    if (!validatedData) return;
+
     const event = await createEvent(validatedData, ownerId);
 
-    res.status(201).json({
-      success: true,
-      message: "Event created successfully",
-      data: event,
-    });
+    return created(res, event, "Event created successfully");
   } catch (error) {
     next(error);
   }
@@ -43,10 +56,18 @@ export const getEventController = async (req, res, next) => {
 
     const event = await getEvent(id);
 
-    res.status(200).json({
-      success: true,
-      data: event,
-    });
+    return success(res, event);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// List events
+export const listEventsController = async (req, res, next) => {
+  try {
+    const events = await listEvents();
+
+    return success(res, events);
   } catch (error) {
     next(error);
   }
@@ -55,26 +76,22 @@ export const getEventController = async (req, res, next) => {
 // Update event
 export const updateEventController = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
-    const validatedData = updateEventSchema.parse(req.body);
-
-    const { ownerId } = req.body;
-
+    const ownerId = getOwnerId(req);
     if (!ownerId) {
-      return res.status(400).json({
-        success: false,
-        message: "ownerId is required until authentication is implemented",
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
       });
     }
 
+    const { id } = req.params;
+
+    const validatedData = parseOrNext(updateEventSchema, req.body, next);
+    if (!validatedData) return;
+
     const event = await updateEvent(id, validatedData, ownerId);
 
-    res.status(200).json({
-      success: true,
-      message: "Event updated successfully",
-      data: event,
-    });
+    return success(res, event, "Event updated successfully");
   } catch (error) {
     next(error);
   }
@@ -83,24 +100,19 @@ export const updateEventController = async (req, res, next) => {
 // Delete event
 export const deleteEventController = async (req, res, next) => {
   try {
-    const { id } = req.params;
-
-    const { ownerId } = req.body;
-
+    const ownerId = getOwnerId(req);
     if (!ownerId) {
-      return res.status(400).json({
-        success: false,
-        message: "ownerId is required until authentication is implemented",
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
       });
     }
 
+    const { id } = req.params;
+
     const event = await deleteEvent(id, ownerId);
 
-    res.status(200).json({
-      success: true,
-      message: "Event deleted successfully",
-      data: event,
-    });
+    return success(res, event, "Event deleted successfully");
   } catch (error) {
     next(error);
   }

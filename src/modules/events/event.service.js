@@ -33,56 +33,54 @@ export const getEvent = async (eventId) => {
   return event;
 };
 
-// Update an event
+// List all events
+export const listEvents = async () => {
+  const events = await prisma.event.findMany({
+    where: {
+      deletedAt: null,
+    },
+    orderBy: {
+      startTime: "asc",
+    },
+  });
+
+  return events;
+};
+
+// Update an event (atomic ownership check)
 export const updateEvent = async (eventId, eventData, ownerId) => {
-  const existingEvent = await prisma.event.findFirst({
+  const updatedEvent = await prisma.event.updateMany({
     where: {
       id: eventId,
       ownerId,
       deletedAt: null,
-    },
-  });
-
-  if (!existingEvent) {
-    throw new NotFoundError(
-      "Event not found or you are not the owner"
-    );
-  }
-
-  const updatedEvent = await prisma.event.update({
-    where: {
-      id: eventId,
     },
     data: eventData,
   });
 
-  return updatedEvent;
+  if (updatedEvent.count === 0) {
+    throw new NotFoundError("Event not found or you are not the owner");
+  }
+
+  return getEvent(eventId);
 };
 
-// Soft-delete an event
+// Soft-delete an event (atomic ownership check)
 export const deleteEvent = async (eventId, ownerId) => {
-  const existingEvent = await prisma.event.findFirst({
+  const deletedEvent = await prisma.event.updateMany({
     where: {
       id: eventId,
       ownerId,
       deletedAt: null,
-    },
-  });
-
-  if (!existingEvent) {
-    throw new NotFoundError(
-      "Event not found or you are not the owner"
-    );
-  }
-
-  const deletedEvent = await prisma.event.update({
-    where: {
-      id: eventId,
     },
     data: {
       deletedAt: new Date(),
     },
   });
 
-  return deletedEvent;
+  if (deletedEvent.count === 0) {
+    throw new NotFoundError("Event not found or you are not the owner");
+  }
+
+  return getEvent(eventId);
 };
