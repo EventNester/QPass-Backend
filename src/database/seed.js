@@ -1,6 +1,9 @@
 import prisma from "./index.js";
+import bcrypt from "bcryptjs";
 
 const seed = async () => {
+  const passwordHash = await bcrypt.hash("test-password-123", 10);
+
   const user = await prisma.user.upsert({
     where: {
       email: "testuser@example.com",
@@ -9,7 +12,7 @@ const seed = async () => {
     create: {
       name: "Test Organizer",
       email: "testuser@example.com",
-      passwordHash: "test-password-hash",
+      passwordHash,
       role: "ORGANIZER",
       status: "ACTIVE",
     },
