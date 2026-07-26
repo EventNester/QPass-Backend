@@ -62,7 +62,7 @@ export const refreshToken = async (token) => {
     if (error.message === 'Refresh token has been revoked') {
       throw new UnauthorizedError(error.message);
     }
-    throw new Error('Invalid or expired refresh token');
+    throw new Error('Invalid or expired refresh token', { cause: error });
   }
 };
 
