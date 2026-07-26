@@ -4,8 +4,8 @@ import app from '../../app.js';
 import prisma from '../../database/index.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
-  globalLimiter: (_req: any, _res: any, next: any) => next(),
-  authLimiter: (_req: any, _res: any, next: any) => next(),
+  globalLimiter: (_req, _res, next) => next(),
+  authLimiter: (_req, _res, next) => next(),
 }));
 
 describe('Auth API Integration Tests', () => {
