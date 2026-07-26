@@ -1,5 +1,7 @@
 import { systemMessages } from "../config/index.js";
 
+export { requireAuth } from "../modules/auth/auth.middleware.js";
+
 export function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -12,11 +14,4 @@ export function requireRole(...allowedRoles) {
 
     next();
   };
-}
-
-export function requireAuth(req, res, next) {
-  if (!req.user) {
-    return res.status(401).json({ status: "error", message: systemMessages.ERROR.AUTH.UNAUTHORIZED });
-  }
-  next();
 }

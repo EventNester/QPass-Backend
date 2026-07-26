@@ -1,13 +1,16 @@
 import { Router } from "express";
 import * as checkinController from "./checkins.controller.js";
-import { requireAuth } from "../../middlewares/rbac.middleware.js";
+import { requireAuth } from "../auth/auth.middleware.js";
+import { requireRole } from "../../middlewares/rbac.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { scanQrSchema } from "./checkins.schema.js";
 
 const router = Router();
 
-// Note on Routing Design: 
+// Note on Routing Design:
 // This router is mounted at /api/v1/checkins.
-// Some endpoints below include an additional /checkins namespace segment 
-// (e.g., /:eventId/checkins/:checkInId/undo). This is intentional to prevent 
+// Some endpoints below include an additional /checkins namespace segment
+// (e.g., /:eventId/checkins/:checkInId/undo). This is intentional to prevent
 // ambiguous route parameters and ensure the paths remain self-documenting.
 
 /**
@@ -57,7 +60,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/:eventId/scan", requireAuth, checkinController.scanQr);
+router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), validate(scanQrSchema), checkinController.scanQr);
 
 /**
  * @swagger
@@ -86,7 +89,7 @@ router.post("/:eventId/scan", requireAuth, checkinController.scanQr);
  *                       type: array
  *                       items: { type: object }
  */
-router.get("/:eventId/checkins", requireAuth, checkinController.getCheckins);
+router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.getCheckins);
 
 /**
  * @swagger
@@ -111,6 +114,6 @@ router.get("/:eventId/checkins", requireAuth, checkinController.getCheckins);
  *       404:
  *         description: Check-in not found
  */
-router.post("/:eventId/checkins/:checkInId/undo", requireAuth, checkinController.undoCheckin);
+router.post("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.undoCheckin);
 
 export default router;

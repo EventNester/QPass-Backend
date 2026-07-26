@@ -8,16 +8,18 @@ import {
   deleteEventController,
 } from "./event.controller.js";
 
+import { requireAuth } from "../auth/auth.middleware.js";
+
 const router = Router();
 
-router.post("/", createEventController);
+router.post("/", requireAuth, createEventController);
 
 router.get("/", listEventsController);
 
 router.get("/:id", getEventController);
 
-router.patch("/:id", updateEventController);
+router.patch("/:id", requireAuth, updateEventController);
 
-router.delete("/:id", deleteEventController);
+router.delete("/:id", requireAuth, deleteEventController);
 
 export default router;

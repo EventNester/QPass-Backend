@@ -10,7 +10,7 @@ import { AppError } from "./utils/error.js";
 const config = getConfig();
 const app = express();
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 app.use(globalLimiter);
 app.use(httpLogger);

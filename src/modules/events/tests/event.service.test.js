@@ -7,7 +7,7 @@ import {
   deleteEvent,
 } from "../event.service.js";
 import prisma from "../../../database/index.js";
-import { NotFoundError } from "../../../utils/error.js";
+import { NotFoundError, ForbiddenError } from "../../../utils/error.js";
 
 vi.mock("../../../database/index.js", () => ({
   default: {
@@ -15,6 +15,7 @@ vi.mock("../../../database/index.js", () => ({
       create: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      count: vi.fn(),
       updateMany: vi.fn(),
     },
   },
@@ -98,26 +99,37 @@ describe("Event Service Tests", () => {
   });
 
   describe("listEvents", () => {
-    test("should return all non-deleted events", async () => {
+    test("should return paginated non-deleted events", async () => {
       const events = [mockEvent, { ...mockEvent, id: "event_2", title: "Second Event" }];
       prisma.event.findMany.mockResolvedValue(events);
+      prisma.event.count.mockResolvedValue(2);
 
       const result = await listEvents();
 
-      expect(result).toEqual(events);
-      expect(result).toHaveLength(2);
+      expect(result.events).toEqual(events);
+      expect(result.events).toHaveLength(2);
+      expect(result.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        total: 2,
+        totalPages: 1,
+      });
       expect(prisma.event.findMany).toHaveBeenCalledWith({
         where: { deletedAt: null },
         orderBy: { startTime: "asc" },
+        skip: 0,
+        take: 20,
       });
     });
 
-    test("should return an empty array when no events exist", async () => {
+    test("should return empty results when no events exist", async () => {
       prisma.event.findMany.mockResolvedValue([]);
+      prisma.event.count.mockResolvedValue(0);
 
       const result = await listEvents();
 
-      expect(result).toEqual([]);
+      expect(result.events).toEqual([]);
+      expect(result.pagination.total).toBe(0);
     });
   });
 
@@ -138,18 +150,20 @@ describe("Event Service Tests", () => {
 
     test("should throw NotFoundError if event does not exist", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(null);
 
       await expect(
         updateEvent("nonexistent", { title: "Updated" }, mockOwnerId)
       ).rejects.toThrow(NotFoundError);
     });
 
-    test("should throw NotFoundError if caller is not the owner", async () => {
+    test("should throw ForbiddenError if caller is not the owner", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
 
       await expect(
         updateEvent("event_1", { title: "Updated" }, "attacker_user")
-      ).rejects.toThrow(NotFoundError);
+      ).rejects.toThrow(ForbiddenError);
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: { id: "event_1", ownerId: "attacker_user", deletedAt: null },
         data: { title: "Updated" },
@@ -158,6 +172,7 @@ describe("Event Service Tests", () => {
 
     test("should throw NotFoundError for soft-deleted events", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(null);
 
       await expect(
         updateEvent("event_1", { title: "Updated" }, mockOwnerId)
@@ -168,14 +183,10 @@ describe("Event Service Tests", () => {
   describe("deleteEvent", () => {
     test("should soft-delete and return the event when owner matches", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 1 });
-      prisma.event.findFirst.mockResolvedValue({
-        ...mockEvent,
-        deletedAt: new Date(),
-      });
 
       const result = await deleteEvent("event_1", mockOwnerId);
 
-      expect(result).toBeDefined();
+      expect(result).toEqual({ id: "event_1" });
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: { id: "event_1", ownerId: mockOwnerId, deletedAt: null },
         data: { deletedAt: expect.any(Date) },
@@ -184,18 +195,20 @@ describe("Event Service Tests", () => {
 
     test("should throw NotFoundError if event does not exist", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(null);
 
       await expect(deleteEvent("nonexistent", mockOwnerId)).rejects.toThrow(
         NotFoundError
       );
     });
 
-    test("should throw NotFoundError if caller is not the owner", async () => {
+    test("should throw ForbiddenError if caller is not the owner", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
 
       await expect(
         deleteEvent("event_1", "attacker_user")
-      ).rejects.toThrow(NotFoundError);
+      ).rejects.toThrow(ForbiddenError);
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: { id: "event_1", ownerId: "attacker_user", deletedAt: null },
         data: { deletedAt: expect.any(Date) },
@@ -204,6 +217,7 @@ describe("Event Service Tests", () => {
 
     test("should throw NotFoundError for already soft-deleted events", async () => {
       prisma.event.updateMany.mockResolvedValue({ count: 0 });
+      prisma.event.findFirst.mockResolvedValue(null);
 
       await expect(deleteEvent("event_1", mockOwnerId)).rejects.toThrow(
         NotFoundError

@@ -14,8 +14,6 @@ import {
 import { success, created } from "../../utils/response.js";
 import { ValidationError } from "../../utils/error.js";
 
-const getOwnerId = (req) => req.user?.id || process.env.DEFAULT_OWNER_ID;
-
 const parseOrNext = (schema, body, next) => {
   try {
     return schema.parse(body);
@@ -30,18 +28,10 @@ const parseOrNext = (schema, body, next) => {
 // Create event
 export const createEventController = async (req, res, next) => {
   try {
-    const ownerId = getOwnerId(req);
-    if (!ownerId) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required",
-      });
-    }
-
     const validatedData = parseOrNext(createEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await createEvent(validatedData, ownerId);
+    const event = await createEvent(validatedData, req.user.id);
 
     return created(res, event, "Event created successfully");
   } catch (error) {
@@ -65,9 +55,11 @@ export const getEventController = async (req, res, next) => {
 // List events
 export const listEventsController = async (req, res, next) => {
   try {
-    const events = await listEvents();
+    const page = parseInt(req.query.page, 10) || undefined;
+    const limit = parseInt(req.query.limit, 10) || undefined;
+    const result = await listEvents(page, limit);
 
-    return success(res, events);
+    return success(res, result);
   } catch (error) {
     next(error);
   }
@@ -76,20 +68,12 @@ export const listEventsController = async (req, res, next) => {
 // Update event
 export const updateEventController = async (req, res, next) => {
   try {
-    const ownerId = getOwnerId(req);
-    if (!ownerId) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required",
-      });
-    }
-
     const { id } = req.params;
 
     const validatedData = parseOrNext(updateEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await updateEvent(id, validatedData, ownerId);
+    const event = await updateEvent(id, validatedData, req.user.id);
 
     return success(res, event, "Event updated successfully");
   } catch (error) {
@@ -100,17 +84,9 @@ export const updateEventController = async (req, res, next) => {
 // Delete event
 export const deleteEventController = async (req, res, next) => {
   try {
-    const ownerId = getOwnerId(req);
-    if (!ownerId) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required",
-      });
-    }
-
     const { id } = req.params;
 
-    const event = await deleteEvent(id, ownerId);
+    const event = await deleteEvent(id, req.user.id);
 
     return success(res, event, "Event deleted successfully");
   } catch (error) {
