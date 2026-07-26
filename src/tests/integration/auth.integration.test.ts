@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
+
+vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
+  globalLimiter: (_req: any, _res: any, next: any) => next(),
+  authLimiter: (_req: any, _res: any, next: any) => next(),
+}));
 
 describe('Auth API Integration Tests', () => {
 
