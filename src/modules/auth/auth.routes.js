@@ -1,164 +1,81 @@
-import { Router } from "express";
-import { authLimiter } from "../../middlewares/rate-limit.middleware.js";
-import { validate } from "../../middlewares/validate.middleware.js";
-import { registerSchema, loginSchema } from "./auth.schema.js";
+import { Router } from 'express';
+import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken, hashPassword } from './auth.service.js';
+import { success, created } from '../../utils/response.js';
+import { systemMessages } from '../../config/index.js';
+
+import { registerSchema, loginSchema, refreshSchema, logoutSchema } from './auth.schema.js';
+import { requireAuth } from './auth.middleware.js';
+import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
-/**
- * @swagger
- * /api/v1/auth/register:
- *   post:
- *     summary: Register a new user account
- *     description: Creates a new user with role `ATTENDEE` by default and returns a JWT pair.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
- *     responses:
- *       201:
- *         description: Account created
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
- *       409:
- *         description: Email already in use
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       422:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       429:
- *         description: Too many requests (rate limit)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post("/register", authLimiter, validate(registerSchema), (req, res) => {
-  res.status(501).json({ status: 'error', message: 'Not implemented' });
+// POST /api/v1/auth/register
+router.post('/register', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
+    }
+    const { name, email, password } = parsed.data;
+
+    const passwordHash = await hashPassword(password);
+    const user = await registerUser({ name, email, passwordHash, role: 'ATTENDEE' });
+
+    const tokens = generateTokens(user);
+
+    return created(res, { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens }, systemMessages.SUCCESS.AUTH.REGISTER);
+  } catch (error) {
+    next(error);
+  }
 });
 
-/**
- * @swagger
- * /api/v1/auth/login:
- *   post:
- *     summary: Log in with email + password
- *     description: Returns a fresh access + refresh token pair on success.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
- *     responses:
- *       200:
- *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
- *       401:
- *         description: Invalid credentials or suspended account
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       422:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       429:
- *         description: Too many requests (5 attempts per 15 minutes)
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post("/login", authLimiter, validate(loginSchema), (req, res) => {
-  res.status(501).json({ status: 'error', message: 'Not implemented' });
+// POST /api/v1/auth/login
+router.post('/login', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
+    }
+    const { email, password } = parsed.data;
+
+    const user = await authenticateUser(email, password);
+    
+    const tokens = generateTokens(user);
+
+    return success(res, { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens }, systemMessages.SUCCESS.AUTH.LOGIN);
+  } catch (error) {
+    next(error);
+  }
 });
 
-/**
- * @swagger
- * /api/v1/auth/refresh:
- *   post:
- *     summary: Exchange a refresh token for a new token pair
- *     description: |
- *       Rotates the refresh token. The old refresh token is invalidated
- *       server-side, so this endpoint can be safely replayed only with the
- *       most recently issued refresh token.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RefreshRequest'
- *     responses:
- *       200:
- *         description: New token pair
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
- *       401:
- *         description: Refresh token invalid, expired, or revoked
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post("/refresh", (req, res) => {
-  res.status(501).json({ status: 'error', message: 'Not implemented' });
+// POST /api/v1/auth/refresh
+router.post('/refresh', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+    }
+    const { refreshToken: token } = parsed.data;
+
+    const newTokens = await refreshToken(token);
+    return success(res, newTokens, systemMessages.SUCCESS.AUTH.TOKEN_REFRESHED);
+  } catch (error) {
+    return next(error);
+  }
 });
 
-/**
- * @swagger
- * /api/v1/auth/logout:
- *   post:
- *     summary: Revoke a refresh token
- *     description: Idempotent — succeeds even if the token is already invalid or expired.
- *     tags: [Auth]
- *     security: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LogoutRequest'
- *     responses:
- *       200:
- *         description: Logged out
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status: { type: string, example: success }
- *                 message: { type: string, example: Logged out successfully }
- *                 data:
- *                   type: object
- *                   properties:
- *                     success: { type: boolean, example: true }
- */
-router.post("/logout", (req, res) => {
-  res.status(501).json({ status: 'error', message: 'Not implemented' });
+// POST /api/v1/auth/logout
+router.post('/logout', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = logoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+    }
+    await blacklistRefreshToken(parsed.data.refreshToken);
+    return success(res, null, systemMessages.SUCCESS.AUTH.LOGOUT);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 export default router;
