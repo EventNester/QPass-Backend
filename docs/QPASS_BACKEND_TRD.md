@@ -17,7 +17,7 @@ QPass is an event registration, ticketing, payment, and attendance intelligence 
 
 > **Core flow:** Organizer creates event → attendees import or self-register → unique QR credential issued → staff scan QR on event day → duplicate blocked → organizers see/export attendance data.
 
-**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration (free + paid), QR code generation/scanning with duplicate detection, Paystack test payments, SMTP email delivery, staff management, dashboard statistics, CSV export, PDF ticket downloads, and audit logging.
+**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration (free + paid), QR code generation/scanning with duplicate detection, Paystack test payments, SMTP email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
 
 **Deferred:** Full KYC, OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
 
@@ -71,7 +71,7 @@ Become Africa's most trusted attendance verification & ticket management platfor
 | QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by organizer only. |
 | Staff management | Assign/remove staff. Email invitation for new staff users. |
 | Dashboard stats | Registrations, check-ins, no-shows, capacity utilization, ticket breakdown. Real-time via Socket.IO. |
-| CSV export | Attendance and registration lists as downloadable CSV. |
+| CSV export | Attendance and registration lists as downloadable CSV/PDF. |
 | PDF ticket downloads | Server-generated PDF with event details, QR code, attendee info, confirmation code. |
 | Audit logging | Event CRUD, registration, QR issue, scan, payment, staff actions. |
 | Health check + Swagger | `GET /health` with DB/Redis status. Auto-generated OpenAPI docs. |
@@ -299,7 +299,7 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 |---|--------|----------|------|---------|
 | 17 | POST | `/events/:eventId/import` | Owner | Upload CSV/XLSX/PDF/DOCX (Multer, 5MB max) |
 | 18 | GET | `/events/:eventId/import/:batchId` | Owner | Import results + per-row errors |
-| 19 | GET | `/events/:eventId/import-template` | Owner | Download CSV template |
+| 19 | GET | `/events/:eventId/import-template` | Owner | Download CSV or PDF template (?format=csv\|pdf, default csv) |
 
 ### 7.5 Public Registration
 
@@ -314,7 +314,7 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 |---|--------|----------|------|---------|
 | 22 | GET | `/tickets/:ticketId` | Secure (token) | View ticket + QR |
 | 23 | GET | `/events/:eventId/tickets` | Owner | List `?page,limit,status` |
-| 24 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV |
+| 24 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF |
 | 25 | GET | `/tickets/:ticketId/download` | Secure (token) | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
 
 ### 7.7 Staff Management
@@ -347,8 +347,8 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
 | 34 | GET | `/events/:eventId/dashboard` | Owner | Stats: registrations, check-ins, no-shows, capacity, ticket breakdown |
-| 35 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV |
-| 36 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV |
+| 35 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
+| 36 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
 
 ### 7.11 Health
 
@@ -426,7 +426,7 @@ SMTP_FROM=QPass <noreply@qpass.com>
 
 ## 11. PDF Ticket Downloads
 
-`GET /tickets/:ticketId/download` — generated on-demand via `pdfkit`.
+`GET /tickets/:ticketId/download`; generated on-demand via `pdfkit`.
 
 **Contents:** QPass header, event name/date/venue, attendee name/email, ticket type, QR code (inline PNG via `qrcode`), confirmation code, check-in instructions. Response: `Content-Type: application/pdf`, `Content-Disposition: attachment; filename="{event-slug}-ticket.pdf"`.
 
@@ -518,7 +518,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 | Task | Details |
 |------|---------|
-| Dashboard + exports | Stats service, CSV export (attendance + registrations), audit log queries |
+| Dashboard + exports | Stats service, PDF/CSV export (attendance + registrations), audit log queries |
 | Seed + docs | Admin/organizer users, sample events, Swagger annotations |
 | Tests | Integration (auth, events, registrations, check-ins, payments), Unit (QR, import, Paystack, auth) |
 | Deploy | Render config, security pass, lint clean |
@@ -601,7 +601,7 @@ SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 | 7 | Wrong event scan | QR from Event A at Event B → WRONG_EVENT |
 | 8 | Unauthorized staff | Non-assigned staff → 403 NOT_AUTHORIZED |
 | 9 | Dashboard stats | Correct counts. Real-time updates during event. |
-| 10 | CSV export | Attendance/registration CSV opens correctly |
+| 10 | CSV/PDF export | Attendance/registration CSV/PDF opens correctly |
 | 11 | PDF ticket download | PDF with QR, event details, ticket type |
 | 12 | Audit trail | All key actions logged with actor, entity, timestamp |
 | 13 | Email delivery | All emails via SMTP. Notification records track SENT/FAILED. |
