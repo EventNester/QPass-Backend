@@ -32,7 +32,12 @@ function fileFilter(_req, file, cb) {
 
 export const uploadAttendees = multer({
   storage,
-  limits: { fileSize: constants.UPLOAD.MAX_SIZE },
+  limits: {
+    fileSize: constants.UPLOAD.MAX_SIZE,
+    files: 1,
+    fields: 0,
+    parts: 1,
+  },
   fileFilter,
 });
 
