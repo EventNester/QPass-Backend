@@ -20,12 +20,13 @@ vi.mock("../../config/index.js", () => ({
         MISSING_FILE: "No file uploaded",
         INVALID_TYPE: "Invalid file type. Allowed formats: CSV, XLSX, PDF, DOCX",
         TOO_LARGE: "File exceeds the 5MB size limit",
+        GENERIC: "File upload failed",
       },
     },
   },
 }));
 
-import { handleUploadError, cleanupOnError } from "../upload.middleware.js";
+import { handleUploadError, cleanupOnError, requireFile } from "../upload.middleware.js";
 
 describe("upload.middleware", () => {
   let res;
@@ -56,6 +57,10 @@ describe("upload.middleware", () => {
       const err = new multer.MulterError("LIMIT_UNEXPECTED_FILE");
       handleUploadError(err, {}, res, next);
       expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        status: "error",
+        message: "File upload failed",
+      });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -101,6 +106,25 @@ describe("upload.middleware", () => {
       await cleanupOnError(err, req, res, next);
       expect(mockUnlink).toHaveBeenCalledWith("/tmp/missing.csv");
       expect(next).toHaveBeenCalledWith(err);
+    });
+  });
+
+  describe("requireFile", () => {
+    it("should return 400 when no file on request", () => {
+      requireFile({}, res, next);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        status: "error",
+        message: "No file uploaded",
+      });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("should call next when file is present", () => {
+      const req = { file: { path: "/tmp/test.csv" } };
+      requireFile(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
     });
   });
 });

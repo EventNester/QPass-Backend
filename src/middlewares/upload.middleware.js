@@ -46,7 +46,7 @@ export function handleUploadError(err, _req, res, next) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(413).json({ status: "error", message: msg.TOO_LARGE });
     }
-    return res.status(400).json({ status: "error", message: err.message });
+    return res.status(400).json({ status: "error", message: msg.GENERIC });
   }
 
   if (err?.message === msg.INVALID_TYPE) {
@@ -54,6 +54,13 @@ export function handleUploadError(err, _req, res, next) {
   }
 
   next(err);
+}
+
+export function requireFile(_req, res, next) {
+  if (!_req.file) {
+    return res.status(400).json({ status: "error", message: msg.MISSING_FILE });
+  }
+  next();
 }
 
 export async function cleanupOnError(err, req, _res, next) {
