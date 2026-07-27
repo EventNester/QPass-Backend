@@ -2,6 +2,9 @@ import { randomBytes } from "crypto";
 import prisma from "../../database/index.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError } from "../../utils/error.js";
+import { systemMessages } from "../../config/index.js";
+
+const msg = systemMessages.ERROR;
 
 /**
  * QR Token
@@ -42,7 +45,7 @@ class QrService {
       where: { registrationId },
     });
     if (existing) {
-      throw new Error("QR token already exists for this registration");
+      throw new Error(msg.TICKET.ALREADY_EXISTS);
     }
 
     await prisma.qrToken.create({
@@ -80,15 +83,15 @@ class QrService {
     });
 
     if (!qrToken) {
-      throw new NotFoundError("Invalid QR token");
+      throw new NotFoundError(msg.TICKET.INVALID);
     }
 
     if (new Date(qrToken.expiresAt) < new Date()) {
-      throw new Error("QR token has expired");
+      throw new Error(msg.TICKET.EXPIRED);
     }
 
     if (qrToken.revokedAt) {
-      throw new Error("QR token has been revoked");
+      throw new Error(msg.TICKET.REVOKED);
     }
 
     return qrToken;

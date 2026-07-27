@@ -51,6 +51,14 @@ vi.mock("../../config/socket.config.js", () => ({
 }));
 vi.mock("../../config/index.js", () => ({
   logger: m.mockLogger,
+  systemMessages: {
+    ERROR: {
+      AUTH: {
+        UNAUTHORIZED: "Unauthorized access",
+        TOKEN_INVALID_OR_EXPIRED: "Invalid or expired token",
+      },
+    },
+  },
 }));
 vi.mock("../../database/index.js", () => ({
   default: {
@@ -123,7 +131,7 @@ describe("Socket Handler", () => {
       const middleware = await getMiddleware();
       const mockNext = vi.fn();
       middleware({ handshake: { auth: {} } }, mockNext);
-      expect(mockNext).toHaveBeenCalledWith(new Error("Authentication error"));
+      expect(mockNext).toHaveBeenCalledWith(new Error("Unauthorized access"));
     });
 
     it("should reject connection with invalid token", async () => {
@@ -131,7 +139,7 @@ describe("Socket Handler", () => {
       const middleware = await getMiddleware();
       const mockNext = vi.fn();
       middleware({ handshake: { auth: { token: "bad" } } }, mockNext);
-      expect(mockNext).toHaveBeenCalledWith(new Error("Authentication error"));
+      expect(mockNext).toHaveBeenCalledWith(new Error("Invalid or expired token"));
     });
 
     it("should accept connection with valid token", async () => {
