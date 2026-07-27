@@ -27,6 +27,8 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 
+  SOCKET_CORS_ORIGIN: z.string().default("*"),
+
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
   PAYSTACK_PUBLIC_KEY: z.string().optional().default(""),
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
