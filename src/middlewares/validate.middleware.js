@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { systemMessages } from "../config/index.js";
 
 export const validate = (schema) => (req, res, next) => {
   try {
@@ -8,7 +9,7 @@ export const validate = (schema) => (req, res, next) => {
     if (error instanceof z.ZodError) {
       return res.status(422).json({
         status: "error",
-        message: "Validation error",
+        message: systemMessages.ERROR.GENERAL.VALIDATION_ERROR,
         errors: error.errors,
       });
     }

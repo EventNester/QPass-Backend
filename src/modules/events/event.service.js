@@ -1,6 +1,8 @@
 import prisma from "../../database/index.js";
 import { NotFoundError, ForbiddenError } from "../../utils/error.js";
-import { constants } from "../../config/index.js";
+import { constants, systemMessages } from "../../config/index.js";
+
+const msg = systemMessages.ERROR;
 
 // Create an event
 export const createEvent = async (eventData, ownerId) => {
@@ -28,7 +30,7 @@ export const getEvent = async (eventId) => {
   });
 
   if (!event) {
-    throw new NotFoundError("Event not found");
+    throw new NotFoundError(msg.EVENT.NOT_FOUND);
   }
 
   return event;
@@ -73,8 +75,8 @@ export const updateEvent = async (eventId, eventData, ownerId) => {
 
   if (updatedEvent.count === 0) {
     const exists = await prisma.event.findFirst({ where: { id: eventId, deletedAt: null } });
-    if (!exists) throw new NotFoundError("Event not found");
-    throw new ForbiddenError("You are not the owner of this event");
+    if (!exists) throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
   return getEvent(eventId);
@@ -95,8 +97,8 @@ export const deleteEvent = async (eventId, ownerId) => {
 
   if (deletedEvent.count === 0) {
     const exists = await prisma.event.findFirst({ where: { id: eventId, deletedAt: null } });
-    if (!exists) throw new NotFoundError("Event not found");
-    throw new ForbiddenError("You are not the owner of this event");
+    if (!exists) throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
   return { id: eventId };
