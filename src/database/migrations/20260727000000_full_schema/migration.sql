@@ -1,6 +1,9 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
+-- CreateExtension
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- CreateEnum
 CREATE TYPE "UserRole" AS ENUM ('ATTENDEE', 'STAFF', 'ORGANIZER', 'ADMIN');
 
@@ -375,6 +378,9 @@ ALTER TABLE "registrations" ADD CONSTRAINT "registrations_ticket_code_id_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "registrations" ADD CONSTRAINT "registrations_ticket_type_id_fkey" FOREIGN KEY ("ticket_type_id") REFERENCES "ticket_types"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- CreateIndex
+CREATE INDEX "registrations_ticket_type_id_idx" ON "registrations"("ticket_type_id");
 
 -- AddForeignKey
 ALTER TABLE "qr_tokens" ADD CONSTRAINT "qr_tokens_registration_id_fkey" FOREIGN KEY ("registration_id") REFERENCES "registrations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
