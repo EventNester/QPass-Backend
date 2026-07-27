@@ -31,12 +31,19 @@ export async function initSocket(server) {
     pubClient = createClient(redisOpts);
     subClient = pubClient.duplicate();
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    const results = await Promise.allSettled([pubClient.connect(), subClient.connect()]);
+    const failed = results.some((r) => r.status === "rejected");
+    if (failed) {
+      throw new Error("Redis client connection failed");
+    }
 
     io.adapter(createAdapter(pubClient, subClient));
     logger.info("Socket.IO Redis adapter connected");
   } catch (err) {
     logger.error("Socket.IO Redis adapter failed, falling back to in-memory:", err.message);
+    await Promise.allSettled([pubClient?.quit(), subClient?.quit()]);
+    pubClient = null;
+    subClient = null;
   }
 
   io.use((socket, next) => {

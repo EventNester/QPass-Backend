@@ -7,8 +7,7 @@ import { initSocket, closeSocket } from "./socket/socket.handler.js";
 
 const config = getConfig();
 const server = http.createServer(app);
-initSocket(server);
-
+await initSocket(server);
 server.listen(config.PORT, async () => {
   try {
     await prisma.$connect();
