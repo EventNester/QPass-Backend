@@ -1,10 +1,12 @@
 import { randomBytes } from "crypto";
+import QRCode from "qrcode";
 import prisma from "../../database/index.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError } from "../../utils/error.js";
-import { systemMessages } from "../../config/index.js";
+import { systemMessages, constants } from "../../config/index.js";
 
 const msg = systemMessages.ERROR;
+const QR_MIN_SIZE = 200;
 
 /**
  * QR Token
@@ -95,6 +97,15 @@ class QrService {
     }
 
     return qrToken;
+  }
+
+  async createQrImage(token, options = {}) {
+    const width = Math.max(options.width ?? constants.QR.SIZE, QR_MIN_SIZE);
+    return QRCode.toBuffer(token, {
+      width,
+      margin: options.margin ?? 2,
+      errorCorrectionLevel: options.errorCorrectionLevel ?? "M",
+    });
   }
 }
 
