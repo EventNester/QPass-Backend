@@ -16,30 +16,60 @@
     }
   ],
   "tags": [
-    { "name": "Health", "description": "Service health & readiness" },
-    { "name": "Auth", "description": "Registration, login, refresh, logout" },
-    { "name": "Checkins", "description": "QR scanning and attendance tracking" },
-    { "name": "Events", "description": "Event management (Aspirational)" },
-    { "name": "Tickets", "description": "Ticket code management (Aspirational)" },
-    { "name": "Attendees", "description": "Attendee verification (Aspirational)" }
+    {
+      "name": "Health",
+      "description": "Service health & readiness"
+    },
+    {
+      "name": "Auth",
+      "description": "Registration, login, refresh, logout"
+    },
+    {
+      "name": "Checkins",
+      "description": "QR scanning and attendance tracking"
+    },
+    {
+      "name": "Events",
+      "description": "Event management (Aspirational)"
+    },
+    {
+      "name": "Tickets",
+      "description": "Ticket code management (Aspirational)"
+    },
+    {
+      "name": "Attendees",
+      "description": "Attendee verification (Aspirational)"
+    }
   ],
   "paths": {
     "/api/v1/events": {
       "get": {
         "summary": "List all events",
         "description": "Retrieves a list of all events (Not Yet Implemented).",
-        "tags": ["Events"],
+        "tags": [
+          "Events"
+        ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       },
       "post": {
         "summary": "Create a new event",
         "description": "Creates a new event (Requires ORGANIZER or ADMIN role) (Not Yet Implemented).",
-        "tags": ["Events"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Events"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "201": { "description": "Created" }
+          "201": {
+            "description": "Created"
+          }
         }
       }
     },
@@ -47,39 +77,86 @@
       "get": {
         "summary": "Get details of a specific event",
         "description": "Not Yet Implemented",
-        "tags": ["Events"],
+        "tags": [
+          "Events"
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" },
-          "404": { "description": "Not Found" }
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
         }
       },
       "patch": {
         "summary": "Update event details",
         "description": "Not Yet Implemented",
-        "tags": ["Events"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Events"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" },
-          "404": { "description": "Not Found" }
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
         }
       },
       "delete": {
         "summary": "Delete/cancel an event",
         "description": "Not Yet Implemented",
-        "tags": ["Events"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Events"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "204": { "description": "No Content" },
-          "404": { "description": "Not Found" }
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
         }
       }
     },
@@ -87,13 +164,28 @@
       "post": {
         "summary": "Upload ticket codes via CSV parsing",
         "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Tickets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       }
     },
@@ -101,13 +193,28 @@
       "get": {
         "summary": "List ticket codes and track statuses",
         "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Tickets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       }
     },
@@ -115,13 +222,28 @@
       "post": {
         "summary": "Validate a specific ticket code status",
         "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Tickets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       }
     },
@@ -129,13 +251,28 @@
       "post": {
         "summary": "Verify an attendee using their ticket code",
         "description": "Not Yet Implemented",
-        "tags": ["Attendees"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Attendees"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       }
     },
@@ -143,13 +280,28 @@
       "post": {
         "summary": "Generate signed JWT QR token for the attendee",
         "description": "Not Yet Implemented",
-        "tags": ["Attendees"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Attendees"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "OK" }
+          "200": {
+            "description": "OK"
+          }
         }
       }
     }
@@ -167,97 +319,629 @@
       "SuccessResponse": {
         "type": "object",
         "properties": {
-          "status": { "type": "string", "example": "success" },
-          "message": { "type": "string" },
-          "data": { "type": "object" }
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          }
         }
       },
       "ErrorResponse": {
         "type": "object",
         "properties": {
-          "status": { "type": "string", "example": "error" },
-          "message": { "type": "string" }
+          "status": {
+            "type": "string",
+            "example": "error"
+          },
+          "message": {
+            "type": "string"
+          }
         }
       },
       "RegisterRequest": {
         "type": "object",
-        "required": ["name", "email", "password"],
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
         "properties": {
-          "name":     { "type": "string", "minLength": 1, "maxLength": 100, "example": "Ada Lovelace" },
-          "email":    { "type": "string", "format": "email", "example": "ada@example.com" },
-          "password": { "type": "string", "minLength": 8, "maxLength": 128, "format": "password" }
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "Ada Lovelace"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "ada@example.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "format": "password"
+          }
         }
       },
       "LoginRequest": {
         "type": "object",
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "properties": {
-          "email":    { "type": "string", "format": "email" },
-          "password": { "type": "string", "format": "password" }
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
         }
       },
       "RefreshRequest": {
         "type": "object",
-        "required": ["refreshToken"],
+        "required": [
+          "refreshToken"
+        ],
         "properties": {
-          "refreshToken": { "type": "string" }
+          "refreshToken": {
+            "type": "string"
+          }
         }
       },
       "LogoutRequest": {
         "type": "object",
-        "required": ["refreshToken"],
+        "required": [
+          "refreshToken"
+        ],
         "properties": {
-          "refreshToken": { "type": "string" }
+          "refreshToken": {
+            "type": "string"
+          }
         }
       },
       "AuthUser": {
         "type": "object",
         "properties": {
-          "id":        { "type": "string" },
-          "name":      { "type": "string" },
-          "email":     { "type": "string", "format": "email" },
-          "role":      { "type": "string", "enum": ["ATTENDEE", "STAFF", "ORGANIZER", "ADMIN"] },
-          "status":    { "type": "string", "enum": ["ACTIVE", "INACTIVE", "SUSPENDED"] },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ATTENDEE",
+              "STAFF",
+              "ORGANIZER",
+              "ADMIN"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "AuthTokens": {
         "type": "object",
         "properties": {
-          "accessToken":  { "type": "string", "description": "Short-lived JWT for the Authorization header" },
-          "refreshToken": { "type": "string", "description": "Long-lived JWT used to mint new access tokens" },
-          "expiresIn":    { "type": "string", "example": "30m" }
+          "accessToken": {
+            "type": "string",
+            "description": "Short-lived JWT for the Authorization header"
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "Long-lived JWT used to mint new access tokens"
+          },
+          "expiresIn": {
+            "type": "string",
+            "example": "30m"
+          }
         }
       },
       "AuthResponse": {
         "type": "object",
         "properties": {
-          "status":  { "type": "string", "example": "success" },
-          "message": { "type": "string" },
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string"
+          },
           "data": {
             "type": "object",
             "properties": {
-              "user":   { "$ref": "#/components/schemas/AuthUser" },
-              "tokens": { "$ref": "#/components/schemas/AuthTokens" }
+              "user": {
+                "$ref": "#/components/schemas/AuthUser"
+              },
+              "tokens": {
+                "$ref": "#/components/schemas/AuthTokens"
+              }
             }
           }
         }
       },
       "ScanRequest": {
         "type": "object",
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "properties": {
-          "token":      { "type": "string", "description": "Raw QR token (hashed server-side)" },
-          "deviceInfo": { "type": "string" }
+          "token": {
+            "type": "string",
+            "description": "Raw QR token (hashed server-side)"
+          },
+          "deviceInfo": {
+            "type": "string"
+          }
         }
       },
       "ScanResult": {
         "type": "object",
         "properties": {
-          "result":       { "type": "string", "enum": ["VALID", "DUPLICATE", "INVALID"] },
-          "message":      { "type": "string" },
+          "result": {
+            "type": "string",
+            "enum": [
+              "VALID",
+              "DUPLICATE",
+              "INVALID"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "attendeeName": {
+            "type": "string"
+          },
+          "checkinId": {
+            "type": "string"
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PUBLISHED",
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED"
+            ]
+          },
+          "registrationMode": {
+            "type": "string",
+            "enum": [
+              "TICKET_BASED",
+              "OPEN"
+            ]
+          },
+          "isPaid": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "registrationOpensAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registrationClosesAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EventCreateRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "slug",
+          "startTime",
+          "endTime",
+          "registrationMode"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registrationMode": {
+            "type": "string",
+            "enum": [
+              "TICKET_BASED",
+              "OPEN"
+            ]
+          },
+          "isPaid": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "registrationOpensAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registrationClosesAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EventUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registrationMode": {
+            "type": "string",
+            "enum": [
+              "TICKET_BASED",
+              "OPEN"
+            ]
+          },
+          "isPaid": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "registrationOpensAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registrationClosesAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TicketType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "capacity": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TicketTypeCreateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "price",
+          "capacity"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "capacity": {
+            "type": "integer"
+          }
+        }
+      },
+      "TicketTypeUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "capacity": {
+            "type": "integer"
+          }
+        }
+      },
+      "Registration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "attendeeEmail": {
+            "type": "string"
+          },
+          "attendeeName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "ticketTypeId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "CONFIRMED",
+              "CANCELLED"
+            ]
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SUCCESS",
+              "FAILED",
+              "REFUNDED"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "WEB",
+              "APP",
+              "IMPORT"
+            ]
+          },
+          "confirmationCode": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "qrIssued": {
+            "type": "boolean"
+          },
+          "qrIssuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegistrationCreateRequest": {
+        "type": "object",
+        "required": [
+          "attendeeName",
+          "attendeeEmail",
+          "ticketTypeId"
+        ],
+        "properties": {
+          "attendeeName": {
+            "type": "string"
+          },
+          "attendeeEmail": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "ticketTypeId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "WEB",
+              "APP",
+              "IMPORT"
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["token", "newPassword"],
+        "properties": {
+          "token": { "type": "string" },
+          "newPassword": { "type": "string", "format": "password" }
+        }
+      },
+      "TicketCode": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "code": { "type": "string" },
+          "status": { "type": "string", "enum": ["UNUSED", "USED", "REVOKED"] },
+          "usedAt": { "type": "string", "format": "date-time" },
+          "attendeeEmail": { "type": "string" },
           "attendeeName": { "type": "string" },
-          "checkinId":    { "type": "string" }
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ImportBatch": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"] },
+          "totalCount": { "type": "integer" },
+          "successCount": { "type": "integer" },
+          "failureCount": { "type": "integer" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "userId": { "type": "string" },
+          "registrationId": { "type": "string" },
+          "paystackReference": { "type": "string" },
+          "amount": { "type": "integer", "description": "Amount in smallest currency unit (e.g., kobo for NGN)" },
+          "currency": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "SUCCESS", "FAILED", "REFUNDED"] },
+          "gateway": { "type": "string" },
+          "metadata": { "type": "object" },
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "paidAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "QrToken": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "registrationId": { "type": "string" },
+          "tokenHash": { "type": "string" },
+          "issuedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "revokedAt": { "type": "string", "format": "date-time" },
+          "scanCount": { "type": "integer" }
         }
       }
     }
