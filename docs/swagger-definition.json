@@ -46,9 +46,7 @@
       "get": {
         "summary": "List all events",
         "description": "Retrieves a list of all events (Not Yet Implemented).",
-        "tags": [
-          "Events"
-        ],
+        "tags": ["Events"],
         "responses": {
           "200": {
             "description": "OK"
@@ -58,9 +56,7 @@
       "post": {
         "summary": "Create a new event",
         "description": "Creates a new event (Requires ORGANIZER or ADMIN role) (Not Yet Implemented).",
-        "tags": [
-          "Events"
-        ],
+        "tags": ["Events"],
         "security": [
           {
             "bearerAuth": []
@@ -77,9 +73,7 @@
       "get": {
         "summary": "Get details of a specific event",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Events"
-        ],
+        "tags": ["Events"],
         "parameters": [
           {
             "in": "path",
@@ -102,9 +96,7 @@
       "patch": {
         "summary": "Update event details",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Events"
-        ],
+        "tags": ["Events"],
         "security": [
           {
             "bearerAuth": []
@@ -132,9 +124,7 @@
       "delete": {
         "summary": "Delete/cancel an event",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Events"
-        ],
+        "tags": ["Events"],
         "security": [
           {
             "bearerAuth": []
@@ -160,13 +150,39 @@
         }
       }
     },
+    "/api/v1/events/{eventId}/publish": {
+      "post": {
+        "summary": "Publish an event",
+        "description": "Generates slug and sets event status to PUBLISHED.",
+        "tags": ["Events"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/api/v1/events/{eventId}/cancel": {
+      "post": {
+        "summary": "Cancel an event",
+        "description": "Sets event status to CANCELLED.",
+        "tags": ["Events"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
     "/api/v1/events/{eventId}/tickets/upload": {
       "post": {
         "summary": "Upload ticket codes via CSV parsing",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Tickets"
-        ],
+        "tags": ["Tickets"],
         "security": [
           {
             "bearerAuth": []
@@ -193,9 +209,7 @@
       "get": {
         "summary": "List ticket codes and track statuses",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Tickets"
-        ],
+        "tags": ["Tickets"],
         "security": [
           {
             "bearerAuth": []
@@ -222,9 +236,7 @@
       "post": {
         "summary": "Validate a specific ticket code status",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Tickets"
-        ],
+        "tags": ["Tickets"],
         "security": [
           {
             "bearerAuth": []
@@ -251,9 +263,7 @@
       "post": {
         "summary": "Verify an attendee using their ticket code",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Attendees"
-        ],
+        "tags": ["Attendees"],
         "security": [
           {
             "bearerAuth": []
@@ -280,9 +290,7 @@
       "post": {
         "summary": "Generate signed JWT QR token for the attendee",
         "description": "Not Yet Implemented",
-        "tags": [
-          "Attendees"
-        ],
+        "tags": ["Attendees"],
         "security": [
           {
             "bearerAuth": []
@@ -302,6 +310,46 @@
           "200": {
             "description": "OK"
           }
+        }
+      }
+    },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "summary": "Request a password reset link",
+        "description": "Sends a password reset email if the account exists.",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "summary": "Reset password using a token",
+        "description": "Resets the user's password using the token received via email.",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
         }
       }
     }
@@ -345,11 +393,7 @@
       },
       "RegisterRequest": {
         "type": "object",
-        "required": [
-          "name",
-          "email",
-          "password"
-        ],
+        "required": ["name", "email", "password"],
         "properties": {
           "name": {
             "type": "string",
@@ -372,10 +416,7 @@
       },
       "LoginRequest": {
         "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
+        "required": ["email", "password"],
         "properties": {
           "email": {
             "type": "string",
@@ -389,9 +430,7 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "required": [
-          "refreshToken"
-        ],
+        "required": ["refreshToken"],
         "properties": {
           "refreshToken": {
             "type": "string"
@@ -400,9 +439,7 @@
       },
       "LogoutRequest": {
         "type": "object",
-        "required": [
-          "refreshToken"
-        ],
+        "required": ["refreshToken"],
         "properties": {
           "refreshToken": {
             "type": "string"
@@ -424,20 +461,11 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "ATTENDEE",
-              "STAFF",
-              "ORGANIZER",
-              "ADMIN"
-            ]
+            "enum": ["ATTENDEE", "STAFF", "ORGANIZER", "ADMIN"]
           },
           "status": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE",
-              "SUSPENDED"
-            ]
+            "enum": ["ACTIVE", "INACTIVE", "SUSPENDED"]
           },
           "createdAt": {
             "type": "string",
@@ -487,9 +515,7 @@
       },
       "ScanRequest": {
         "type": "object",
-        "required": [
-          "token"
-        ],
+        "required": ["token"],
         "properties": {
           "token": {
             "type": "string",
@@ -505,11 +531,7 @@
         "properties": {
           "result": {
             "type": "string",
-            "enum": [
-              "VALID",
-              "DUPLICATE",
-              "INVALID"
-            ]
+            "enum": ["VALID", "DUPLICATE", "INVALID"]
           },
           "message": {
             "type": "string"
@@ -526,6 +548,9 @@
         "type": "object",
         "properties": {
           "id": {
+            "type": "string"
+          },
+          "ownerId": {
             "type": "string"
           },
           "title": {
@@ -550,20 +575,11 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "DRAFT",
-              "PUBLISHED",
-              "ACTIVE",
-              "COMPLETED",
-              "CANCELLED"
-            ]
+            "enum": ["DRAFT", "PUBLISHED", "ACTIVE", "COMPLETED", "CANCELLED"]
           },
           "registrationMode": {
             "type": "string",
-            "enum": [
-              "TICKET_BASED",
-              "OPEN"
-            ]
+            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"]
           },
           "isPaid": {
             "type": "boolean"
@@ -628,10 +644,7 @@
           },
           "registrationMode": {
             "type": "string",
-            "enum": [
-              "TICKET_BASED",
-              "OPEN"
-            ]
+            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"]
           },
           "isPaid": {
             "type": "boolean"
@@ -677,10 +690,7 @@
           },
           "registrationMode": {
             "type": "string",
-            "enum": [
-              "TICKET_BASED",
-              "OPEN"
-            ]
+            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"]
           },
           "isPaid": {
             "type": "boolean"
@@ -717,10 +727,23 @@
             "type": "string"
           },
           "price": {
-            "type": "number"
+            "type": "integer",
+            "description": "Amount in smallest currency unit (e.g., kobo for NGN)"
           },
           "capacity": {
             "type": "integer"
+          },
+          "quantitySold": {
+            "type": "integer",
+            "default": 0
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "default": 0
           },
           "createdAt": {
             "type": "string",
@@ -734,11 +757,7 @@
       },
       "TicketTypeCreateRequest": {
         "type": "object",
-        "required": [
-          "name",
-          "price",
-          "capacity"
-        ],
+        "required": ["name", "price", "capacity"],
         "properties": {
           "name": {
             "type": "string"
@@ -747,7 +766,8 @@
             "type": "string"
           },
           "price": {
-            "type": "number"
+            "type": "integer",
+            "description": "Amount in smallest currency unit (e.g., kobo for NGN)"
           },
           "capacity": {
             "type": "integer"
@@ -764,7 +784,8 @@
             "type": "string"
           },
           "price": {
-            "type": "number"
+            "type": "integer",
+            "description": "Amount in smallest currency unit (e.g., kobo for NGN)"
           },
           "capacity": {
             "type": "integer"
@@ -778,6 +799,9 @@
             "type": "string"
           },
           "eventId": {
+            "type": "string"
+          },
+          "ticketCodeId": {
             "type": "string"
           },
           "attendeeEmail": {
@@ -794,28 +818,15 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "PENDING",
-              "CONFIRMED",
-              "CANCELLED"
-            ]
+            "enum": ["PENDING", "CONFIRMED", "CANCELLED"]
           },
           "paymentStatus": {
             "type": "string",
-            "enum": [
-              "PENDING",
-              "SUCCESS",
-              "FAILED",
-              "REFUNDED"
-            ]
+            "enum": ["PENDING", "SUCCESS", "FAILED", "REFUNDED"]
           },
           "source": {
             "type": "string",
-            "enum": [
-              "WEB",
-              "APP",
-              "IMPORT"
-            ]
+            "enum": ["IMPORT", "PUBLIC_LINK"]
           },
           "confirmationCode": {
             "type": "string"
@@ -842,11 +853,7 @@
       },
       "RegistrationCreateRequest": {
         "type": "object",
-        "required": [
-          "attendeeName",
-          "attendeeEmail",
-          "ticketTypeId"
-        ],
+        "required": ["attendeeName", "attendeeEmail"],
         "properties": {
           "attendeeName": {
             "type": "string"
@@ -862,11 +869,7 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "WEB",
-              "APP",
-              "IMPORT"
-            ]
+            "enum": ["IMPORT", "PUBLIC_LINK"]
           },
           "metadata": {
             "type": "object"
@@ -906,10 +909,18 @@
         "properties": {
           "id": { "type": "string" },
           "eventId": { "type": "string" },
-          "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"] },
-          "totalCount": { "type": "integer" },
-          "successCount": { "type": "integer" },
-          "failureCount": { "type": "integer" },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
+          },
+          "totalRows": { "type": "integer" },
+          "successRows": { "type": "integer" },
+          "failedRows": { "type": "integer" },
+          "uploadedById": { "type": "string" },
+          "originalFilename": { "type": "string" },
+          "fileType": { "type": "string", "enum": ["csv", "xlsx", "pdf", "docx"] },
+          "errorReport": { "type": "object" },
+          "completedAt": { "type": "string", "format": "date-time" },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         }
@@ -922,9 +933,15 @@
           "userId": { "type": "string" },
           "registrationId": { "type": "string" },
           "paystackReference": { "type": "string" },
-          "amount": { "type": "integer", "description": "Amount in smallest currency unit (e.g., kobo for NGN)" },
+          "amount": {
+            "type": "integer",
+            "description": "Amount in smallest currency unit (e.g., kobo for NGN)"
+          },
           "currency": { "type": "string" },
-          "status": { "type": "string", "enum": ["PENDING", "SUCCESS", "FAILED", "REFUNDED"] },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "SUCCESS", "FAILED", "REFUNDED"]
+          },
           "gateway": { "type": "string" },
           "metadata": { "type": "object" },
           "verifiedAt": { "type": "string", "format": "date-time" },
@@ -942,6 +959,61 @@
           "expiresAt": { "type": "string", "format": "date-time" },
           "revokedAt": { "type": "string", "format": "date-time" },
           "scanCount": { "type": "integer" }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "paymentId": { "type": "string" },
+          "invoiceNumber": { "type": "string" },
+          "amount": { "type": "integer" },
+          "issueDate": { "type": "string", "format": "date-time" },
+          "dueDate": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["PENDING", "PAID", "OVERDUE", "CANCELLED"] }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "recipient": { "type": "string" },
+          "channel": { "type": "string" },
+          "template": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "SENT", "FAILED", "READ"] },
+          "userId": { "type": "string" },
+          "eventId": { "type": "string" },
+          "registrationId": { "type": "string" },
+          "providerMessageId": { "type": "string" },
+          "failureReason": { "type": "string" },
+          "sentAt": { "type": "string", "format": "date-time" },
+          "readAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "actorId": { "type": "string" },
+          "action": { "type": "string" },
+          "entity": { "type": "string" },
+          "entityId": { "type": "string" },
+          "beforeSnapshot": { "type": "object" },
+          "afterSnapshot": { "type": "object" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "EventStaffAssignment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "eventId": { "type": "string" },
+          "userId": { "type": "string" },
+          "permissionScope": { "type": "string" },
+          "active": { "type": "boolean" },
+          "assignedAt": { "type": "string", "format": "date-time" }
         }
       }
     }

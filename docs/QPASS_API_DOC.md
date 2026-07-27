@@ -359,11 +359,13 @@ Get import batch status and per-row errors.
 
 #### `GET /api/v1/events/:eventId/import-template`
 
-Download a CSV template with the correct column headers for attendee import.
+Download a template with the correct column headers for attendee import. Supports CSV and PDF formats.
 
 **Auth:** Owner (ORGANIZER)
 
-**Response:** CSV file download (`Content-Type: text/csv`)
+**Query:** `?format=csv` (default) or `?format=pdf`
+
+**Response:** File download (`Content-Type: text/csv` or `application/pdf`)
 
 ---
 
@@ -431,11 +433,13 @@ List all tickets for an event.
 
 #### `POST /api/v1/events/:eventId/tickets/export`
 
-Export all event tickets as a CSV file download.
+Export all event tickets as a CSV or PDF file download.
 
 **Auth:** Owner (ORGANIZER)
 
-**Response:** CSV file download (`Content-Type: text/csv`)
+**Query:** `?format=csv` (default) or `?format=pdf`
+
+**Response:** CSV/PDF file download (`Content-Type: text/csv` or `application/pdf`)
 
 ---
 
@@ -577,21 +581,25 @@ Get event dashboard statistics: registration counts, check-in rates, no-shows, c
 
 #### `GET /api/v1/events/:eventId/exports/attendance`
 
-Export attendance data (check-in records with attendee info) as CSV.
+Export attendance data (check-in records with attendee info) as CSV or PDF.
 
 **Auth:** Owner (ORGANIZER)
 
-**Response:** CSV file download
+**Query:** `?format=csv` (default) or `?format=pdf`
+
+**Response:** CSV/PDF file download
 
 ---
 
 #### `GET /api/v1/events/:eventId/exports/registrations`
 
-Export registration data as CSV.
+Export registration data as CSV or PDF.
 
 **Auth:** Owner (ORGANIZER)
 
-**Response:** CSV file download
+**Query:** `?format=csv` (default) or `?format=pdf`
+
+**Response:** CSV/PDF file download
 
 ---
 
