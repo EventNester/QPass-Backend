@@ -50,7 +50,7 @@ The default Docker Compose maps Postgres to port `5433` and Redis to `6380` on t
 
 ## API Documentation
 
-**[Full API Reference →](./docs/API.md)**
+**[Full API Reference →](./docs/QPASS_API_DOC.md)**
 
 All 39 endpoints across 11 modules are documented with request/response examples, auth requirements, and validation schemas.
 

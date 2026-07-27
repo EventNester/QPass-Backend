@@ -61,7 +61,7 @@
 | **Okuo** | Public free registration: `POST /public/events/:slug/register` — create Registration + TicketCode + QR → email | `src/modules/public/` | **John** (QR service) — HARD block, cannot create QR without this. Start view route first, wire QR after John merges. |
 | **Emmanuel** | Ticket view: `GET /tickets/:ticketId` — return ticket details | `src/modules/tickets/` | **Nobody** — start with non-QR parts |
 | **Emmanuel** | Ticket list: `GET /events/:eventId/tickets` — paginated, filter by status | `src/modules/tickets/` | **Nobody** |
-| **Emmanuel** | CSV export: `POST /events/:eventId/tickets/export` | `src/modules/tickets/` | **Nobody** |
+| **Emmanuel** | CSV/PDF export: `POST /events/:eventId/tickets/export` | `src/modules/tickets/` | **Nobody** |
 | **Emmanuel** | QR data URL in ticket view | `src/modules/tickets/` | **John** (QR service) — HARD block for QR image generation |
 | **Nash** | File parsers: `src/utils/parsers/csv.js` (csv-parse), `src/utils/parsers/xlsx.js` (xlsx), `src/utils/parsers/pdf.js` (pdf-parse + table detection), `src/utils/parsers/docx.js` (mammoth + table extraction). Each returns `{ name, email, phone, ticketType }[]` with row-level errors | `src/utils/parsers/` | **Nobody** — fully independent. **John needs these by end of day.** |
 
@@ -74,7 +74,7 @@
 | **Francis** | Wire email triggers: registration confirmed → email, QR issued → email, payment verified → email, staff assigned → email. All via Notification service | notification.service.js, various services | **Self** — needs own notification service (done Day 4) |
 | **Okuo** | Public paid registration: create Registration (PENDING) + Payment (PENDING) → Paystack `/transaction/initialize` → return `{ registration, paymentUrl }` | `src/modules/public/` | **John** (QR service) — HARD block. **Francis** (email) — soft block, email can be wired after Francis merges. |
 | **Emmanuel** | Ticket PDF download: `GET /tickets/:ticketId/download` — pdfkit: QPass header, event details, attendee info, QR code (inline PNG), confirmation code. `Content-Disposition: attachment; filename="{event-slug}-ticket.pdf"` | `src/modules/tickets/ticket-pdf.service.js` | **John** (QR service) — HARD block for QR image embedding |
-| **Nash** | Import routes: `POST /events/:eventId/import` (with upload middleware), `GET /events/:eventId/import/:batchId` (results), `GET /events/:eventId/import-template` (CSV template download) | `src/modules/registrations/import.routes.js` | **John** (upload middleware) — needs middleware to exist for Multer integration. Can scaffold routes first, wire middleware after. |
+| **Nash** | Import routes: `POST /events/:eventId/import` (with upload middleware), `GET /events/:eventId/import/:batchId` (results), `GET /events/:eventId/import-template` (CSV/PDF template download via `?format` query) | `src/modules/registrations/import.routes.js` | **John** (upload middleware) — needs middleware to exist for Multer integration. Can scaffold routes first, wire middleware after. |
 
 ### Day 6 — Staff + Integration Tests
 
@@ -83,7 +83,7 @@
 | **John** | Staff management: `POST /events/:eventId/staff` (assign/invite), `GET /events/:eventId/staff` (list), `DELETE /events/:eventId/staff/:staffId` (remove). If user doesn't exist, create pending user + send invite email | `src/modules/staff/` | **Francis** (email service) — HARD block for invite email. Can do assign/list/remove without email, but invite flow needs it. |
 | **Francis** | Email integration tests: register → confirmation email sent, import → QR emails sent, password reset → email sent. Use Ethereal/Mailtrap for test SMTP | tests | **John** — needs import + registration flows merged to test email triggers end-to-end |
 | **Okuo** | Public registration integration tests: free flow, paid flow, duplicate registration, capacity full. Import integration tests: CSV + XLSX | tests | **John** (import service + Nash parsers) for import tests. **Self** for registration tests. |
-| **Emmanuel** | Ticket PDF integration tests: PDF generated with correct content, QR embedded. CSV export tests: file downloads, correct columns | tests | **John** (QR service) — needs QR to be generating images |
+| **Emmanuel** | Ticket PDF integration tests: PDF generated with correct content, QR embedded. CSV/PDF export tests: file downloads, correct columns | tests | **John** (QR service) — needs QR to be generating images |
 | **Nash** | Socket.IO integration: emit `checkin:update` on scan, `registration:new` on registration. Room join on connect. Staff management integration tests | tests | **John** (Socket.IO from Phase 1 + staff module) |
 
 ### Day 7 — Final Testing + Exit Verification
@@ -93,7 +93,7 @@
 | **John** | Full Phase 2 integration test run. Code review all PRs. Merge to `dev` | — | **All** — needs all PRs submitted |
 | **Francis** | Email edge cases: invalid SMTP (non-blocking), template rendering errors, Notification FAILED tracking. Final email service polish | tests | **Nobody** |
 | **Okuo** | Import edge cases: invalid file types, empty files, malformed rows, duplicate emails in same batch. Public registration edge cases | tests | **Nobody** |
-| **Emmanuel** | PDF edge cases: long names, special characters, missing QR. CSV export edge cases: empty data, large datasets | tests | **Nobody** |
+| **Emmanuel** | PDF edge cases: long names, special characters, missing QR. CSV/PDF export edge cases: empty data, large datasets | tests | **Nobody** |
 | **Nash** | Final Swagger review — all Phase 2 endpoints documented. Final route wiring in `v1.js` (public, registrations, staff, tickets). Phase 2 exit checklist | — | **John** — needs all routes wired |
 
 **Phase 2 Exit Criterion:** Import works for all 4 formats. Public reg (free + paid) works. QR emailed. Tickets downloadable as PDF. Staff assignable. ✅

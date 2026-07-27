@@ -590,7 +590,7 @@ const upload = multer({
 Implement:
 - `listRegistrations(eventId, userId, query)` - paginated, verify event ownership
 - `getRegistration(eventId, registrationId, userId)` - verify ownership
-- `exportRegistrations(eventId, userId)` - generate CSV string from registrations
+- `exportRegistrations(eventId, userId)` - generate CSV/PDF from registrations
 
 ### 2.5b - Registration Routes
 
@@ -602,7 +602,7 @@ GET  /:eventId/registrations/:regId       → authenticateUser → controller.ge
 POST /:eventId/registrations/export       → authenticateUser → controller.export
 POST /:eventId/import                     → authenticateUser → upload.single("file") → controller.import
 GET  /:eventId/import/:batchId            → authenticateUser → controller.getImportBatch
-GET  /:eventId/import-template            → authenticateUser → controller.downloadTemplate
+GET  /:eventId/import-template            → authenticateUser → controller.downloadTemplate (?format=csv|pdf)
 ```
 
 ---
@@ -616,7 +616,7 @@ GET  /:eventId/import-template            → authenticateUser → controller.do
 Implement:
 - `getTicket(ticketId, userId)` - find TicketCode by id, verify user is attendee or event owner, include registration + qrToken
 - `listEventTickets(eventId, userId, query)` - paginated, verify ownership
-- `exportTickets(eventId, userId)` - CSV export
+- `exportTickets(eventId, userId)` - CSV/PDF export
 
 ### 2.6b - PDF Ticket Service
 
@@ -925,15 +925,17 @@ GET /:eventId/dashboard → authenticateUser → controller.getDashboard
 
 ---
 
-## Step 4.2 - CSV Export
+## Step 4.2 - CSV/PDF Export
 
 **File:** `src/modules/reports/export.service.js`
 
 Implement:
 - `exportAttendanceCSV(eventId)` - query checkIns with registration info, format as CSV string
+- `exportAttendancePDF(eventId)` - query checkIns with registration info, format as PDF
 - `exportRegistrationsCSV(eventId)` - query registrations with ticketType, format as CSV
+- `exportRegistrationsPDF(eventId)` - query registrations with ticketType, format as PDF
 
-Use a simple CSV builder or `csv-stringify` library.
+Use a simple CSV builder or `csv-stringify` library. For PDF, use `pdfkit`.
 
 **File:** `src/modules/reports/export.routes.js`
 
@@ -1096,8 +1098,8 @@ Final checklist before release:
 ## Phase 4 Exit Checklist
 
 - [ ] Dashboard returns correct stats (registrations, check-ins, no-shows, capacity, ticket breakdown)
-- [ ] Attendance CSV export downloads and opens correctly
-- [ ] Registration CSV export downloads and opens correctly
+- [ ] Attendance CSV/PDF export downloads and opens correctly
+- [ ] Registration CSV/PDF export downloads and opens correctly
 - [ ] Audit log queries work with filters
 - [ ] Seed script creates admin, organizer, sample events, registrations
 - [ ] Swagger docs show all endpoints
