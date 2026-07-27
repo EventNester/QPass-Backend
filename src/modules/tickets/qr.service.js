@@ -1,52 +1,98 @@
-/**
- * QR Token Payload Structure
- *
- * Note: Since Phase 2 uses JWT for QR tokens, the 'signature' is typically
- * handled by the JWT header and verification process itself. However, if a
- * custom crypto approach is used, it can be attached directly to the payload.
- *
- * @typedef {Object} QrTokenPayload
- * @property {string} attendeeId
- * @property {string} eventId
- * @property {number} timestamp - Unix timestamp (issued at)
- * @property {string} [signature] - Handled by JWT natively, or populated for custom crypto
- */
+import { randomBytes } from "crypto";
+import prisma from "../../database/index.js";
+import { hashToken } from "../../utils/crypto.js";
+import { NotFoundError } from "../../utils/error.js";
 
 /**
- * QR Service Skeleton
- * Handles generation and validation of attendee QR codes
+ * QR Token
+ *
+ * Tokens are opaque 64-char hex strings generated via `crypto.randomBytes(32)`.
+ * Only the SHA-256 hash is stored in the database. Expiration is enforced
+ * against the `QrToken.expiresAt` column (set to `event.endTime + 24h` at
+ * issuance time). The raw token is delivered to the attendee and never persisted.
+ *
+ * @typedef {Object} QrTokenRecord
+ * @property {string} id
+ * @property {string} registrationId
+ * @property {string} tokenHash - SHA-256 hex digest of the raw token
+ * @property {Date} issuedAt
+ * @property {Date} expiresAt - event.endTime + 24h
+ * @property {Date|null} revokedAt
+ * @property {number} scanCount
  */
+
 class QrService {
   /**
-   * Generates a signed QR token for an attendee
+   * Generate an opaque QR token for a registration.
    *
-   * @param {string} attendeeId - The unique ID of the attendee
-   * @param {string} eventId - The ID of the event the ticket is for
-   * @returns {Promise<string>} A signed token string (e.g., JWT) representing the payload
+   * 1. Produce a random 64-char hex token.
+   * 2. SHA-256 hash it and store the hash in QrToken.
+   * 3. Return the raw token (delivered to attendee, never stored).
+   *
+   * @param {string} registrationId - The registration this token belongs to
+   * @param {Date} expiresAt - Absolute expiration datetime (typically event.endTime + 24h)
+   * @returns {Promise<string>} The raw hex token to deliver to the attendee
+   * @throws {Error} If a token already exists for this registration
    */
-  async generateToken(_attendeeId, _eventId) {
-    // TODO: Implement token generation logic
-    // 1. Construct payload matching QrTokenPayload
-    // 2. Sign payload (e.g., using jsonwebtoken)
-    // 3. Return the token string
-    throw new Error("Not implemented");
+  async generateToken(registrationId, expiresAt) {
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = hashToken(rawToken);
+
+    const existing = await prisma.qrToken.findUnique({
+      where: { registrationId },
+    });
+    if (existing) {
+      throw new Error("QR token already exists for this registration");
+    }
+
+    await prisma.qrToken.create({
+      data: {
+        registrationId,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    return rawToken;
   }
 
   /**
-   * Validates a scanned QR token string and decodes its payload
+   * Validate a scanned QR token string.
+   *
+   * 1. Hash the raw token with SHA-256.
+   * 2. Look up the QrToken record by hash.
+   * 3. Check expiration (expiresAt must be in the future).
+   * 4. Check revocation (revokedAt must be null).
+   * 5. Return the registration data if valid.
    *
    * @param {string} token - The raw token string scanned from the QR code
-   * @returns {Promise<QrTokenPayload>} The decoded payload if valid and signature matches
-   * @throws {Error} If token is expired, tampered with, or invalid
+   * @returns {Promise<Object>} The QrToken record with its registration
+   * @throws {NotFoundError} If the token hash is not found
+   * @throws {Error} If the token has expired
+   * @throws {Error} If the token has been revoked
    */
-  async validateToken(_token) {
-    // TODO: Implement token validation logic
-    // 1. Verify token signature
-    // 2. Check expiration (timestamp)
-    // 3. Return decoded QrTokenPayload
-    throw new Error("Not implemented");
+  async validateToken(token) {
+    const tokenHash = hashToken(token);
+
+    const qrToken = await prisma.qrToken.findUnique({
+      where: { tokenHash },
+      include: { registration: true },
+    });
+
+    if (!qrToken) {
+      throw new NotFoundError("Invalid QR token");
+    }
+
+    if (new Date(qrToken.expiresAt) < new Date()) {
+      throw new Error("QR token has expired");
+    }
+
+    if (qrToken.revokedAt) {
+      throw new Error("QR token has been revoked");
+    }
+
+    return qrToken;
   }
 }
 
-// Export a singleton instance
 export const qrService = new QrService();
