@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import multer from "multer";
 
+const { mockUnlink } = vi.hoisted(() => ({
+  mockUnlink: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("node:fs/promises", () => ({ unlink: mockUnlink }));
+
 vi.mock("../../config/index.js", () => ({
   constants: {
     UPLOAD: {
@@ -27,6 +32,7 @@ describe("upload.middleware", () => {
   let next;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     res = {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
@@ -70,26 +76,30 @@ describe("upload.middleware", () => {
       expect(next).toHaveBeenCalledWith(err);
       expect(res.status).not.toHaveBeenCalled();
     });
-
-    it("should cleanup uploaded file on multer error", async () => {
-      const err = new multer.MulterError("LIMIT_FILE_SIZE");
-      const req = { file: { path: "/tmp/test.csv" } };
-      await cleanupOnError(err, req, res, next);
-      expect(next).toHaveBeenCalledWith(err);
-    });
   });
 
   describe("cleanupOnError", () => {
+    it("should call unlink with the file path on error", async () => {
+      const err = new multer.MulterError("LIMIT_FILE_SIZE");
+      const req = { file: { path: "/tmp/test.csv" } };
+      await cleanupOnError(err, req, res, next);
+      expect(mockUnlink).toHaveBeenCalledWith("/tmp/test.csv");
+      expect(next).toHaveBeenCalledWith(err);
+    });
+
     it("should not call unlink when no file on req", async () => {
       const err = new Error("fail");
       await cleanupOnError(err, {}, res, next);
+      expect(mockUnlink).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalledWith(err);
     });
 
     it("should call next even if unlink fails", async () => {
+      mockUnlink.mockRejectedValueOnce(new Error("ENOENT"));
       const err = new Error("fail");
       const req = { file: { path: "/tmp/missing.csv" } };
       await cleanupOnError(err, req, res, next);
+      expect(mockUnlink).toHaveBeenCalledWith("/tmp/missing.csv");
       expect(next).toHaveBeenCalledWith(err);
     });
   });
