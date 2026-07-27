@@ -86,6 +86,11 @@ export default {
       DB_CONNECTION_FAILED: "Database connection failed",
       SERVER_START_FAILED: "Failed to start server",
     },
+    UPLOAD: {
+      MISSING_FILE: "No file uploaded",
+      INVALID_TYPE: "Invalid file type. Allowed formats: CSV, XLSX, PDF, DOCX",
+      TOO_LARGE: "File exceeds the 5MB size limit",
+    },
   },
 
   VALIDATION: {
