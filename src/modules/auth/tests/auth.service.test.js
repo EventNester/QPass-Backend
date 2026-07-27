@@ -29,6 +29,11 @@ vi.mock('../../../config/index.js', () => ({
     ERROR: {
       AUTH: {
         UNAUTHORIZED: 'Unauthorized access',
+        TOKEN_INVALID_OR_EXPIRED: 'Invalid or expired token',
+        TOKEN_REFRESH_REVOKED: 'Refresh token has been revoked',
+        TOKEN_REFRESH_INVALID: 'Invalid or expired refresh token',
+        ALREADY_EXISTS: 'Account already exists with this email',
+        INVALID_CREDENTIALS: 'Invalid email or password',
       },
     },
   },
@@ -86,6 +91,15 @@ describe('Auth Service Tests', () => {
       expect(decoded.role).toBe('ORGANIZER');
     });
 
+    test('should throw UnauthorizedError with exact message on invalid token', () => {
+      expect(() => validateToken('garbage_token')).toThrow(UnauthorizedError);
+      try {
+        validateToken('garbage_token');
+      } catch (err) {
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_INVALID_OR_EXPIRED);
+      }
+    });
+
     test('should refresh access token correctly', async () => {
       const { refreshToken: token } = generateTokens(mockUser);
       mRedisClient.get.mockResolvedValue(null);
@@ -97,7 +111,24 @@ describe('Auth Service Tests', () => {
     test('should throw error if refresh token is blacklisted', async () => {
       const { refreshToken: token } = generateTokens(mockUser);
       mRedisClient.get.mockResolvedValue('1');
-      await expect(refreshToken(token)).rejects.toThrow(UnauthorizedError);
+      try {
+        await refreshToken(token);
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_REFRESH_REVOKED);
+      }
+    });
+
+    test('should throw error if refresh token is invalid', async () => {
+      mRedisClient.get.mockResolvedValue(null);
+      try {
+        await refreshToken('not_a_real_jwt');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_REFRESH_INVALID);
+      }
     });
   });
 
@@ -130,9 +161,13 @@ describe('Auth Service Tests', () => {
     test('should throw ConflictError if email exists', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       
-      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' }))
-        .rejects
-        .toThrow(ConflictError);
+      try {
+        await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConflictError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
+      }
     });
   });
 
@@ -148,18 +183,26 @@ describe('Auth Service Tests', () => {
     test('should throw UnauthorizedError if user not found', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(authenticateUser('lucas@example.com', 'password123'))
-        .rejects
-        .toThrow(UnauthorizedError);
+      try {
+        await authenticateUser('lucas@example.com', 'password123');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
+      }
     });
 
     test('should throw UnauthorizedError if password incorrect', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       bcrypt.compare.mockResolvedValue(false);
 
-      await expect(authenticateUser('lucas@example.com', 'password123'))
-        .rejects
-        .toThrow(UnauthorizedError);
+      try {
+        await authenticateUser('lucas@example.com', 'password123');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
+      }
     });
   });
 
