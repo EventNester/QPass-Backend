@@ -27,7 +27,7 @@ QPass is an event registration, ticketing, payment, and attendance intelligence 
 
 ### 2.1 Problem Statement
 
-The event industry in Nigeria suffers from fragmented attendance management. Organizers rely on printed lists, WhatsApp confirmations, and manual verification — leading to slow check-in (10–30 seconds per person), duplicate ticket fraud, lost paper records, and zero real-time visibility. QPass unifies registration, QR-based verification, attendance tracking, and analytics in one platform.
+The event industry in Nigeria suffers from fragmented attendance management. Organizers rely on printed lists, WhatsApp confirmations, and manual verification, leading to slow check-in (10–30 seconds per person), duplicate ticket fraud, lost paper records, and zero real-time visibility. QPass unifies registration, QR-based verification, attendance tracking, and analytics in one platform.
 
 ### 2.2 Product Vision
 
@@ -62,11 +62,11 @@ Become Africa's most trusted attendance verification & ticket management platfor
 |---------|-------|
 | Auth (register, login, refresh, password reset) | RBAC: Organizer, Staff, Attendee, Admin. JWT 30min access / 7d refresh. |
 | Event CRUD + publish | Owner-only. Slug-based public URLs. DRAFT → PUBLISHED → ACTIVE → COMPLETED/CANCELLED. |
-| TicketType management | Per-event categories (VIP, Regular, Student). Price in kobo, optional capacity. |
+| TicketType management | Per-event categories (VIP, Regular, Student). Price in naira, optional capacity. |
 | Attendee import (CSV/XLSX/PDF/DOCX) | Row validation, batch tracking, per-row error reporting. 5MB max. Synchronous (<1000 rows). |
 | Public registration | Slug-based link. Free → instant confirmation + QR. Paid → Paystack → QR. |
 | QR code generation | One per registration. SHA-256 hashed server-side. Raw token delivered to attendee. Expires event end + 24h. |
-| Paystack test payments | Initialize, verify, webhook (idempotent). Amounts in kobo. Server-side amount verification. |
+| Paystack test payments | Initialize, verify, webhook (idempotent). Amounts in naira. Server-side amount verification. |
 | SMTP email | 5 templates: registration, QR, payment, staff invite, password reset. Non-blocking. |
 | QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by organizer only. |
 | Staff management | Assign/remove staff. Email invitation for new staff users. |
@@ -195,31 +195,31 @@ enum NotificationStatus { PENDING  SENT  FAILED  READ }
 
 ### 5.2 Models
 
-**User** — id (cuid), name, email (unique), passwordHash (bcrypt 12), role (default ATTENDEE, server-side only), status (ACTIVE), createdAt, updatedAt, deletedAt (soft delete). Relations: events, staffAssignments, payments, auditLogs, checkins.
+**User** - id (uuid), name, email (unique), passwordHash (bcrypt 12), role (default ATTENDEE, server-side only), status (ACTIVE), createdAt, updatedAt, deletedAt (soft delete). Relations: events, staffAssignments, payments, auditLogs, checkins.
 
-**Event** — id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), isPaid (false), capacity?, currency ("NGN"), registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, payments, invoices, ticketCodes.
+**Event** - id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), isPaid (false), capacity?, currency ("NGN"), registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, payments, invoices, ticketCodes.
 
-**TicketType** — id, eventId (FK→Event), name, description?, price (kobo, 0=free), capacity?, quantitySold (0), active (true), sortOrder (0), createdAt, updatedAt. Index: [eventId]. Relations: event, registrations.
+**TicketType** - id, eventId (FK→Event), name, description?, price (naira, 0=free), capacity?, quantitySold (0), active (true), sortOrder (0), createdAt, updatedAt. Index: [eventId]. Relations: event, registrations.
 
-**Registration** — id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), paymentStatus (PENDING), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (PENDING), createdAt, updatedAt. Unique: [eventId, ticketCodeId]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins.
+**Registration** - id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), paymentStatus (PENDING), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (PENDING), createdAt, updatedAt. Unique: [eventId, ticketCodeId]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins.
 
-**TicketCode** — id, eventId (FK→Event), code, status (UNUSED), usedAt?, attendeeEmail?, attendeeName?, createdAt. Unique: [eventId, code]. Indexes: [eventId], [code].
+**TicketCode** - id, eventId (FK→Event), code, status (UNUSED), usedAt?, attendeeEmail?, attendeeName?, createdAt. Unique: [eventId, code]. Indexes: [eventId], [code].
 
-**QrToken** — id, registrationId (unique, FK→Registration), tokenHash (unique, SHA-256), issuedAt, expiresAt (event.endTime + 24h), revokedAt?, scanCount (0). Index: [tokenHash]. Only hash stored; raw token delivered to attendee.
+**QrToken** - id, registrationId (unique, FK→Registration), tokenHash (unique, SHA-256), issuedAt, expiresAt (event.endTime + 24h), revokedAt?, scanCount (0). Index: [tokenHash]. Only hash stored; raw token delivered to attendee.
 
-**CheckIn** — id, eventId (FK→Event), registrationId (FK→Registration), staffId (FK→User), scannedAt, result (VALID/DUPLICATE/INVALID), deviceInfo?, ipAddress?. Unique: [eventId, registrationId]. Indexes: [eventId], [registrationId].
+**CheckIn** - id, eventId (FK→Event), registrationId (FK→Registration), staffId (FK→User), scannedAt, result (VALID/DUPLICATE/INVALID), deviceInfo?, ipAddress?. Unique: [eventId, registrationId]. Indexes: [eventId], [registrationId].
 
-**Payment** — id, eventId (FK→Event), userId (FK→User), registrationId? (unique, FK→Registration), paystackReference (unique), amount (kobo), currency ("NGN"), status (PENDING), gateway ("PAYSTACK"), metadata? (Json), verifiedAt?, createdAt, paidAt?. Indexes: [eventId], [userId], [paystackReference].
+**Payment** - id, eventId (FK→Event), userId (FK→User), registrationId? (unique, FK→Registration), paystackReference (unique), amount (naira), currency ("NGN"), status (PENDING), gateway ("PAYSTACK"), metadata? (Json), verifiedAt?, createdAt, paidAt?. Indexes: [eventId], [userId], [paystackReference].
 
-**Invoice** — id, eventId (FK→Event), paymentId (unique, FK→Payment), invoiceNumber (unique), amount, issueDate, dueDate, status (PENDING).
+**Invoice** - id, eventId (FK→Event), paymentId (unique, FK→Payment), invoiceNumber (unique), amount, issueDate, dueDate, status (PENDING).
 
-**Notification** — id, recipient, channel, template, status (PENDING), userId? (FK→User), eventId? (FK→Event), registrationId? (FK→Registration), providerMessageId?, failureReason?, sentAt?, readAt?, createdAt. Index: [recipient]. Failures never block core actions.
+**Notification** - id, recipient, channel, template, status (PENDING), userId? (FK→User), eventId? (FK→Event), registrationId? (FK→Registration), providerMessageId?, failureReason?, sentAt?, readAt?, createdAt. Index: [recipient]. Failures never block core actions.
 
-**AuditLog** — id, actorId? (FK→User, nullable for webhooks), action, entity, entityId, beforeSnapshot? (Json), afterSnapshot? (Json), createdAt. Indexes: [actorId], [entity, entityId].
+**AuditLog** - id, actorId? (FK→User, nullable for webhooks), action, entity, entityId, beforeSnapshot? (Json), afterSnapshot? (Json), createdAt. Indexes: [actorId], [entity, entityId].
 
-**EventStaffAssignment** — id, eventId (FK→Event), userId (FK→User), permissionScope?, active (true), assignedAt. Unique: [eventId, userId].
+**EventStaffAssignment** - id, eventId (FK→Event), userId (FK→User), permissionScope?, active (true), assignedAt. Unique: [eventId, userId].
 
-**ImportBatch** — id, eventId (FK→Event), uploadedById (FK→User), originalFilename, fileType (csv/xlsx/pdf/docx), totalRows, successRows, failedRows, status (PROCESSING/COMPLETED/FAILED), errorReport? (Json), createdAt, completedAt?. Index: [eventId].
+**ImportBatch** - id, eventId (FK→Event), uploadedById (FK→User), originalFilename, fileType (csv/xlsx/pdf/docx), totalRows, successRows, failedRows, status (PROCESSING/COMPLETED/FAILED), errorReport? (Json), createdAt, completedAt?. Index: [eventId].
 
 ---
 
@@ -271,7 +271,7 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 | 5 | POST | `/auth/password/forgot` | Public | authLimiter | Send reset email with time-limited token. |
 | 6 | POST | `/auth/password/reset` | Public | — | `{ token, newPassword }`. |
 
-**Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE — `role` field stripped from input.
+**Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; `role` field stripped from input.
 
 ### 7.2 Events
 
@@ -368,7 +368,7 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 4. Store `QrToken`: `{ tokenHash, registrationId, expiresAt: event.endTime + 24h }`
 5. Raw token delivered to attendee only (email, web, PDF)
 
-**Payload:** Single opaque hex string (64 chars). No JSON — prevents info leakage if photographed.
+**Payload:** Single opaque hex string (64 chars). No JSON; prevents info leakage if photographed.
 
 ### 8.2 Check-in Flow
 
@@ -396,11 +396,11 @@ PAYSTACK_WEBHOOK_SECRET=whsec_xxx
 ```
 
 **Flow:**
-1. **Initialize:** `POST /transaction/initialize` → `{ email, amount (kobo), currency: "NGN", callback_url, metadata }` → `{ authorization_url, access_code, reference }`
+1. **Initialize:** `POST /transaction/initialize` → `{ email, amount (naira), currency: "NGN", callback_url, metadata }` → `{ authorization_url, access_code, reference }`
 2. **Webhook (`charge.success`):** Verify HMAC-SHA512 → `GET /transaction/verify/{reference}` → if success: update Payment (SUCCESS, paidAt, verifiedAt) → update Registration (CONFIRMED) → create TicketCode → QR → email → audit → Socket.IO
-3. **Manual verify:** `POST /payments/verify/:reference` — fallback for webhook failures
+3. **Manual verify:** `POST /payments/verify/:reference` - fallback for webhook failures
 
-**Rules:** Amounts in kobo. **Never trust client amount** — always pull from `TicketType.price`. Webhook must be idempotent. Use raw request body for HMAC verification.
+**Rules:** Amounts in naira. **Never trust client amount**; always pull from `TicketType.price`. Webhook must be idempotent. Use raw request body for HMAC verification.
 
 ---
 
@@ -622,6 +622,5 @@ SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 | File parsing failures | Row-level errors, partial imports, graceful degradation. |
 | Email failure | Non-blocking. Notification tracks failure. |
 
----
 
-*QPass Backend TRD v2 — July 2026 — Crosstrack Group 13*
+*QPass Backend TRD | July 2026 | Crosstrack Group 13*

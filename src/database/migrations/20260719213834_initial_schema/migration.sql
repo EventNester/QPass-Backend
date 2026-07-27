@@ -27,7 +27,7 @@ CREATE TYPE "NotificationStatus" AS ENUM ('PENDING', 'SENT', 'FAILED', 'READ');
 
 -- CreateTable
 CREATE TABLE "users" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "password_hash" TEXT NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE "users" (
 
 -- CreateTable
 CREATE TABLE "events" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "title" TEXT NOT NULL,
     "description" TEXT,
     "venue" TEXT,
@@ -59,7 +59,7 @@ CREATE TABLE "events" (
 
 -- CreateTable
 CREATE TABLE "event_staff_assignments" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "permission_scope" TEXT,
@@ -71,7 +71,7 @@ CREATE TABLE "event_staff_assignments" (
 
 -- CreateTable
 CREATE TABLE "ticket_codes" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "status" "TicketCodeStatus" NOT NULL DEFAULT 'UNUSED',
@@ -85,7 +85,7 @@ CREATE TABLE "ticket_codes" (
 
 -- CreateTable
 CREATE TABLE "registrations" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "ticket_code_id" TEXT NOT NULL,
     "attendee_email" TEXT NOT NULL,
@@ -101,7 +101,7 @@ CREATE TABLE "registrations" (
 
 -- CreateTable
 CREATE TABLE "qr_tokens" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "registration_id" TEXT NOT NULL,
     "token_hash" TEXT NOT NULL,
     "issued_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +114,7 @@ CREATE TABLE "qr_tokens" (
 
 -- CreateTable
 CREATE TABLE "check_ins" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "registration_id" TEXT NOT NULL,
     "staff_id" TEXT NOT NULL,
@@ -128,7 +128,7 @@ CREATE TABLE "check_ins" (
 
 -- CreateTable
 CREATE TABLE "payments" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "paystack_reference" TEXT NOT NULL,
@@ -143,7 +143,7 @@ CREATE TABLE "payments" (
 
 -- CreateTable
 CREATE TABLE "invoices" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "event_id" TEXT NOT NULL,
     "payment_id" TEXT NOT NULL,
     "invoice_number" TEXT NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE "invoices" (
 
 -- CreateTable
 CREATE TABLE "notifications" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "recipient" TEXT NOT NULL,
     "channel" TEXT NOT NULL,
     "template" TEXT NOT NULL,
@@ -171,7 +171,7 @@ CREATE TABLE "notifications" (
 
 -- CreateTable
 CREATE TABLE "audit_logs" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "actor_id" TEXT NOT NULL,
     "action" TEXT NOT NULL,
     "entity" TEXT NOT NULL,
