@@ -1,11 +1,20 @@
 import prisma from "./index.js";
 import bcrypt from "bcryptjs";
 
+if (process.env.NODE_ENV === "production") {
+  console.error("Refusing to seed in production. Set NODE_ENV to developpment or test.");
+  process.exit(1);
+}
+
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "admin-password-123";
+const ORGANIZER_PASSWORD = process.env.SEED_ORGANIZER_PASSWORD || "organizer-password-123";
+const BCRYPT_ROUNDS = 12;
+
 const seed = async () => {
   console.log("Seeding database...");
 
   // 1. Create admin user
-  const adminPassword = await bcrypt.hash("admin-password-123", 12);
+  const adminPassword = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS);
   const admin = await prisma.user.upsert({
     where: { email: "admin@qpass.dev" },
     update: {},
@@ -20,7 +29,7 @@ const seed = async () => {
   console.log(`Admin user: ${admin.email} (id: ${admin.id})`);
 
   // 2. Create organizer user
-  const organizerPassword = await bcrypt.hash("organizer-password-123", 12);
+  const organizerPassword = await bcrypt.hash(ORGANIZER_PASSWORD, BCRYPT_ROUNDS);
   const organizer = await prisma.user.upsert({
     where: { email: "organizer@qpass.dev" },
     update: {},
@@ -80,6 +89,7 @@ const seed = async () => {
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: {},
     create: {
+      id: "00000000-0000-0000-0000-000000000001",
       eventId: publishedEvent.id,
       name: "VIP",
       description: "VIP access with premium perks",
@@ -93,6 +103,7 @@ const seed = async () => {
     where: { id: "00000000-0000-0000-0000-000000000002" },
     update: {},
     create: {
+      id: "00000000-0000-0000-0000-000000000002",
       eventId: publishedEvent.id,
       name: "Regular",
       description: "Standard event access",
@@ -106,6 +117,7 @@ const seed = async () => {
     where: { id: "00000000-0000-0000-0000-000000000003" },
     update: {},
     create: {
+      id: "00000000-0000-0000-0000-000000000003",
       eventId: publishedEvent.id,
       name: "Student",
       description: "Discounted student ticket",
@@ -119,8 +131,8 @@ const seed = async () => {
   console.log("\nSeed completed successfully!");
   console.log("──────────────────────────────");
   console.log("Test credentials:");
-  console.log(`  Admin:      admin@qpass.dev / admin-password-123`);
-  console.log(`  Organizer:  organizer@qpass.dev / organizer-password-123`);
+  console.log(`  Admin:      admin@qpass.dev`);
+  console.log(`  Organizer:  organizer@qpass.dev`);
 };
 
 seed()
