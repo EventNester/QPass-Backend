@@ -4,10 +4,29 @@ import { createClient } from "redis";
 import { validateToken } from "../modules/auth/auth.service.js";
 import { getSocketConfig } from "../config/socket.config.js";
 import { logger } from "../config/index.js";
+import { dashboardRoom, scanRoom } from "./rooms.js";
+import prisma from "../database/index.js";
 
 let io;
 let pubClient;
 let subClient;
+
+async function isAuthorizedForEvent(userId, userRole, eventId) {
+  if (userRole === "ADMIN") return true;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null },
+    select: { ownerId: true },
+  });
+  if (!event) return false;
+  if (event.ownerId === userId) return true;
+
+  const assignment = await prisma.eventStaffAssignment.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { active: true },
+  });
+  return assignment?.active === true;
+}
 
 export async function initSocket(server) {
   const socketConfig = getSocketConfig();
@@ -62,26 +81,36 @@ export async function initSocket(server) {
   io.on("connection", (socket) => {
     logger.info(`Socket connected: ${socket.id} (user: ${socket.user?.sub})`);
 
-    socket.on("join:event", (eventId) => {
-      const room = `event:${eventId}:dashboard`;
+    socket.on("join:event", async (eventId) => {
+      const authorized = await isAuthorizedForEvent(socket.user.sub, socket.user.role, eventId);
+      if (!authorized) {
+        logger.debug(`Socket ${socket.id} rejected join:event for ${eventId} (unauthorized)`);
+        return;
+      }
+      const room = dashboardRoom(eventId);
       socket.join(room);
       logger.debug(`Socket ${socket.id} joined ${room}`);
     });
 
     socket.on("leave:event", (eventId) => {
-      const room = `event:${eventId}:dashboard`;
+      const room = dashboardRoom(eventId);
       socket.leave(room);
       logger.debug(`Socket ${socket.id} left ${room}`);
     });
 
-    socket.on("join:scan", (eventId) => {
-      const room = `event:${eventId}:scan`;
+    socket.on("join:scan", async (eventId) => {
+      const authorized = await isAuthorizedForEvent(socket.user.sub, socket.user.role, eventId);
+      if (!authorized) {
+        logger.debug(`Socket ${socket.id} rejected join:scan for ${eventId} (unauthorized)`);
+        return;
+      }
+      const room = scanRoom(eventId);
       socket.join(room);
       logger.debug(`Socket ${socket.id} joined ${room}`);
     });
 
     socket.on("leave:scan", (eventId) => {
-      const room = `event:${eventId}:scan`;
+      const room = scanRoom(eventId);
       socket.leave(room);
       logger.debug(`Socket ${socket.id} left ${room}`);
     });
@@ -98,34 +127,13 @@ export function getIO() {
   return io;
 }
 
-export function emitCheckinUpdate(eventId, data) {
-  if (!io) return;
-  io.to(`event:${eventId}:dashboard`).emit("checkin:update", {
-    ...data,
-    timestamp: new Date().toISOString(),
-  });
-}
-
-export function emitRegistrationNew(eventId, data) {
-  if (!io) return;
-  io.to(`event:${eventId}:dashboard`).emit("registration:new", {
-    ...data,
-    timestamp: new Date().toISOString(),
-  });
-}
-
-export function emitScanResult(eventId, data) {
-  if (!io) return;
-  io.to(`event:${eventId}:scan`).emit("scan:result", data);
-}
-
 export async function closeSocket() {
   if (pubClient) {
-    await pubClient.quit();
+    try { await pubClient.quit(); } catch (err) { logger.error("Failed to close pub Redis client", err); }
     pubClient = null;
   }
   if (subClient) {
-    await subClient.quit();
+    try { await subClient.quit(); } catch (err) { logger.error("Failed to close sub Redis client", err); }
     subClient = null;
   }
   if (io) {
