@@ -3,7 +3,7 @@ import http from "http";
 import app from "./app.js";
 import { getConfig, logger, systemMessages, createRedisClient, closeRedisClient } from "./config/index.js";
 import prisma from "./database/index.js";
-import { initSocket, closeSocket } from "./socket/socket.handler.js";
+import { initSocket, closeSocket } from "./realtime/socket.js";
 
 const config = getConfig();
 const server = http.createServer(app);
