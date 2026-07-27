@@ -10,10 +10,12 @@ import {
   hashPassword,
   comparePassword
 } from '../auth.service.js';
+import { requireAuth } from '../auth.middleware.js';
 import prisma from '../../../database/index.js';
 
 import bcrypt from 'bcryptjs';
 import { ConflictError, UnauthorizedError } from '../../../utils/error.js';
+import { systemMessages } from '../../../config/index.js';
 
 // Mock dependencies
 vi.mock('../../../config/index.js', () => ({
@@ -22,7 +24,14 @@ vi.mock('../../../config/index.js', () => ({
     JWT_REFRESH_SECRET: 'testrefreshsecret',
     JWT_EXPIRES_IN: '15m',
     JWT_REFRESH_EXPIRES_IN: '7d'
-  }))
+  })),
+  systemMessages: {
+    ERROR: {
+      AUTH: {
+        UNAUTHORIZED: 'Unauthorized access',
+      },
+    },
+  },
 }));
 
 vi.mock('../../../database/index.js', () => ({
@@ -173,6 +182,48 @@ describe('Auth Service Tests', () => {
       mRedisClient.get.mockResolvedValue(null);
       const result = await isTokenBlacklisted('some_token');
       expect(result).toBe(false);
+    });
+  });
+
+  describe('requireAuth Middleware', () => {
+    let req;
+    let res;
+    let next;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      req = { headers: {} };
+      res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      next = vi.fn();
+    });
+
+    test('should return 401 if no authorization header', async () => {
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ status: 'error', message: systemMessages.ERROR.AUTH.UNAUTHORIZED });
+    });
+
+    test('should return 401 if token does not start with Bearer', async () => {
+      req.headers.authorization = 'Basic token123';
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should return 401 if token is invalid', async () => {
+      req.headers.authorization = 'Bearer invalid_token';
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should attach user and call next if token is valid', async () => {
+      const { accessToken } = generateTokens(mockUser);
+      req.headers.authorization = `Bearer ${accessToken}`;
+      await requireAuth(req, res, next);
+      expect(req.user).toBeDefined();
+      expect(next).toHaveBeenCalled();
     });
   });
 });

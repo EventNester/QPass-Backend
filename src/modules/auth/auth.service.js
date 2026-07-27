@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../../database/index.js';
 import { ConflictError, UnauthorizedError } from '../../utils/error.js';
 import { getRedisClient } from "../../config/redis.js";
-import { getConfig } from "../../config/index.js";
+import { getConfig, systemMessages } from "../../config/index.js";
 
 const SALT_ROUNDS = 12;
 
@@ -43,7 +43,7 @@ export const validateToken = (token) => {
   try {
     return jwt.verify(token, JWT_SECRET);
   } catch {
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.TOKEN_INVALID_OR_EXPIRED);
   }
 };
 
@@ -55,7 +55,7 @@ export const refreshToken = async (token) => {
   try {
     const blacklisted = await isTokenBlacklisted(token);
     if (blacklisted) {
-      throw new UnauthorizedError('Refresh token has been revoked');
+      throw new UnauthorizedError(systemMessages.ERROR.AUTH.TOKEN_REFRESH_REVOKED);
     }
     const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
     const newAccessToken = jwt.sign(
@@ -74,7 +74,7 @@ export const refreshToken = async (token) => {
     if (error instanceof UnauthorizedError) {
       throw error;
     }
-    throw new UnauthorizedError('Invalid or expired refresh token');
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.TOKEN_REFRESH_INVALID);
   }
 };
 
@@ -89,7 +89,7 @@ export async function comparePassword(plainPassword, passwordHash) {
 export async function registerUser({ name, email, passwordHash, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    throw new ConflictError("Account already exists with this email");
+    throw new ConflictError(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
   }
 
   const user = await prisma.user.create({
@@ -102,12 +102,12 @@ export async function registerUser({ name, email, passwordHash, role }) {
 export async function authenticateUser(email, plainPassword) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    throw new UnauthorizedError("Invalid email or password");
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
   }
 
   const isMatch = await comparePassword(plainPassword, user.passwordHash);
   if (!isMatch) {
-    throw new UnauthorizedError("Invalid email or password");
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
   }
 
   return user;

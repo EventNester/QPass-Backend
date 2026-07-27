@@ -3,7 +3,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import { validateToken } from "../modules/auth/auth.service.js";
 import { getSocketConfig } from "../config/socket.config.js";
-import { logger } from "../config/index.js";
+import { logger, systemMessages } from "../config/index.js";
 import { dashboardRoom, scanRoom } from "./rooms.js";
 import prisma from "../database/index.js";
 
@@ -68,13 +68,13 @@ export async function initSocket(server) {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
-      return next(new Error("Authentication error"));
+      return next(new Error(systemMessages.ERROR.AUTH.UNAUTHORIZED));
     }
     try {
       socket.user = validateToken(token);
       next();
     } catch {
-      next(new Error("Authentication error"));
+      next(new Error(systemMessages.ERROR.AUTH.TOKEN_INVALID_OR_EXPIRED));
     }
   });
 

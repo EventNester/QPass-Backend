@@ -1,5 +1,7 @@
 import rateLimit from "express-rate-limit";
-import { constants } from "../config/index.js";
+import { constants, systemMessages } from "../config/index.js";
+
+const msg = systemMessages.ERROR;
 
 export const globalLimiter = rateLimit({
   windowMs: constants.RATE_LIMIT.WINDOW_MS,
@@ -9,7 +11,7 @@ export const globalLimiter = rateLimit({
   skip: (req) => req.url === "/health",
   message: {
     status: "error",
-    message: "Too many requests, please try again later",
+    message: msg.GENERAL.TOO_MANY_REQUESTS,
   },
 });
 
@@ -20,6 +22,6 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     status: "error",
-    message: "Too many authentication attempts, please try again later",
+    message: msg.AUTH.TOO_MANY_ATTEMPTS,
   },
 });

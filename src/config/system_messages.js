@@ -35,15 +35,19 @@ export default {
       INVALID_CREDENTIALS: "Invalid email or password",
       TOKEN_EXPIRED: "Token has expired",
       TOKEN_INVALID: "Invalid token",
+      TOKEN_INVALID_OR_EXPIRED: "Invalid or expired token",
+      TOKEN_REFRESH_REVOKED: "Refresh token has been revoked",
+      TOKEN_REFRESH_INVALID: "Invalid or expired refresh token",
       UNAUTHORIZED: "Unauthorized access",
       FORBIDDEN: "Access forbidden",
       ACCOUNT_SUSPENDED: "Account has been suspended",
       ALREADY_EXISTS: "Account already exists with this email",
+      TOO_MANY_ATTEMPTS: "Too many authentication attempts, please try again later",
     },
     EVENT: {
       NOT_FOUND: "Event not found",
       ALREADY_EXISTS: "Event with this title already exists",
-      UNAUTHORIZED: "You are not authorized to modify this event",
+      UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
     },
     TICKET: {
@@ -51,6 +55,10 @@ export default {
       CODE_USED: "Ticket code has already been used",
       CODE_REVOKED: "Ticket code has been revoked",
       NOT_FOUND: "Ticket code not found",
+      ALREADY_EXISTS: "QR token already exists for this registration",
+      INVALID: "Invalid QR token",
+      EXPIRED: "QR token has expired",
+      REVOKED: "QR token has been revoked",
     },
     CHECKIN: {
       DUPLICATE: "Duplicate check-in detected",
@@ -58,6 +66,9 @@ export default {
       QR_EXPIRED: "QR code has expired",
       QR_REVOKED: "QR code has been revoked",
       NOT_AUTHORIZED: "You are not authorized to scan for this event",
+      SCAN_IN_PROGRESS: "Scan already in progress",
+      EVENT_MISMATCH: "QR code is not valid for this event",
+      NOT_FOUND: "Check-in not found",
     },
     PAYMENT: {
       FAILED: "Payment verification failed",
@@ -66,6 +77,7 @@ export default {
     },
     GENERAL: {
       NOT_FOUND: "Resource not found",
+      ALREADY_EXISTS: "Resource already exists",
       ROUTE_NOT_FOUND: "Route not found",
       VALIDATION_ERROR: "Validation error",
       INTERNAL_ERROR: "Internal server error",
@@ -74,6 +86,17 @@ export default {
       DB_CONNECTION_FAILED: "Database connection failed",
       SERVER_START_FAILED: "Failed to start server",
     },
+  },
+
+  VALIDATION: {
+    NAME_REQUIRED: "Name is required",
+    INVALID_EMAIL: "Invalid email address",
+    PASSWORD_MIN: "Password must be at least 8 characters",
+    PASSWORD_LOWERCASE: "Password must contain a lowercase letter",
+    PASSWORD_UPPERCASE: "Password must contain an uppercase letter",
+    PASSWORD_NUMBER: "Password must contain a number",
+    PASSWORD_REQUIRED: "Password is required",
+    TOKEN_REQUIRED: "Refresh token is required",
   },
 
   INFO: {
