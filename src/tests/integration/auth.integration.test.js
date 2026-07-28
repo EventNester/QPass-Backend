@@ -122,4 +122,82 @@ describe('Auth API Integration Tests', () => {
 
   });
 
+  describe('POST /api/v1/auth/forgot-password & reset-password', () => {
+    let generatedResetToken;
+
+    it('should return 404 for forgot-password with non-existent email', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/forgot-password')
+        .send({
+          email: 'notfound@example.com',
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 200 and generate reset token for existing user', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/forgot-password')
+        .send({
+          email: 'ada@example.com',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.resetToken).toBeDefined();
+      generatedResetToken = response.body.data.resetToken;
+    });
+
+    it('should return 200 and reset password with a valid token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/reset-password')
+        .send({
+          token: generatedResetToken,
+          password: 'NewSecurePassword456',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+    });
+
+    it('should allow user to login with the new reset password', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'ada@example.com',
+          password: 'NewSecurePassword456',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.accessToken).toBeDefined();
+    });
+
+    it('should return 401 when trying to reuse an invalidated reset token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/reset-password')
+        .send({
+          token: generatedResetToken,
+          password: 'AnotherPassword789',
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 401 for an invalid reset token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/reset-password')
+        .send({
+          token: 'invalid-token-string',
+          password: 'AnotherPassword789',
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.status).toBe('error');
+    });
+  });
+
 });
+
