@@ -87,18 +87,22 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100,
+            "description": "User's full name (required, must not be empty)",
             "example": "Ada Lovelace"
           },
           "email": {
             "type": "string",
             "format": "email",
+            "description": "Valid email address (required)",
             "example": "ada@example.com"
           },
           "password": {
             "type": "string",
             "minLength": 8,
             "maxLength": 128,
-            "format": "password"
+            "format": "password",
+            "description": "Password must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, and one number (required)",
+            "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
           }
         }
       },
@@ -108,11 +112,13 @@
         "properties": {
           "email": {
             "type": "string",
-            "format": "email"
+            "format": "email",
+            "description": "Valid email address (required)"
           },
           "password": {
             "type": "string",
-            "format": "password"
+            "format": "password",
+            "description": "Account password (required, must not be empty)"
           }
         }
       },
@@ -121,7 +127,8 @@
         "required": ["refreshToken"],
         "properties": {
           "refreshToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Refresh token obtained from login/register (required, must not be empty)"
           }
         }
       },
@@ -130,7 +137,8 @@
         "required": ["refreshToken"],
         "properties": {
           "refreshToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Refresh token to blacklist (required, must not be empty)"
           }
         }
       },
@@ -207,10 +215,11 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "Raw QR token (hashed server-side)"
+            "description": "Raw QR token from attendee's QR code (required, must not be empty). Hashed server-side before lookup."
           },
           "deviceInfo": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional device identifier or name for audit logging"
           }
         }
       },
@@ -317,46 +326,59 @@
         ],
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Event title (required, 1-200 characters)"
           },
           "slug": {
             "type": "string",
             "readOnly": true
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional event description"
           },
           "venue": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional event venue/location"
           },
           "startTime": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Event start time in ISO 8601 format (required, e.g. 2026-08-15T09:00:00Z)"
           },
           "endTime": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Event end time in ISO 8601 format (required, must be after startTime)"
           },
           "registrationMode": {
             "type": "string",
-            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"]
+            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"],
+            "description": "Registration mode (required): PUBLIC_LINK — self-registration via link, CLOSED_IMPORT — admin-imported attendees only, HYBRID — both"
           },
           "isPaid": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the event requires payment"
           },
           "capacity": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Maximum number of attendees (optional)"
           },
           "currency": {
-            "type": "string"
+            "type": "string",
+            "description": "Currency code for paid events (e.g. NGN, USD)"
           },
           "registrationOpensAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When registration opens (ISO 8601)"
           },
           "registrationClosesAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When registration closes (ISO 8601)"
           }
         }
       },
@@ -364,46 +386,59 @@
         "type": "object",
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Event title (optional, 1-200 characters if provided)"
           },
           "slug": {
             "type": "string",
             "readOnly": true
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional event description"
           },
           "venue": {
-            "type": "string"
+            "type": "string",
+            "description": "Optional event venue/location"
           },
           "startTime": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Event start time (ISO 8601). If provided, endTime is also required."
           },
           "endTime": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Event end time (ISO 8601). If provided, startTime is also required. Must be after startTime when both are set."
           },
           "registrationMode": {
             "type": "string",
-            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"]
+            "enum": ["PUBLIC_LINK", "CLOSED_IMPORT", "HYBRID"],
+            "description": "Registration mode: PUBLIC_LINK, CLOSED_IMPORT, or HYBRID"
           },
           "isPaid": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the event requires payment"
           },
           "capacity": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Maximum number of attendees"
           },
           "currency": {
-            "type": "string"
+            "type": "string",
+            "description": "Currency code for paid events (e.g. NGN, USD)"
           },
           "registrationOpensAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When registration opens (ISO 8601)"
           },
           "registrationClosesAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When registration closes (ISO 8601)"
           }
         }
       },
@@ -576,15 +611,29 @@
         "type": "object",
         "required": ["email"],
         "properties": {
-          "email": { "type": "string", "format": "email" }
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address associated with the account (required, must be valid)"
+          }
         }
       },
       "ResetPasswordRequest": {
         "type": "object",
-        "required": ["token", "newPassword"],
+        "required": ["token", "password"],
         "properties": {
-          "token": { "type": "string" },
-          "newPassword": { "type": "string", "format": "password" }
+          "token": {
+            "type": "string",
+            "description": "Password reset token received via email (required, must not be empty)"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "New password — must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, and one number (required)",
+            "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
+          }
         }
       },
       "TicketCode": {

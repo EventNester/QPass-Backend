@@ -6,12 +6,135 @@ import {
   listEventsController,
   updateEventController,
   deleteEventController,
+  publishEventController,
+  cancelEventController,
 } from "./event.controller.js";
 
 import { requireAuth } from "../auth/auth.middleware.js";
 
 const router = Router();
 
+// Create Event
+router.post("/", requireAuth, createEventController);
+
+// List Events
+router.get("/", listEventsController);
+
+/**
+ * @openapi
+ * /api/v1/events/{id}/publish:
+ *   post:
+ *     summary: Publish a draft event
+ *     description: |
+ *       Transitions an event from DRAFT to PUBLISHED and generates a unique public slug.
+ *       Only the event owner can publish, and only while the event is in DRAFT status.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event published successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — caller is not the event owner
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Event not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid event ID format, Event is not in draft status"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// Publish Event
+router.post("/:id/publish", requireAuth, publishEventController);
+
+/**
+ * @openapi
+ * /api/v1/events/{id}/cancel:
+ *   post:
+ *     summary: Cancel a published event
+ *     description: |
+ *       Transitions an event to CANCELLED status. Draft events cannot be cancelled
+ *       (use delete instead). Only the event owner can cancel.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — caller is not the event owner
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Event not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid event ID format, Cannot cancel a draft event, Event is already cancelled"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// Cancel Event
+router.post("/:id/cancel", requireAuth, cancelEventController);
+
+// Get One Event
+router.get("/:id", getEventController);
+
+// Update Event
+router.patch("/:id", requireAuth, updateEventController);
+
+// Delete Event
 /**
  * @openapi
  * /api/v1/events:
