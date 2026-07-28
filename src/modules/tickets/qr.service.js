@@ -7,6 +7,7 @@ import { systemMessages, constants } from "../../config/index.js";
 
 const msg = systemMessages.ERROR;
 const QR_MIN_SIZE = 200;
+const QR_MAX_SIZE = constants.QR.MAX_SIZE;
 
 /**
  * QR Token
@@ -113,7 +114,7 @@ class QrService {
    * @returns {Promise<Buffer>} PNG image buffer
    */
   async createQrImage(token, options = {}) {
-    const width = Math.max(options.width ?? constants.QR.SIZE, QR_MIN_SIZE);
+    const width = Math.min(Math.max(options.width ?? constants.QR.SIZE, QR_MIN_SIZE), QR_MAX_SIZE);
     return QRCode.toBuffer(token, {
       width,
       margin: options.margin ?? 2,
