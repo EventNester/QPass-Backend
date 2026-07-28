@@ -3,10 +3,11 @@ import http from "http";
 import app from "./app.js";
 import { getConfig, logger, systemMessages, createRedisClient, closeRedisClient } from "./config/index.js";
 import prisma from "./database/index.js";
+import { initSocket, closeSocket } from "./realtime/socket.js";
 
 const config = getConfig();
 const server = http.createServer(app);
-
+await initSocket(server);
 server.listen(config.PORT, async () => {
   try {
     await prisma.$connect();
@@ -21,6 +22,7 @@ server.listen(config.PORT, async () => {
 async function gracefulShutdown() {
   server.close(async () => {
     try {
+      await closeSocket();
       await prisma.$disconnect();
       await closeRedisClient();
       process.exit(0);

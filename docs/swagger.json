@@ -41,319 +41,7 @@
       "description": "Attendee verification (Aspirational)"
     }
   ],
-  "paths": {
-    "/api/v1/events": {
-      "get": {
-        "summary": "List all events",
-        "description": "Retrieves a list of all events (Not Yet Implemented).",
-        "tags": ["Events"],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      },
-      "post": {
-        "summary": "Create a new event",
-        "description": "Creates a new event (Requires ORGANIZER or ADMIN role) (Not Yet Implemented).",
-        "tags": ["Events"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Created"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}": {
-      "get": {
-        "summary": "Get details of a specific event",
-        "description": "Not Yet Implemented",
-        "tags": ["Events"],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "404": {
-            "description": "Not Found"
-          }
-        }
-      },
-      "patch": {
-        "summary": "Update event details",
-        "description": "Not Yet Implemented",
-        "tags": ["Events"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "404": {
-            "description": "Not Found"
-          }
-        }
-      },
-      "delete": {
-        "summary": "Delete/cancel an event",
-        "description": "Not Yet Implemented",
-        "tags": ["Events"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "description": "Not Found"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/publish": {
-      "post": {
-        "summary": "Publish an event",
-        "description": "Generates slug and sets event status to PUBLISHED.",
-        "tags": ["Events"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": {
-          "200": { "description": "OK" }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/cancel": {
-      "post": {
-        "summary": "Cancel an event",
-        "description": "Sets event status to CANCELLED.",
-        "tags": ["Events"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "eventId", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": {
-          "200": { "description": "OK" }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/tickets/upload": {
-      "post": {
-        "summary": "Upload ticket codes via CSV parsing",
-        "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/tickets": {
-      "get": {
-        "summary": "List ticket codes and track statuses",
-        "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/tickets/validate": {
-      "post": {
-        "summary": "Validate a specific ticket code status",
-        "description": "Not Yet Implemented",
-        "tags": ["Tickets"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/attendees/verify": {
-      "post": {
-        "summary": "Verify an attendee using their ticket code",
-        "description": "Not Yet Implemented",
-        "tags": ["Attendees"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/events/{eventId}/attendees/qr-token": {
-      "post": {
-        "summary": "Generate signed JWT QR token for the attendee",
-        "description": "Not Yet Implemented",
-        "tags": ["Attendees"],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/v1/auth/password/forgot": {
-      "post": {
-        "summary": "Request a password reset link",
-        "description": "Sends a password reset email if the account exists.",
-        "tags": ["Auth"],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ForgotPasswordRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "OK" }
-        }
-      }
-    },
-    "/api/v1/auth/password/reset": {
-      "post": {
-        "summary": "Reset password using a token",
-        "description": "Resets the user's password using the token received via email.",
-        "tags": ["Auth"],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResetPasswordRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "OK" }
-        }
-      }
-    }
-  },
+
   "components": {
     "securitySchemes": {
       "bearerAuth": {
@@ -612,11 +300,17 @@
           }
         }
       },
-      "EventCreateRequest": {
+      "EventResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "message": { "type": "string" },
+          "data": { "$ref": "#/components/schemas/Event" }
+        }
+      },      "EventCreateRequest": {
         "type": "object",
         "required": [
           "title",
-          "slug",
           "startTime",
           "endTime",
           "registrationMode"
@@ -626,7 +320,8 @@
             "type": "string"
           },
           "slug": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "description": {
             "type": "string"
@@ -672,7 +367,8 @@
             "type": "string"
           },
           "slug": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "description": {
             "type": "string"
