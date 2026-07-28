@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import multer from "multer";
 
+// vi.hoisted ensures the mock is created before any imported modules execute,
+// which is required when mocking node built-ins used at import time.
 const { mockUnlink } = vi.hoisted(() => ({
   mockUnlink: vi.fn().mockResolvedValue(undefined),
 }));
