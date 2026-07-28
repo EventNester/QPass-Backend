@@ -14,7 +14,7 @@ const router = Router();
 // ambiguous route parameters and ensure the paths remain self-documenting.
 
 /**
- * @swagger
+ * @openapi
  * /api/v1/checkins/{eventId}/scan:
  *   post:
  *     summary: Scan a QR code to check in an attendee
@@ -63,7 +63,7 @@ const router = Router();
 router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), validate(scanQrSchema), checkinController.scanQr);
 
 /**
- * @swagger
+ * @openapi
  * /api/v1/checkins/{eventId}/checkins:
  *   get:
  *     summary: List all check-ins for an event
@@ -92,7 +92,7 @@ router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), va
 router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.getCheckins);
 
 /**
- * @swagger
+ * @openapi
  * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
  *   post:
  *     summary: Undo a check-in
