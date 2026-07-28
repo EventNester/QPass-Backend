@@ -2,7 +2,10 @@ import prisma from "../../database/index.js";
 import { getRedisClient } from "../../config/redis.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError } from "../../utils/error.js";
-import { constants } from "../../config/index.js";
+import { constants, systemMessages } from "../../config/index.js";
+
+const errMsg = systemMessages.ERROR;
+const successMsg = systemMessages.SUCCESS;
 
 export async function scanQr(eventId, data, staffId) {
   const redis = getRedisClient();
@@ -12,7 +15,7 @@ export async function scanQr(eventId, data, staffId) {
   const locked = await redis.set(lockKey, "1", "EX", 10, "NX");
 
   if (!locked) {
-    throw new ConflictError("Scan already in progress");
+    throw new ConflictError(errMsg.CHECKIN.SCAN_IN_PROGRESS);
   }
 
   try {
@@ -22,15 +25,15 @@ export async function scanQr(eventId, data, staffId) {
     });
 
     if (!qrToken) {
-      return { result: constants.CHECKIN_RESULT.INVALID, message: "Invalid QR code" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: errMsg.CHECKIN.INVALID_QR };
     }
 
     if (new Date(qrToken.expiresAt) < new Date()) {
-      return { result: constants.CHECKIN_RESULT.INVALID, message: "QR code has expired" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: errMsg.CHECKIN.QR_EXPIRED };
     }
 
     if (qrToken.registration.eventId !== eventId) {
-      return { result: constants.CHECKIN_RESULT.INVALID, message: "QR code is not valid for this event" };
+      return { result: constants.CHECKIN_RESULT.INVALID, message: errMsg.CHECKIN.EVENT_MISMATCH };
     }
 
     const existingCheckin = await prisma.checkIn.findUnique({
@@ -47,7 +50,7 @@ export async function scanQr(eventId, data, staffId) {
           afterSnapshot: { tokenHash, attemptTime: new Date().toISOString() },
         },
       });
-      return { result: constants.CHECKIN_RESULT.DUPLICATE, message: "Duplicate check-in detected" };
+      return { result: constants.CHECKIN_RESULT.DUPLICATE, message: errMsg.CHECKIN.DUPLICATE };
     }
 
     const checkin = await prisma.checkIn.create({
@@ -68,7 +71,7 @@ export async function scanQr(eventId, data, staffId) {
 
     return {
       result: constants.CHECKIN_RESULT.VALID,
-      message: "Check-in successful",
+      message: successMsg.CHECKIN.SUCCESS,
       attendeeName: checkin.registration.attendeeName,
       checkinId: checkin.id,
     };
@@ -90,8 +93,8 @@ export async function getCheckins(eventId) {
 
 export async function undoCheckin(eventId, checkInId, staffId) {
   const checkin = await prisma.checkIn.findUnique({ where: { id: checkInId } });
-  if (!checkin) throw new NotFoundError("Check-in not found");
-  if (checkin.eventId !== eventId) throw new NotFoundError("Check-in not found");
+  if (!checkin) throw new NotFoundError(errMsg.CHECKIN.NOT_FOUND);
+  if (checkin.eventId !== eventId) throw new NotFoundError(errMsg.CHECKIN.NOT_FOUND);
 
   await prisma.$transaction([
     prisma.auditLog.create({

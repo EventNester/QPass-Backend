@@ -13,6 +13,7 @@ import {
 
 import { success, created } from "../../utils/response.js";
 import { ValidationError } from "../../utils/error.js";
+import { systemMessages } from "../../config/index.js";
 
 const parseOrNext = (schema, body, next) => {
   try {
@@ -33,7 +34,7 @@ export const createEventController = async (req, res, next) => {
 
     const event = await createEvent(validatedData, req.user.id);
 
-    return created(res, event, "Event created successfully");
+    return created(res, event, systemMessages.SUCCESS.EVENT.CREATED);
   } catch (error) {
     next(error);
   }
@@ -75,7 +76,7 @@ export const updateEventController = async (req, res, next) => {
 
     const event = await updateEvent(id, validatedData, req.user.id);
 
-    return success(res, event, "Event updated successfully");
+    return success(res, event, systemMessages.SUCCESS.EVENT.UPDATED);
   } catch (error) {
     next(error);
   }
@@ -88,7 +89,7 @@ export const deleteEventController = async (req, res, next) => {
 
     const event = await deleteEvent(id, req.user.id);
 
-    return success(res, event, "Event deleted successfully");
+    return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
   } catch (error) {
     next(error);
   }

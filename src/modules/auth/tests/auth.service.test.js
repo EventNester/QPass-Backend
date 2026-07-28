@@ -10,10 +10,12 @@ import {
   hashPassword,
   comparePassword
 } from '../auth.service.js';
+import { requireAuth } from '../auth.middleware.js';
 import prisma from '../../../database/index.js';
 
 import bcrypt from 'bcryptjs';
 import { ConflictError, UnauthorizedError } from '../../../utils/error.js';
+import { systemMessages } from '../../../config/index.js';
 
 // Mock dependencies
 vi.mock('../../../config/index.js', () => ({
@@ -22,7 +24,19 @@ vi.mock('../../../config/index.js', () => ({
     JWT_REFRESH_SECRET: 'testrefreshsecret',
     JWT_EXPIRES_IN: '15m',
     JWT_REFRESH_EXPIRES_IN: '7d'
-  }))
+  })),
+  systemMessages: {
+    ERROR: {
+      AUTH: {
+        UNAUTHORIZED: 'Unauthorized access',
+        TOKEN_INVALID_OR_EXPIRED: 'Invalid or expired token',
+        TOKEN_REFRESH_REVOKED: 'Refresh token has been revoked',
+        TOKEN_REFRESH_INVALID: 'Invalid or expired refresh token',
+        ALREADY_EXISTS: 'Account already exists with this email',
+        INVALID_CREDENTIALS: 'Invalid email or password',
+      },
+    },
+  },
 }));
 
 vi.mock('../../../database/index.js', () => ({
@@ -77,6 +91,15 @@ describe('Auth Service Tests', () => {
       expect(decoded.role).toBe('ORGANIZER');
     });
 
+    test('should throw UnauthorizedError with exact message on invalid token', () => {
+      expect(() => validateToken('garbage_token')).toThrow(UnauthorizedError);
+      try {
+        validateToken('garbage_token');
+      } catch (err) {
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_INVALID_OR_EXPIRED);
+      }
+    });
+
     test('should refresh access token correctly', async () => {
       const { refreshToken: token } = generateTokens(mockUser);
       mRedisClient.get.mockResolvedValue(null);
@@ -88,7 +111,24 @@ describe('Auth Service Tests', () => {
     test('should throw error if refresh token is blacklisted', async () => {
       const { refreshToken: token } = generateTokens(mockUser);
       mRedisClient.get.mockResolvedValue('1');
-      await expect(refreshToken(token)).rejects.toThrow(UnauthorizedError);
+      try {
+        await refreshToken(token);
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_REFRESH_REVOKED);
+      }
+    });
+
+    test('should throw error if refresh token is invalid', async () => {
+      mRedisClient.get.mockResolvedValue(null);
+      try {
+        await refreshToken('not_a_real_jwt');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_REFRESH_INVALID);
+      }
     });
   });
 
@@ -121,9 +161,13 @@ describe('Auth Service Tests', () => {
     test('should throw ConflictError if email exists', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       
-      await expect(registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' }))
-        .rejects
-        .toThrow(ConflictError);
+      try {
+        await registerUser({ name: 'Lucas Nash', email: 'lucas@example.com', passwordHash: 'hashed_password', role: 'ORGANIZER' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConflictError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
+      }
     });
   });
 
@@ -139,18 +183,26 @@ describe('Auth Service Tests', () => {
     test('should throw UnauthorizedError if user not found', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(authenticateUser('lucas@example.com', 'password123'))
-        .rejects
-        .toThrow(UnauthorizedError);
+      try {
+        await authenticateUser('lucas@example.com', 'password123');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
+      }
     });
 
     test('should throw UnauthorizedError if password incorrect', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
       bcrypt.compare.mockResolvedValue(false);
 
-      await expect(authenticateUser('lucas@example.com', 'password123'))
-        .rejects
-        .toThrow(UnauthorizedError);
+      try {
+        await authenticateUser('lucas@example.com', 'password123');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnauthorizedError);
+        expect(err.message).toBe(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
+      }
     });
   });
 
@@ -173,6 +225,48 @@ describe('Auth Service Tests', () => {
       mRedisClient.get.mockResolvedValue(null);
       const result = await isTokenBlacklisted('some_token');
       expect(result).toBe(false);
+    });
+  });
+
+  describe('requireAuth Middleware', () => {
+    let req;
+    let res;
+    let next;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      req = { headers: {} };
+      res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      next = vi.fn();
+    });
+
+    test('should return 401 if no authorization header', async () => {
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ status: 'error', message: systemMessages.ERROR.AUTH.UNAUTHORIZED });
+    });
+
+    test('should return 401 if token does not start with Bearer', async () => {
+      req.headers.authorization = 'Basic token123';
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should return 401 if token is invalid', async () => {
+      req.headers.authorization = 'Bearer invalid_token';
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should attach user and call next if token is valid', async () => {
+      const { accessToken } = generateTokens(mockUser);
+      req.headers.authorization = `Bearer ${accessToken}`;
+      await requireAuth(req, res, next);
+      expect(req.user).toBeDefined();
+      expect(next).toHaveBeenCalled();
     });
   });
 });
