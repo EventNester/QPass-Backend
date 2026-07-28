@@ -62,6 +62,13 @@ export default {
   QR: {
     EXPIRY_HOURS: 24,
     SIZE: 300,
+    MAX_SIZE: 1000,
+  },
+
+  UPLOAD: {
+    MAX_SIZE: 5 * 1024 * 1024,
+    ALLOWED_EXTENSIONS: [".csv", ".xlsx", ".pdf", ".docx"],
+    DIR: "uploads",
   },
 
   PAGINATION: {
