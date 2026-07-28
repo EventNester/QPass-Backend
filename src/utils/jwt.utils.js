@@ -5,10 +5,10 @@ import { UnauthorizedError } from './error.js';
 export function getJwtConfig() {
   const config = getConfig();
   return {
-    JWT_SECRET: config.JWT_SECRET || 'default_access_secret',
-    JWT_REFRESH_SECRET: config.JWT_REFRESH_SECRET || 'default_refresh_secret',
-    JWT_EXPIRES_IN: config.JWT_EXPIRES_IN || '15m',
-    JWT_REFRESH_EXPIRES_IN: config.JWT_REFRESH_EXPIRES_IN || '7d',
+    JWT_SECRET: config.JWT_SECRET,
+    JWT_REFRESH_SECRET: config.JWT_REFRESH_SECRET,
+    JWT_EXPIRES_IN: config.JWT_EXPIRES_IN,
+    JWT_REFRESH_EXPIRES_IN: config.JWT_REFRESH_EXPIRES_IN,
   };
 }
 
