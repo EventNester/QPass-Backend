@@ -62,6 +62,7 @@ export default {
   QR: {
     EXPIRY_HOURS: 24,
     SIZE: 300,
+    MAX_SIZE: 1000,
   },
 
   PAGINATION: {
