@@ -12,7 +12,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
     .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
     .regex(/\d/, v.PASSWORD_NUMBER),
-}).strip();
+});
 
 export const loginSchema = z.object({
   email: z.string().email(v.INVALID_EMAIL),
@@ -26,3 +26,18 @@ export const refreshSchema = z.object({
 export const logoutSchema = z.object({
   refreshToken: z.string().min(1, v.TOKEN_REQUIRED),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(v.INVALID_EMAIL),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, v.RESET_TOKEN_REQUIRED),
+  password: z
+    .string()
+    .min(8, v.PASSWORD_MIN)
+    .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
+    .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
+    .regex(/\d/, v.PASSWORD_NUMBER),
+});
+
