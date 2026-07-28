@@ -28,6 +28,18 @@ const parseOrNext = (schema, body, next) => {
   }
 };
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const parseEventIdOrNext = (id, next) => {
+  if (!UUID_REGEX.test(id)) {
+    next(new ValidationError("Invalid event ID format"));
+    return null;
+  }
+
+  return id;
+};
+
 // Create event
 export const createEventController = async (req, res, next) => {
   try {
@@ -100,9 +112,10 @@ export const deleteEventController = async (req, res, next) => {
 // Publish event
 export const publishEventController = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
 
-    const event = await publishEvent(id, req.user.id);
+    const event = await publishEvent(eventId, req.user.id);
 
     return success(
       res,
@@ -118,9 +131,10 @@ export const publishEventController = async (req, res, next) => {
 // Cancel event
 export const cancelEventController = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
 
-    const event = await cancelEvent(id, req.user.id);
+    const event = await cancelEvent(eventId, req.user.id);
 
     return success(
       res,

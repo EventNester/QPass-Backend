@@ -8,6 +8,23 @@ import { constants, systemMessages } from "../../config/index.js";
 import { generateSlug } from "../../utils/slug.js";
 
 const msg = systemMessages.ERROR;
+const MAX_SLUG_RETRIES = 10;
+
+async function generateUniqueSlug(title) {
+  let attempts = 0;
+  let slug = generateSlug(title);
+
+  while (
+    await prisma.event.findFirst({ where: { slug, deletedAt: null } })
+  ) {
+    if (++attempts >= MAX_SLUG_RETRIES) {
+      throw new Error("Failed to generate unique slug after max retries");
+    }
+    slug = generateSlug(title);
+  }
+
+  return slug;
+}
 
 // Create an event
 export const createEvent = async (eventData, ownerId) => {
@@ -140,7 +157,7 @@ export const deleteEvent = async (eventId, ownerId) => {
   };
 };
 
-// Publish an event
+// Publish an event (atomic ownership + draft-status check)
 export const publishEvent = async (eventId, ownerId) => {
   const event = await prisma.event.findFirst({
     where: {
@@ -151,36 +168,49 @@ export const publishEvent = async (eventId, ownerId) => {
   });
 
   if (!event) {
-    throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    const exists = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+    });
+
+    if (!exists) {
+      throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    }
+
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
-  if (event.status !== "DRAFT") {
-    throw new ValidationError(msg.EVENT.ALREADY_PUBLISHED);
+  if (event.status !== constants.EVENT_STATUS.DRAFT) {
+    throw new ValidationError(
+      `${msg.EVENT.NOT_DRAFT} (current: ${event.status})`
+    );
   }
 
-  let slug = generateSlug(event.title);
+  const slug = await generateUniqueSlug(event.title);
 
-  // Ensure slug is unique
-  while (await prisma.event.findUnique({ where: { slug } })) {
-    slug = generateSlug(event.title);
-  }
-
-  const publishedEvent = await prisma.event.update({
+  const published = await prisma.event.updateMany({
     where: {
       id: eventId,
+      ownerId,
+      deletedAt: null,
+      status: constants.EVENT_STATUS.DRAFT,
     },
     data: {
-      status: "PUBLISHED",
+      status: constants.EVENT_STATUS.PUBLISHED,
       slug,
       publishedAt: new Date(),
     },
   });
 
-  return publishedEvent;
+  if (published.count === 0) {
+    throw new ValidationError(
+      `${msg.EVENT.NOT_DRAFT} (current: ${event.status})`
+    );
+  }
+
+  return getEvent(eventId);
 };
 
-
-// Cancel an event
+// Cancel an event (atomic ownership check)
 export const cancelEvent = async (eventId, ownerId) => {
   const event = await prisma.event.findFirst({
     where: {
@@ -191,22 +221,46 @@ export const cancelEvent = async (eventId, ownerId) => {
   });
 
   if (!event) {
-    throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    const exists = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+    });
+
+    if (!exists) {
+      throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    }
+
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
-  // Prevent cancelling an event twice
-  if (event.status === "CANCELLED") {
+  if (event.status === constants.EVENT_STATUS.DRAFT) {
+    throw new ValidationError(msg.EVENT.CANNOT_CANCEL_DRAFT);
+  }
+
+  if (event.status === constants.EVENT_STATUS.CANCELLED) {
     throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
   }
 
-  const cancelledEvent = await prisma.event.update({
+  const cancelled = await prisma.event.updateMany({
     where: {
       id: eventId,
+      ownerId,
+      deletedAt: null,
+      status: {
+        in: [
+          constants.EVENT_STATUS.PUBLISHED,
+          constants.EVENT_STATUS.ACTIVE,
+          constants.EVENT_STATUS.COMPLETED,
+        ],
+      },
     },
     data: {
-      status: "CANCELLED",
+      status: constants.EVENT_STATUS.CANCELLED,
     },
   });
 
-  return cancelledEvent;
+  if (cancelled.count === 0) {
+    throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
+  }
+
+  return getEvent(eventId);
 };

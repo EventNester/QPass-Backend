@@ -13,8 +13,10 @@ export function generateSlug(title) {
     // Remove hyphens at the beginning or end
     .replace(/^-|-$/g, "");
 
+  const base = slug || "untitled";
+
   // Generate a random 6-character hexadecimal suffix
   const suffix = crypto.randomBytes(3).toString("hex");
 
-  return `${slug}-${suffix}`;
+  return `${base}-${suffix}`;
 }
