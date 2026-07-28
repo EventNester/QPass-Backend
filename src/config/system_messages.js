@@ -10,6 +10,8 @@ export default {
       CREATED: "Event created successfully",
       UPDATED: "Event updated successfully",
       DELETED: "Event deleted successfully",
+      PUBLISHED: "Event published successfully",
+      CANCELLED: "Event cancelled successfully",
     },
     TICKET: {
       CODES_UPLOADED: "Ticket codes uploaded successfully",
@@ -49,6 +51,8 @@ export default {
       ALREADY_EXISTS: "Event with this title already exists",
       UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
+      ALREADY_PUBLISHED: "Only draft events can be published",
+      ALREADY_CANCELLED: "Event is already cancelled",
     },
     TICKET: {
       INVALID_CODE: "Invalid ticket code",
