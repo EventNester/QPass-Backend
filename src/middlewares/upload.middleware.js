@@ -9,7 +9,9 @@ const msg = systemMessages.ERROR.UPLOAD;
 
 // Ensure the uploads directory exists at app startup. `recursive: true` avoids
 // errors if the directory is already present.
-const uploadDir = join(process.cwd(), constants.UPLOAD.DIR);
+// Use env var override if set, otherwise default to config constant. This allows
+// serverless/ephemeral environments to redirect uploads to /tmp or a mounted volume.
+const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), constants.UPLOAD.DIR);
 mkdirSync(uploadDir, { recursive: true });
 
 // Set for O(1) extension lookups during file filtering.
@@ -65,8 +67,8 @@ export function handleUploadError(err, _req, res, next) {
   next(err);
 }
 
-export function requireFile(_req, res, next) {
-  if (!_req.file) {
+export function requireFile(req, res, next) {
+  if (!req.file) {
     return res.status(400).json({ status: "error", message: msg.MISSING_FILE });
   }
   next();
