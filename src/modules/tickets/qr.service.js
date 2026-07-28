@@ -99,6 +99,19 @@ class QrService {
     return qrToken;
   }
 
+  /**
+   * Generate a QR code PNG buffer from a raw token string.
+   *
+   * Width is clamped to a minimum of 200px to ensure scannability
+   * on small displays. Defaults to constants.QR.SIZE (300px).
+   *
+   * @param {string} token - The raw hex token to encode in the QR code
+   * @param {Object} [options]
+   * @param {number} [options.width] - Image width in px (default: constants.QR.SIZE)
+   * @param {number} [options.margin] - Quiet zone in modules (default: 2)
+   * @param {string} [options.errorCorrectionLevel] - L/M/Q/H (default: "M")
+   * @returns {Promise<Buffer>} PNG image buffer
+   */
   async createQrImage(token, options = {}) {
     const width = Math.max(options.width ?? constants.QR.SIZE, QR_MIN_SIZE);
     return QRCode.toBuffer(token, {
