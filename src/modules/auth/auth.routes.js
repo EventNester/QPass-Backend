@@ -10,7 +10,29 @@ import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
-// POST /api/v1/auth/register
+/**
+ * @openapi
+ * /api/v1/auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     description: Creates a new user account with ATTENDEE role. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: Validation error
+ */
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
@@ -30,7 +52,29 @@ router.post('/register', authLimiter, async (req, res, next) => {
   }
 });
 
-// POST /api/v1/auth/login
+/**
+ * @openapi
+ * /api/v1/auth/login:
+ *   post:
+ *     summary: Authenticate a user
+ *     description: Validates credentials and returns access + refresh tokens. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       401:
+ *         description: Invalid credentials
+ */
 router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -49,7 +93,25 @@ router.post('/login', authLimiter, async (req, res, next) => {
   }
 });
 
-// POST /api/v1/auth/refresh
+/**
+ * @openapi
+ * /api/v1/auth/refresh:
+ *   post:
+ *     summary: Refresh access token
+ *     description: Exchange a valid refresh token for a new access + refresh token pair. Old refresh token is blacklisted.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RefreshRequest'
+ *     responses:
+ *       200:
+ *         description: Tokens refreshed successfully
+ *       401:
+ *         description: Invalid or expired refresh token
+ */
 router.post('/refresh', async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
@@ -65,7 +127,27 @@ router.post('/refresh', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/auth/logout
+/**
+ * @openapi
+ * /api/v1/auth/logout:
+ *   post:
+ *     summary: Logout a user
+ *     description: Blacklists the refresh token so it cannot be used again.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LogoutRequest'
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/logout', requireAuth, async (req, res, next) => {
   try {
     const parsed = logoutSchema.safeParse(req.body);
@@ -79,7 +161,27 @@ router.post('/logout', requireAuth, async (req, res, next) => {
   }
 });
 
-// POST /api/v1/auth/forgot-password
+/**
+ * @openapi
+ * /api/v1/auth/forgot-password:
+ *   post:
+ *     summary: Request a password reset email
+ *     description: Sends a password reset link to the given email if an account exists.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ForgotPasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Reset instructions sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ */
 router.post('/forgot-password', authLimiter, async (req, res, next) => {
   try {
     const parsed = forgotPasswordSchema.safeParse(req.body);
@@ -93,7 +195,25 @@ router.post('/forgot-password', authLimiter, async (req, res, next) => {
   }
 });
 
-// POST /api/v1/auth/reset-password
+/**
+ * @openapi
+ * /api/v1/auth/reset-password:
+ *   post:
+ *     summary: Reset password with a reset token
+ *     description: Accepts a reset token and new password to complete the password reset flow.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ResetPasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       401:
+ *         description: Invalid or expired reset token
+ */
 router.post('/reset-password', authLimiter, async (req, res, next) => {
   try {
     const parsed = resetPasswordSchema.safeParse(req.body);

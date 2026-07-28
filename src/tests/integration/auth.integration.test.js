@@ -125,15 +125,16 @@ describe('Auth API Integration Tests', () => {
   describe('POST /api/v1/auth/forgot-password & reset-password', () => {
     let generatedResetToken;
 
-    it('should return 404 for forgot-password with non-existent email', async () => {
+    it('should return 200 for forgot-password with non-existent email (no enumeration)', async () => {
       const response = await request(app)
         .post('/api/v1/auth/forgot-password')
         .send({
           email: 'notfound@example.com',
         });
 
-      expect(response.status).toBe(404);
-      expect(response.body.status).toBe('error');
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data).toEqual({});
     });
 
     it('should return 200 and generate reset token for existing user', async () => {
