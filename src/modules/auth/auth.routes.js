@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken, hashPassword } from './auth.service.js';
+import { forgotPassword, resetPassword } from './password.service.js';
 import { success, created } from '../../utils/response.js';
 import { systemMessages } from '../../config/index.js';
 
-import { registerSchema, loginSchema, refreshSchema, logoutSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, refreshSchema, logoutSchema, forgotPasswordSchema, resetPasswordSchema } from './auth.schema.js';
 import { requireAuth } from './auth.middleware.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 
@@ -78,4 +79,33 @@ router.post('/logout', requireAuth, async (req, res, next) => {
   }
 });
 
+// POST /api/v1/auth/forgot-password
+router.post('/forgot-password', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+    }
+    const result = await forgotPassword(parsed.data.email);
+    return success(res, result, systemMessages.SUCCESS.AUTH.PASSWORD_RESET_SENT);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// POST /api/v1/auth/reset-password
+router.post('/reset-password', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+    }
+    await resetPassword(parsed.data.token, parsed.data.password);
+    return success(res, null, systemMessages.SUCCESS.AUTH.PASSWORD_RESET_SUCCESS);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 export default router;
+

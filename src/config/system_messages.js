@@ -5,6 +5,8 @@ export default {
       LOGIN: "Login successful",
       LOGOUT: "Logged out successfully",
       TOKEN_REFRESHED: "Token refreshed successfully",
+      PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
+      PASSWORD_RESET_SUCCESS: "Password reset successfully",
     },
     EVENT: {
       CREATED: "Event created successfully",
@@ -43,6 +45,7 @@ export default {
       ACCOUNT_SUSPENDED: "Account has been suspended",
       ALREADY_EXISTS: "Account already exists with this email",
       TOO_MANY_ATTEMPTS: "Too many authentication attempts, please try again later",
+      RESET_TOKEN_INVALID: "Invalid or expired password reset token",
     },
     EVENT: {
       NOT_FOUND: "Event not found",
@@ -97,6 +100,7 @@ export default {
     PASSWORD_NUMBER: "Password must contain a number",
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
+    RESET_TOKEN_REQUIRED: "Reset token is required",
   },
 
   INFO: {

@@ -1,0 +1,91 @@
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { forgotPassword, resetPassword } from '../password.service.js';
+import prisma from '../../../database/index.js';
+import { NotFoundError, UnauthorizedError } from '../../../utils/error.js';
+
+
+const mRedisClient = {
+  set: vi.fn(),
+  get: vi.fn(),
+  del: vi.fn(),
+};
+
+vi.mock('../../../config/redis.js', () => ({
+  getRedisClient: vi.fn(() => mRedisClient),
+}));
+
+vi.mock('../../../database/index.js', () => ({
+  default: {
+    user: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('../../../utils/email.js', () => ({
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(true),
+}));
+
+describe('Password Service', () => {
+  const mockUser = {
+    id: 'user-id-123',
+    name: 'Test User',
+    email: 'test@example.com',
+    passwordHash: 'old-hash',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('forgotPassword', () => {
+    test('should throw NotFoundError if user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(forgotPassword('unknown@example.com')).rejects.toThrow(NotFoundError);
+    });
+
+    test('should generate reset token, store in redis, and send email if user exists', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      mRedisClient.set.mockResolvedValue('OK');
+
+      const result = await forgotPassword(mockUser.email);
+
+      expect(result.resetToken).toBeDefined();
+      expect(typeof result.resetToken).toBe('string');
+      expect(mRedisClient.set).toHaveBeenCalledWith(
+        `pwd_reset:${result.resetToken}`,
+        mockUser.id,
+        'EX',
+        900
+      );
+    });
+  });
+
+  describe('resetPassword', () => {
+    test('should throw UnauthorizedError if token is invalid or expired', async () => {
+      mRedisClient.get.mockResolvedValue(null);
+
+      await expect(resetPassword('invalid-token', 'NewSecurePass1')).rejects.toThrow(
+        UnauthorizedError
+      );
+    });
+
+    test('should update password and invalidate token if token is valid', async () => {
+      mRedisClient.get.mockResolvedValue(mockUser.id);
+      prisma.user.update.mockResolvedValue({ ...mockUser, passwordHash: 'new-hash' });
+      mRedisClient.del.mockResolvedValue(1);
+
+      const result = await resetPassword('valid-token', 'NewSecurePass123');
+
+      expect(result.success).toBe(true);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: expect.objectContaining({
+          passwordHash: expect.any(String),
+        }),
+      });
+      expect(mRedisClient.del).toHaveBeenCalledWith('pwd_reset:valid-token');
+    });
+  });
+});
