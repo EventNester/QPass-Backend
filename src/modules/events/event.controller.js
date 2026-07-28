@@ -4,6 +4,8 @@ import {
   listEvents,
   updateEvent,
   deleteEvent,
+  publishEvent,
+  cancelEvent,
 } from "./event.service.js";
 
 import {
@@ -90,6 +92,41 @@ export const deleteEventController = async (req, res, next) => {
     const event = await deleteEvent(id, req.user.id);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Publish event
+export const publishEventController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const event = await publishEvent(id, req.user.id);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.PUBLISHED
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// Cancel event
+export const cancelEventController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const event = await cancelEvent(id, req.user.id);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.CANCELLED
+    );
   } catch (error) {
     next(error);
   }
