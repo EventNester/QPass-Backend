@@ -15,7 +15,8 @@ const router = Router();
  * /api/v1/auth/register:
  *   post:
  *     summary: Register a new user
- *     description: Creates a new user account with ATTENDEE role. Rate limited to 5 requests per 15 minutes.
+ *     description: Creates a new user account with ATTENDEE role. Rate limited to 5 requests per 15 minutes. 
+ *      Password must be at least 8 characters, uppercase letter, lowercase letter, and contain a number.
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -31,7 +32,13 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/AuthResponse'
  *       400:
- *         description: Validation error
+ *         description: "Validation error. Possible messages: Name is required, Invalid email address, Password must be at least 8 characters, Password must contain an uppercase letter, Password must contain a lowercase letter, Password must contain a number"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
  */
 router.post('/register', authLimiter, async (req, res, next) => {
   try {
@@ -72,8 +79,20 @@ router.post('/register', authLimiter, async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: "Validation error. Possible messages: Invalid email address, Password is required"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid email or password
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
  */
 router.post('/login', authLimiter, async (req, res, next) => {
   try {
@@ -109,8 +128,18 @@ router.post('/login', authLimiter, async (req, res, next) => {
  *     responses:
  *       200:
  *         description: Tokens refreshed successfully
+ *       400:
+ *         description: "Validation error. Possible message: Refresh token is required"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/refresh', async (req, res, next) => {
   try {
@@ -145,8 +174,18 @@ router.post('/refresh', async (req, res, next) => {
  *     responses:
  *       200:
  *         description: Logged out successfully
+ *       400:
+ *         description: "Validation error. Possible message: Refresh token is required"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/logout', requireAuth, async (req, res, next) => {
   try {
@@ -181,6 +220,14 @@ router.post('/logout', requireAuth, async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: "Validation error. Possible message: Invalid email address"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
  */
 router.post('/forgot-password', authLimiter, async (req, res, next) => {
   try {
@@ -211,8 +258,20 @@ router.post('/forgot-password', authLimiter, async (req, res, next) => {
  *     responses:
  *       200:
  *         description: Password reset successfully
+ *       400:
+ *         description: "Validation error. Possible messages: Reset token is required, Password must be at least 8 characters, Password must contain an uppercase letter, Password must contain a lowercase letter, Password must contain a number"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Invalid or expired reset token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
  */
 router.post('/reset-password', authLimiter, async (req, res, next) => {
   try {

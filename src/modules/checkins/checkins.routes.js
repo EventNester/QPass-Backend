@@ -48,13 +48,25 @@ const router = Router();
  *                     data:
  *                       $ref: '#/components/schemas/ScanResult'
  *       401:
- *         description: Missing or invalid token
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — requires STAFF or ORGANIZER role
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Scan already in progress
+ *         description: Scan already in progress or duplicate check-in
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: token must not be empty"
  *         content:
  *           application/json:
  *             schema:
@@ -88,6 +100,18 @@ router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), va
  *                     data:
  *                       type: array
  *                       items: { type: object }
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — requires STAFF or ORGANIZER role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.getCheckins);
 
@@ -111,6 +135,18 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *     responses:
  *       200:
  *         description: Check-in undone
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — requires STAFF or ORGANIZER role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Check-in not found
  */

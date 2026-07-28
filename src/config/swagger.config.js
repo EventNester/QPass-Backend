@@ -25,8 +25,8 @@ if (!existsSync(DEFINITION_PATH)) {
 const options = {
   definition,
   apis: [
-    join(__dirname, "../routes/*.js"),
-    join(__dirname, "../modules/*/*.routes.js"),
+    join(__dirname, "../routes/*.js").replace(/\\/g, "/"),
+    join(__dirname, "../modules/*/*.routes.js").replace(/\\/g, "/"),
   ],
 };
 
