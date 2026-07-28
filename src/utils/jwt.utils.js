@@ -44,6 +44,12 @@ export function verifyRefreshToken(token) {
   }
 }
 
+/**
+ * Decodes a JWT token without verifying its signature.
+ * Reserved for future use (e.g., inspecting token claims or expiration before verification).
+ * @param {string} token
+ * @returns {null | { [key: string]: any } | string}
+ */
 export function decodeToken(token) {
   return jwt.decode(token);
 }
