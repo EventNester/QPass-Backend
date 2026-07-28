@@ -1,10 +1,13 @@
 import { randomBytes } from "crypto";
+import QRCode from "qrcode";
 import prisma from "../../database/index.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError } from "../../utils/error.js";
-import { systemMessages } from "../../config/index.js";
+import { systemMessages, constants } from "../../config/index.js";
 
 const msg = systemMessages.ERROR;
+const QR_MIN_SIZE = 200;
+const QR_MAX_SIZE = constants.QR.MAX_SIZE;
 
 /**
  * QR Token
@@ -95,6 +98,28 @@ class QrService {
     }
 
     return qrToken;
+  }
+
+  /**
+   * Generate a QR code PNG buffer from a raw token string.
+   *
+   * Width is clamped to a minimum of 200px to ensure scannability
+   * on small displays. Defaults to constants.QR.SIZE (300px).
+   *
+   * @param {string} token - The raw hex token to encode in the QR code
+   * @param {Object} [options]
+   * @param {number} [options.width] - Image width in px (default: constants.QR.SIZE)
+   * @param {number} [options.margin] - Quiet zone in modules (default: 2)
+   * @param {string} [options.errorCorrectionLevel] - L/M/Q/H (default: "M")
+   * @returns {Promise<Buffer>} PNG image buffer
+   */
+  async createQrImage(token, options = {}) {
+    const width = Math.min(Math.max(options.width ?? constants.QR.SIZE, QR_MIN_SIZE), QR_MAX_SIZE);
+    return QRCode.toBuffer(token, {
+      width,
+      margin: options.margin ?? 2,
+      errorCorrectionLevel: options.errorCorrectionLevel ?? "M",
+    });
   }
 }
 
