@@ -7,9 +7,12 @@ import { constants, systemMessages } from "../config/index.js";
 
 const msg = systemMessages.ERROR.UPLOAD;
 
+// Ensure the uploads directory exists at app startup. `recursive: true` avoids
+// errors if the directory is already present.
 const uploadDir = join(process.cwd(), constants.UPLOAD.DIR);
 mkdirSync(uploadDir, { recursive: true });
 
+// Set for O(1) extension lookups during file filtering.
 const ALLOWED_EXT = new Set(constants.UPLOAD.ALLOWED_EXTENSIONS);
 
 const storage = multer.diskStorage({
@@ -30,6 +33,8 @@ function fileFilter(_req, file, cb) {
   cb(null, true);
 }
 
+// Multer instance scoped to attendee imports. Enforces a single file upload
+// with no accompanying form fields (parts: 1, fields: 0).
 export const uploadAttendees = multer({
   storage,
   limits: {
@@ -41,6 +46,10 @@ export const uploadAttendees = multer({
   fileFilter,
 });
 
+// Multer-specific errors use distinct HTTP codes so the client can differentiate
+// between size limits (413) and other multer failures (400). Non-multer errors
+// with our INVALID_TYPE message are mapped to 415 Unsupported Media Type.
+// All other errors are forwarded to the global error handler.
 export function handleUploadError(err, _req, res, next) {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
@@ -63,6 +72,9 @@ export function requireFile(_req, res, next) {
   next();
 }
 
+// Cleans up the uploaded file when an error occurs upstream (e.g. validation
+// failure after multer already wrote to disk). The `.catch(() => {})` swallows
+// unlink errors (e.g. file already removed) to avoid masking the original error.
 export async function cleanupOnError(err, req, _res, next) {
   if (err && req.file?.path) {
     await unlink(req.file.path).catch(() => {});
