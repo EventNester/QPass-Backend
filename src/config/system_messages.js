@@ -5,6 +5,8 @@ export default {
       LOGIN: "Login successful",
       LOGOUT: "Logged out successfully",
       TOKEN_REFRESHED: "Token refreshed successfully",
+      PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
+      PASSWORD_RESET_SUCCESS: "Password reset successfully",
     },
     EVENT: {
       CREATED: "Event created successfully",
@@ -45,13 +47,15 @@ export default {
       ACCOUNT_SUSPENDED: "Account has been suspended",
       ALREADY_EXISTS: "Account already exists with this email",
       TOO_MANY_ATTEMPTS: "Too many authentication attempts, please try again later",
+      RESET_TOKEN_INVALID: "Invalid or expired password reset token",
     },
     EVENT: {
       NOT_FOUND: "Event not found",
       ALREADY_EXISTS: "Event with this title already exists",
       UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
-      ALREADY_PUBLISHED: "Only draft events can be published",
+      NOT_DRAFT: "Event is not in draft status",
+      CANNOT_CANCEL_DRAFT: "Cannot cancel a draft event",
       ALREADY_CANCELLED: "Event is already cancelled",
     },
     TICKET: {
@@ -90,6 +94,12 @@ export default {
       DB_CONNECTION_FAILED: "Database connection failed",
       SERVER_START_FAILED: "Failed to start server",
     },
+    UPLOAD: {
+      MISSING_FILE: "No file uploaded",
+      INVALID_TYPE: "Invalid file type. Allowed formats: CSV, XLSX, PDF, DOCX",
+      TOO_LARGE: "File exceeds the 5MB size limit",
+      GENERIC: "File upload failed",
+    },
   },
 
   VALIDATION: {
@@ -101,6 +111,7 @@ export default {
     PASSWORD_NUMBER: "Password must contain a number",
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
+    RESET_TOKEN_REQUIRED: "Reset token is required",
   },
 
   INFO: {
