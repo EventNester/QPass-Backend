@@ -25,27 +25,44 @@ async function verifyEventOwnership(eventId, ownerId) {
 
 export async function assignStaff(eventId, ownerId, data) {
   const event = await verifyEventOwnership(eventId, ownerId);
+  const email = data.email.trim().toLowerCase();
 
-  let user = await prisma.user.findUnique({
-    where: { email: data.email },
-  });
+  let user = await prisma.user.findUnique({ where: { email } });
 
   let isNewUser = false;
 
   if (!user) {
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(randomPassword, 12);
-    const name = data.email.split('@')[0];
+    const name = email.split('@')[0];
 
-    user = await prisma.user.create({
-      data: {
-        name,
-        email: data.email,
-        passwordHash,
-        role: 'STAFF',
-      },
-    });
+    try {
+      user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: 'STAFF',
+        },
+      });
+    } catch (err) {
+      if (err.code === 'P2002') {
+        user = await prisma.user.findUnique({ where: { email } });
+        if (!user) throw err;
+      } else {
+        throw err;
+      }
+    }
     isNewUser = true;
+  }
+
+  if (user.role === 'ATTENDEE') {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'STAFF' },
+    });
+  } else if (user.role !== 'STAFF') {
+    throw new ForbiddenError('Cannot assign privileged user as staff');
   }
 
   const existingAssignment = await prisma.eventStaffAssignment.findUnique({
@@ -56,28 +73,35 @@ export async function assignStaff(eventId, ownerId, data) {
     throw new ConflictError(msg.STAFF.ALREADY_ASSIGNED);
   }
 
-  if (user.role !== 'STAFF') {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { role: 'STAFF' },
-    });
-  }
-
-  const assignment = await prisma.eventStaffAssignment.create({
-    data: {
-      eventId,
-      userId: user.id,
-      permissionScope: data.permissionScope || null,
-    },
-    include: {
-      user: {
-        select: { id: true, name: true, email: true, role: true, status: true },
+  const [assignment] = await prisma.$transaction(async (tx) => {
+    const created = await tx.eventStaffAssignment.create({
+      data: {
+        eventId,
+        userId: user.id,
+        permissionScope: data.permissionScope || null,
       },
-    },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, role: true, status: true },
+        },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId: ownerId,
+        action: isNewUser ? 'STAFF_INVITE_CREATE' : 'STAFF_ASSIGN',
+        entity: 'EventStaffAssignment',
+        entityId: created.id,
+        afterSnapshot: { email, eventId, permissionScope: data.permissionScope || null },
+      },
+    });
+
+    return [created];
   });
 
   sendNotification({
-    recipient: data.email,
+    recipient: email,
     subject: `You're Invited as Staff — ${event.title}`,
     template: 'staff-invite',
     context: {
@@ -89,17 +113,7 @@ export async function assignStaff(eventId, ownerId, data) {
     userId: user.id,
     eventId,
   }).catch((err) => {
-    logger.error({ err: err.message, email: data.email, eventId }, 'Staff invite email send failed');
-  });
-
-  await prisma.auditLog.create({
-    data: {
-      actorId: ownerId,
-      action: isNewUser ? 'STAFF_INVITE_CREATE' : 'STAFF_ASSIGN',
-      entity: 'EventStaffAssignment',
-      entityId: assignment.id,
-      afterSnapshot: { email: data.email, eventId, permissionScope: data.permissionScope || null },
-    },
+    logger.error({ err: err.message, email, eventId }, 'Staff invite email send failed');
   });
 
   return assignment;
@@ -138,19 +152,28 @@ export async function removeStaff(eventId, staffId, ownerId) {
     throw new NotFoundError(msg.STAFF.NOT_FOUND);
   }
 
-  const deletedAssignment = await prisma.eventStaffAssignment.delete({
-    where: { id: staffId },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const deleted = await tx.eventStaffAssignment.delete({
+        where: { id: staffId },
+      });
 
-  await prisma.auditLog.create({
-    data: {
-      actorId: ownerId,
-      action: 'STAFF_REMOVE',
-      entity: 'EventStaffAssignment',
-      entityId: staffId,
-      beforeSnapshot: { eventId, userId: deletedAssignment.userId, permissionScope: deletedAssignment.permissionScope },
-    },
-  });
+      await tx.auditLog.create({
+        data: {
+          actorId: ownerId,
+          action: 'STAFF_REMOVE',
+          entity: 'EventStaffAssignment',
+          entityId: staffId,
+          beforeSnapshot: { eventId, userId: deleted.userId, permissionScope: deleted.permissionScope },
+        },
+      });
+    });
+  } catch (err) {
+    if (err.code === 'P2025') {
+      throw new NotFoundError(msg.STAFF.NOT_FOUND);
+    }
+    throw err;
+  }
 
   return { id: staffId, eventId };
 }
