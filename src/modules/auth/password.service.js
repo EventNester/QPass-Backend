@@ -13,22 +13,21 @@ export async function forgotPassword(email) {
   const user = await prisma.user.findUnique({ where: { email } });
 
   if (!user) {
-    logger.warn({ email }, 'Password reset requested for non-existent email');
-    await new Promise((r) => setTimeout(r, 200));
+    logger.warn('Password reset requested for non-existent email');
     return {};
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
   const redis = getRedisClient();
 
-  try {
-    await sendPasswordResetEmail(user.email, resetToken);
-  } catch {
-    logger.error({ email }, 'Password reset email send failed');
-    return {};
-  }
-
   await redis.set(`${REDIS_PREFIX}${resetToken}`, user.id, 'EX', RESET_TOKEN_TTL_SECONDS);
+
+  sendPasswordResetEmail(user.email, resetToken).catch(async (err) => {
+    logger.error({ err: err.message }, 'Password reset email send failed');
+    try {
+      await redis.del(`${REDIS_PREFIX}${resetToken}`);
+    } catch { /* ignore cleanup error */ }
+  });
 
   return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }
