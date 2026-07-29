@@ -176,6 +176,7 @@ model TicketType {
   event         Event          @relation(fields: [eventId], references: [id])
   registrations Registration[]
 
+  @@unique([eventId, sortOrder])
   @@index([eventId])
   @@map("ticket_types")
 }
@@ -219,7 +220,7 @@ model Registration {
 
   event      Event      @relation(fields: [eventId], references: [id])
   ticketCode TicketCode @relation(fields: [ticketCodeId], references: [id])
-  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
+  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
   qrToken       QrToken?
   checkins      CheckIn[]
   payment       Payment?

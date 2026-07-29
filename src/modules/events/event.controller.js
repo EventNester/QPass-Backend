@@ -46,7 +46,7 @@ export const createEventController = async (req, res, next) => {
     const validatedData = parseOrNext(createEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await createEvent(validatedData, req.user.id);
+    const event = await createEvent(validatedData, req.user.sub);
 
     return created(res, event, systemMessages.SUCCESS.EVENT.CREATED);
   } catch (error) {
@@ -88,7 +88,7 @@ export const updateEventController = async (req, res, next) => {
     const validatedData = parseOrNext(updateEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await updateEvent(id, validatedData, req.user.id);
+    const event = await updateEvent(id, validatedData, req.user.sub);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.UPDATED);
   } catch (error) {
@@ -101,7 +101,7 @@ export const deleteEventController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const event = await deleteEvent(id, req.user.id);
+    const event = await deleteEvent(id, req.user.sub);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
   } catch (error) {
@@ -115,7 +115,7 @@ export const publishEventController = async (req, res, next) => {
     const eventId = parseEventIdOrNext(req.params.id, next);
     if (!eventId) return;
 
-    const event = await publishEvent(eventId, req.user.id);
+    const event = await publishEvent(eventId, req.user.sub);
 
     return success(
       res,
@@ -134,7 +134,7 @@ export const cancelEventController = async (req, res, next) => {
     const eventId = parseEventIdOrNext(req.params.id, next);
     if (!eventId) return;
 
-    const event = await cancelEvent(eventId, req.user.id);
+    const event = await cancelEvent(eventId, req.user.sub);
 
     return success(
       res,

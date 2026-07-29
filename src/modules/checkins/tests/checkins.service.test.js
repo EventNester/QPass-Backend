@@ -9,6 +9,12 @@ const successMsg = systemMessages.SUCCESS;
 
 vi.mock("../../../database/index.js", () => ({
   default: {
+    event: {
+      findFirst: vi.fn(),
+    },
+    eventStaffAssignment: {
+      findUnique: vi.fn(),
+    },
     qrToken: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -208,10 +214,11 @@ describe("Checkin Service Tests", () => {
 
   describe("getCheckins", () => {
     test("should return checkins for an event", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
       const checkins = [mockCheckin, { ...mockCheckin, id: "checkin_2" }];
       prisma.checkIn.findMany.mockResolvedValue(checkins);
 
-      const result = await getCheckins(mockEventId);
+      const result = await getCheckins(mockEventId, mockStaffId);
 
       expect(result).toEqual(checkins);
       expect(prisma.checkIn.findMany).toHaveBeenCalledWith({
@@ -225,9 +232,10 @@ describe("Checkin Service Tests", () => {
     });
 
     test("should return empty array if no checkins", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
       prisma.checkIn.findMany.mockResolvedValue([]);
 
-      const result = await getCheckins(mockEventId);
+      const result = await getCheckins(mockEventId, mockStaffId);
 
       expect(result).toEqual([]);
     });
@@ -252,7 +260,7 @@ describe("Checkin Service Tests", () => {
 
     test("should undo checkin successfully with audit log and deletion in transaction", async () => {
       prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
-      prisma.$transaction.mockResolvedValue([{}, {}]);
+      prisma.$transaction.mockResolvedValue([{}, {}, {}]);
 
       const result = await undoCheckin(mockEventId, mockCheckInId, mockStaffId);
 
@@ -272,6 +280,10 @@ describe("Checkin Service Tests", () => {
           },
         }),
         prisma.checkIn.delete({ where: { id: mockCheckInId } }),
+        prisma.qrToken.update({
+          where: { registrationId: mockCheckin.registrationId },
+          data: { revokedAt: null, scanCount: { decrement: 1 } },
+        }),
       ]);
       expect(result).toEqual({ success: true });
     });
