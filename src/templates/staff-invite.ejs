@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>You've been invited as Staff - <%= eventName %></title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+    .content { padding: 20px 0; color: #334155; line-height: 1.6; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #0f766e; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+    .footer { text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="color: #1e293b; margin: 0;"><%= appName || 'QPass' %></h1>
+    </div>
+    <div class="content">
+      <h2>Hello, <%= name %>!</h2>
+      <p>You have been invited to join the staff team for <strong><%= eventName %></strong>.</p>
+      <% if (typeof role !== 'undefined' && role) { %>
+        <p>Assigned Role: <strong><%= role %></strong></p>
+      <% } %>
+      <p>Please click the button below to accept your invitation and access the event staff dashboard:</p>
+      <% if (typeof inviteUrl !== 'undefined' && inviteUrl) { %>
+        <p style="text-align: center;">
+          <a href="<%= inviteUrl %>" class="button">Accept Invitation</a>
+        </p>
+      <% } %>
+      <p>If you did not expect this invitation, you can ignore this email.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= year || new Date().getFullYear() %> <%= appName || 'QPass' %>. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
