@@ -28,6 +28,8 @@ async function generateUniqueSlug(title) {
 
 // Create an event
 export const createEvent = async (eventData, ownerId) => {
+  const slug = await generateUniqueSlug(eventData.title);
+
   const event = await prisma.event.create({
     data: {
       title: eventData.title,
@@ -35,6 +37,7 @@ export const createEvent = async (eventData, ownerId) => {
       venue: eventData.venue,
       startTime: eventData.startTime,
       endTime: eventData.endTime,
+      slug,
       ownerId,
     },
   });
