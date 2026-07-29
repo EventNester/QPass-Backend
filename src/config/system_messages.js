@@ -109,6 +109,15 @@ export default {
       TOO_LARGE: "File exceeds the 5MB size limit",
       GENERIC: "File upload failed",
     },
+    IMPORT: {
+      CSV_PARSE_FAILED: "Failed to parse CSV file",
+      XLSX_PARSE_FAILED: "Failed to parse XLSX file",
+      PDF_PARSE_FAILED: "Failed to parse PDF file",
+      DOCX_PARSE_FAILED: "Failed to parse DOCX file",
+      NO_WORKSHEETS: "No worksheets found in XLSX file",
+      INVALID_BUFFER: "Invalid file buffer",
+      ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
+    },
   },
 
   VALIDATION: {
@@ -121,6 +130,19 @@ export default {
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
+    IMPORT: {
+      MISSING_NAME: "Name is required",
+      CONTACT_REQUIRED: "At least one of email or phone is required",
+      INVALID_EMAIL_FORMAT: "Invalid email format",
+      INVALID_PHONE: "Invalid phone number format",
+      DUPLICATE_EMAIL: "Duplicate email within the same batch",
+      DUPLICATE_PHONE: "Duplicate phone within the same batch",
+      DUPLICATE_EMAIL_EVENT: "Email already registered for this event",
+      DUPLICATE_PHONE_EVENT: "Phone already registered for this event",
+      UNKNOWN_TICKET_TYPE: "Unknown ticket type",
+      CAPACITY_EXCEEDED: "Event or ticket type capacity exceeded",
+      EMPTY_ROW: "Row must contain at least a name and contact info",
+    },
   },
 
   INFO: {
