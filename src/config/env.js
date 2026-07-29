@@ -34,6 +34,7 @@ const envSchema = z.object({
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
   BREVO_API_KEY: z.string().optional().default(""),
+  BREVO_SMTP_KEY: z.string().optional().default(""),
   BREVO_SENDER_EMAIL: z.string().optional().default("noreply@qpass.com"),
   BREVO_SENDER_NAME: z.string().optional().default("QPass"),
 
