@@ -3,8 +3,8 @@ import { assignStaff, listStaff, removeStaff } from "../staff.service.js";
 import prisma from "../../../database/index.js";
 import { NotFoundError, ConflictError, ForbiddenError } from "../../../utils/error.js";
 
-vi.mock("../../../database/index.js", () => ({
-  default: {
+const mockPrisma = vi.hoisted(() => {
+  const base = {
     event: { findFirst: vi.fn() },
     user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     eventStaffAssignment: {
@@ -14,7 +14,15 @@ vi.mock("../../../database/index.js", () => ({
       delete: vi.fn(),
     },
     auditLog: { create: vi.fn() },
-  },
+  };
+  return {
+    ...base,
+    $transaction: vi.fn((fn) => fn(base)),
+  };
+});
+
+vi.mock("../../../database/index.js", () => ({
+  default: mockPrisma,
 }));
 
 vi.mock("../../../config/index.js", () => ({
