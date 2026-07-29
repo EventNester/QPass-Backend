@@ -85,7 +85,7 @@ const seed = async () => {
   console.log(`Published event: ${publishedEvent.title} (slug: ${publishedEvent.slug})`);
 
   // 4. Create ticket types for published event
-  const vipTicket = await prisma.ticketType.upsert({
+  await prisma.ticketType.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: {},
     create: {
@@ -99,7 +99,7 @@ const seed = async () => {
     },
   });
 
-  const regularTicket = await prisma.ticketType.upsert({
+  await prisma.ticketType.upsert({
     where: { id: "00000000-0000-0000-0000-000000000002" },
     update: {},
     create: {
@@ -113,7 +113,7 @@ const seed = async () => {
     },
   });
 
-  const studentTicket = await prisma.ticketType.upsert({
+  await prisma.ticketType.upsert({
     where: { id: "00000000-0000-0000-0000-000000000003" },
     update: {},
     create: {

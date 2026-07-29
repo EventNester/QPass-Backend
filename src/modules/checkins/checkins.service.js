@@ -80,7 +80,27 @@ export async function scanQr(eventId, data, staffId) {
   }
 }
 
-export async function getCheckins(eventId) {
+export async function getCheckins(eventId, userId) {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null },
+    select: { ownerId: true },
+  });
+
+  if (!event) {
+    throw new NotFoundError(errMsg.EVENT.NOT_FOUND);
+  }
+
+  if (event.ownerId !== userId) {
+    const assignment = await prisma.eventStaffAssignment.findUnique({
+      where: { eventId_userId: { eventId, userId } },
+      select: { active: true },
+    });
+
+    if (!assignment?.active) {
+      throw new NotFoundError(errMsg.EVENT.NOT_FOUND);
+    }
+  }
+
   return prisma.checkIn.findMany({
     where: { eventId },
     include: {
@@ -112,6 +132,10 @@ export async function undoCheckin(eventId, checkInId, staffId) {
       },
     }),
     prisma.checkIn.delete({ where: { id: checkInId } }),
+    prisma.qrToken.update({
+      where: { registrationId: checkin.registrationId },
+      data: { revokedAt: null, scanCount: { decrement: 1 } },
+    }),
   ]);
 
   return { success: true };

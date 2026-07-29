@@ -12,6 +12,8 @@ export default {
       CREATED: "Event created successfully",
       UPDATED: "Event updated successfully",
       DELETED: "Event deleted successfully",
+      PUBLISHED: "Event published successfully",
+      CANCELLED: "Event cancelled successfully",
     },
     TICKET: {
       CODES_UPLOADED: "Ticket codes uploaded successfully",
@@ -25,6 +27,11 @@ export default {
     PAYMENT: {
       INITIALIZED: "Payment initialized successfully",
       VERIFIED: "Payment verified successfully",
+    },
+    STAFF: {
+      ASSIGNED: "Staff assigned successfully",
+      LISTED: "Staff list retrieved successfully",
+      REMOVED: "Staff removed successfully",
     },
     REPORT: {
       GENERATED: "Report generated successfully",
@@ -52,6 +59,9 @@ export default {
       ALREADY_EXISTS: "Event with this title already exists",
       UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
+      NOT_DRAFT: "Event is not in draft status",
+      CANNOT_CANCEL_DRAFT: "Cannot cancel a draft event",
+      ALREADY_CANCELLED: "Event is already cancelled",
     },
     TICKET: {
       INVALID_CODE: "Invalid ticket code",
@@ -78,6 +88,10 @@ export default {
       ALREADY_VERIFIED: "Payment has already been verified",
       INVALID_REFERENCE: "Invalid payment reference",
     },
+    STAFF: {
+      ALREADY_ASSIGNED: "Staff member is already assigned to this event",
+      NOT_FOUND: "Staff assignment not found",
+    },
     GENERAL: {
       NOT_FOUND: "Resource not found",
       ALREADY_EXISTS: "Resource already exists",
@@ -88,6 +102,21 @@ export default {
       TOO_MANY_REQUESTS: "Too many requests, please try again later",
       DB_CONNECTION_FAILED: "Database connection failed",
       SERVER_START_FAILED: "Failed to start server",
+    },
+    UPLOAD: {
+      MISSING_FILE: "No file uploaded",
+      INVALID_TYPE: "Invalid file type. Allowed formats: CSV, XLSX, PDF, DOCX",
+      TOO_LARGE: "File exceeds the 5MB size limit",
+      GENERIC: "File upload failed",
+    },
+    IMPORT: {
+      CSV_PARSE_FAILED: "Failed to parse CSV file",
+      XLSX_PARSE_FAILED: "Failed to parse XLSX file",
+      PDF_PARSE_FAILED: "Failed to parse PDF file",
+      DOCX_PARSE_FAILED: "Failed to parse DOCX file",
+      NO_WORKSHEETS: "No worksheets found in XLSX file",
+      INVALID_BUFFER: "Invalid file buffer",
+      ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
     },
   },
 
@@ -101,6 +130,19 @@ export default {
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
+    IMPORT: {
+      MISSING_NAME: "Name is required",
+      CONTACT_REQUIRED: "At least one of email or phone is required",
+      INVALID_EMAIL_FORMAT: "Invalid email format",
+      INVALID_PHONE: "Invalid phone number format",
+      DUPLICATE_EMAIL: "Duplicate email within the same batch",
+      DUPLICATE_PHONE: "Duplicate phone within the same batch",
+      DUPLICATE_EMAIL_EVENT: "Email already registered for this event",
+      DUPLICATE_PHONE_EVENT: "Phone already registered for this event",
+      UNKNOWN_TICKET_TYPE: "Unknown ticket type",
+      CAPACITY_EXCEEDED: "Event or ticket type capacity exceeded",
+      EMPTY_ROW: "Row must contain at least a name and contact info",
+    },
   },
 
   INFO: {

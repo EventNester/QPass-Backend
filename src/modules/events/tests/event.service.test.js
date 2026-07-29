@@ -5,9 +5,20 @@ import {
   listEvents,
   updateEvent,
   deleteEvent,
+  publishEvent,
+  cancelEvent,
 } from "../event.service.js";
 import prisma from "../../../database/index.js";
-import { NotFoundError, ForbiddenError } from "../../../utils/error.js";
+import {
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+} from "../../../utils/error.js";
+import { constants } from "../../../config/index.js";
+
+vi.mock("../../../utils/slug.js", () => ({
+  generateSlug: vi.fn(() => "test-event-abc123"),
+}));
 
 vi.mock("../../../database/index.js", () => ({
   default: {
@@ -47,7 +58,7 @@ describe("Event Service Tests", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe("createEvent", () => {
@@ -64,6 +75,7 @@ describe("Event Service Tests", () => {
           venue: mockEventData.venue,
           startTime: mockEventData.startTime,
           endTime: mockEventData.endTime,
+          slug: expect.any(String),
           ownerId: mockOwnerId,
         },
       });
@@ -222,6 +234,148 @@ describe("Event Service Tests", () => {
       await expect(deleteEvent("event_1", mockOwnerId)).rejects.toThrow(
         NotFoundError
       );
+    });
+  });
+
+  describe("publishEvent", () => {
+    test("should publish a draft event and preserve its slug", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+        publishedAt: new Date(),
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(mockEvent)
+        .mockResolvedValueOnce(publishedEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await publishEvent("event_1", mockOwnerId);
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          ownerId: mockOwnerId,
+          deletedAt: null,
+          status: constants.EVENT_STATUS.DRAFT,
+        },
+        data: {
+          status: constants.EVENT_STATUS.PUBLISHED,
+          publishedAt: expect.any(Date),
+        },
+      });
+      expect(result).toEqual(publishedEvent);
+    });
+
+    test.each([
+      constants.EVENT_STATUS.PUBLISHED,
+      constants.EVENT_STATUS.CANCELLED,
+      constants.EVENT_STATUS.ACTIVE,
+      constants.EVENT_STATUS.COMPLETED,
+    ])("should reject publish when status is %s", async (status) => {
+      prisma.event.findFirst.mockResolvedValueOnce({ ...mockEvent, status });
+
+      await expect(publishEvent("event_1", mockOwnerId)).rejects.toThrow(
+        /Event is not in draft status \(current: /
+      );
+    });
+
+    test("should throw NotFoundError when event does not exist", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      await expect(publishEvent("nonexistent", mockOwnerId)).rejects.toThrow(
+        NotFoundError
+      );
+    });
+
+    test("should throw ForbiddenError when caller is not the owner", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockEvent);
+
+      await expect(
+        publishEvent("event_1", "attacker_user")
+      ).rejects.toThrow(ForbiddenError);
+    });
+  });
+
+  describe("cancelEvent", () => {
+    test("should cancel a published event", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+      };
+      const cancelledEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.CANCELLED,
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(publishedEvent)
+        .mockResolvedValueOnce(cancelledEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await cancelEvent("event_1", mockOwnerId);
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          ownerId: mockOwnerId,
+          deletedAt: null,
+          status: {
+            in: [
+              constants.EVENT_STATUS.PUBLISHED,
+              constants.EVENT_STATUS.ACTIVE,
+              constants.EVENT_STATUS.COMPLETED,
+            ],
+          },
+        },
+        data: {
+          status: constants.EVENT_STATUS.CANCELLED,
+        },
+      });
+      expect(result).toEqual(cancelledEvent);
+    });
+
+    test("should reject cancelling an already cancelled event", async () => {
+      prisma.event.findFirst.mockResolvedValueOnce({
+        ...mockEvent,
+        status: constants.EVENT_STATUS.CANCELLED,
+      });
+
+      await expect(cancelEvent("event_1", mockOwnerId)).rejects.toThrow(
+        ValidationError
+      );
+    });
+
+    test("should reject cancelling a draft event", async () => {
+      prisma.event.findFirst.mockResolvedValueOnce(mockEvent);
+
+      await expect(cancelEvent("event_1", mockOwnerId)).rejects.toThrow(
+        ValidationError
+      );
+    });
+
+    test("should throw NotFoundError when event does not exist", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      await expect(cancelEvent("nonexistent", mockOwnerId)).rejects.toThrow(
+        NotFoundError
+      );
+    });
+
+    test("should throw ForbiddenError when caller is not the owner", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockEvent);
+
+      await expect(
+        cancelEvent("event_1", "attacker_user")
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 });

@@ -11,7 +11,7 @@ export const requireAuth = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     const decoded = validateToken(token);
-    req.user = decoded;
+    req.user = { ...decoded, id: decoded.sub };
     next();
   } catch {
     return res.status(401).json({ status: "error", message: systemMessages.ERROR.AUTH.UNAUTHORIZED });

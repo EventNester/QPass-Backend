@@ -1,5 +1,5 @@
 import { z } from "zod";
-import systemMessages from "../../config/system_messages.js";
+import { systemMessages } from "../../config/index.js";
 
 const v = systemMessages.VALIDATION;
 
@@ -12,7 +12,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
     .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
     .regex(/\d/, v.PASSWORD_NUMBER),
-}).strip();
+});
 
 export const loginSchema = z.object({
   email: z.string().email(v.INVALID_EMAIL),
@@ -29,7 +29,7 @@ export const logoutSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email(v.INVALID_EMAIL),
-}).strip();
+});
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, v.RESET_TOKEN_REQUIRED),
@@ -39,5 +39,5 @@ export const resetPasswordSchema = z.object({
     .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
     .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
     .regex(/\d/, v.PASSWORD_NUMBER),
-}).strip();
+});
 

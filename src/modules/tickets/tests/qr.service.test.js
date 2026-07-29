@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+vi.mock("qrcode", () => ({
+  default: {
+    toBuffer: vi.fn().mockResolvedValue(Buffer.from("mock-png")),
+  },
+}));
+
 vi.mock("../../../database/index.js", () => ({
   default: {
     qrToken: {
@@ -11,6 +17,7 @@ vi.mock("../../../database/index.js", () => ({
 
 import { qrService } from "../qr.service.js";
 import prisma from "../../../database/index.js";
+import QRCode from "qrcode";
 
 describe("QrService", () => {
   beforeEach(() => {
@@ -36,18 +43,18 @@ describe("QrService", () => {
     });
 
     it("should throw if a token already exists for the registration", async () => {
-      prisma.qrToken.findUnique.mockResolvedValue({ id: "existing" });
+      prisma.qrToken.create.mockRejectedValue({ code: 'P2002' });
 
       await expect(
         qrService.generateToken("reg-1", new Date())
       ).rejects.toThrow("QR token already exists for this registration");
     });
 
-    it("should not call create if token already exists", async () => {
-      prisma.qrToken.findUnique.mockResolvedValue({ id: "existing" });
+    it("should not call create multiple times on duplicate", async () => {
+      prisma.qrToken.create.mockRejectedValue({ code: 'P2002' });
 
       await qrService.generateToken("reg-1", new Date()).catch(() => {});
-      expect(prisma.qrToken.create).not.toHaveBeenCalled();
+      expect(prisma.qrToken.create).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -92,6 +99,33 @@ describe("QrService", () => {
       });
 
       await expect(qrService.validateToken("revoked")).rejects.toThrow("QR token has been revoked");
+    });
+  });
+
+  describe("createQrImage", () => {
+    it("should return a PNG buffer for a valid token", async () => {
+      const buf = await qrService.createQrImage("abc123");
+      expect(buf).toBeInstanceOf(Buffer);
+      expect(buf.toString()).toBe("mock-png");
+      expect(QRCode.toBuffer).toHaveBeenCalledWith("abc123", {
+        width: 300,
+        margin: 2,
+        errorCorrectionLevel: "M",
+      });
+    });
+
+    it("should enforce minimum width of 200px", async () => {
+      await qrService.createQrImage("abc123", { width: 100 });
+      expect(QRCode.toBuffer).toHaveBeenCalledWith("abc123", expect.objectContaining({ width: 200 }));
+    });
+
+    it("should accept custom width and margin", async () => {
+      await qrService.createQrImage("abc123", { width: 400, margin: 4 });
+      expect(QRCode.toBuffer).toHaveBeenCalledWith("abc123", {
+        width: 400,
+        margin: 4,
+        errorCorrectionLevel: "M",
+      });
     });
   });
 });
