@@ -4,6 +4,8 @@ import {
   listEvents,
   updateEvent,
   deleteEvent,
+  publishEvent,
+  cancelEvent,
 } from "./event.service.js";
 
 import {
@@ -24,6 +26,18 @@ const parseOrNext = (schema, body, next) => {
     }
     return next(err);
   }
+};
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const parseEventIdOrNext = (id, next) => {
+  if (!UUID_REGEX.test(id)) {
+    next(new ValidationError("Invalid event ID format"));
+    return null;
+  }
+
+  return id;
 };
 
 // Create event
@@ -90,6 +104,43 @@ export const deleteEventController = async (req, res, next) => {
     const event = await deleteEvent(id, req.user.id);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Publish event
+export const publishEventController = async (req, res, next) => {
+  try {
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
+
+    const event = await publishEvent(eventId, req.user.id);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.PUBLISHED
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// Cancel event
+export const cancelEventController = async (req, res, next) => {
+  try {
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
+
+    const event = await cancelEvent(eventId, req.user.id);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.CANCELLED
+    );
   } catch (error) {
     next(error);
   }
