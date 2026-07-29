@@ -72,7 +72,15 @@ export async function comparePassword(plainPassword, passwordHash) {
 
 export async function registerUser({ name, email, passwordHash, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
+
   if (existing) {
+    if (existing.deletedAt) {
+      const user = await prisma.user.update({
+        where: { id: existing.id },
+        data: { deletedAt: null, name, passwordHash, role },
+      });
+      return user;
+    }
     throw new ConflictError(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
   }
 

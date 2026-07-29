@@ -1,5 +1,5 @@
 import prisma from "../../database/index.js";
-import { NotFoundError, UnauthorizedError, ConflictError } from "../../utils/error.js";
+import { NotFoundError, ForbiddenError, ConflictError } from "../../utils/error.js";
 import { systemMessages } from "../../config/index.js";
 
 const msg = systemMessages.ERROR;
@@ -18,7 +18,7 @@ async function checkEventOwnership(eventId, userId) {
   }
 
   if (event.ownerId !== userId) {
-    throw new UnauthorizedError(msg.EVENT.UNAUTHORIZED);
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 }
 
