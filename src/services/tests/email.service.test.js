@@ -110,7 +110,7 @@ describe('Email Service', () => {
       expect(fakeTransporter.sendMail).toHaveBeenCalledTimes(3);
     });
 
-    test('should throw error after 3 failed attempts', async () => {
+    test('should return success: false after 3 failed attempts (non-blocking)', async () => {
       const fakeTransporter = {
         sendMail: vi.fn().mockRejectedValue(new Error('Persistent error')),
       };
@@ -118,15 +118,23 @@ describe('Email Service', () => {
       vi.spyOn(nodemailer, 'createTransport').mockReturnValue(fakeTransporter);
       resetTransporterCache();
 
-      await expect(
-        sendEmail({
-          to: 'fail@example.com',
-          subject: 'Fail Test',
-          html: '<p>Test</p>',
-        })
-      ).rejects.toThrow('Persistent error');
+      const res = await sendEmail({
+        to: 'fail@example.com',
+        subject: 'Fail Test',
+        html: '<p>Test</p>',
+      });
 
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('Persistent error');
       expect(fakeTransporter.sendMail).toHaveBeenCalledTimes(3);
+    });
+
+    test('should not crash on template rendering errors and return fallback HTML', async () => {
+      const html = await renderTemplate('non-existent-template', {
+        subject: 'Fallback Test',
+      });
+      expect(html).toContain('Notification from');
+      expect(html).toContain('Fallback Test');
     });
   });
 
@@ -155,3 +163,4 @@ describe('Email Service', () => {
     });
   });
 });
+
