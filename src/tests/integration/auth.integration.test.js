@@ -81,7 +81,7 @@ describe('Auth API Integration Tests', () => {
 
   describe('POST /api/v1/auth/login', () => {
 
-    it('should return 400 for invalid email format', async () => {
+    it('should return 422 for invalid email format', async () => {
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
@@ -89,7 +89,7 @@ describe('Auth API Integration Tests', () => {
           password: 'password123',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
     });
 
