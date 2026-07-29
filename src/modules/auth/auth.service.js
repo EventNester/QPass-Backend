@@ -38,11 +38,20 @@ export async function refreshToken(token) {
 
   const decoded = verifyRefreshToken(token);
 
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.sub },
+    select: { id: true, name: true, email: true, role: true, deletedAt: true },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
+  }
+
   const payload = {
-    sub: decoded.sub,
-    name: decoded.name,
-    email: decoded.email,
-    role: decoded.role,
+    sub: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
   };
 
   const accessToken = signAccessToken(payload);
@@ -63,7 +72,15 @@ export async function comparePassword(plainPassword, passwordHash) {
 
 export async function registerUser({ name, email, passwordHash, role }) {
   const existing = await prisma.user.findUnique({ where: { email } });
+
   if (existing) {
+    if (existing.deletedAt) {
+      const user = await prisma.user.update({
+        where: { id: existing.id },
+        data: { deletedAt: null, name, passwordHash, role },
+      });
+      return user;
+    }
     throw new ConflictError(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
   }
 

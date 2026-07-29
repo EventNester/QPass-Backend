@@ -73,7 +73,6 @@ export async function getTransporter(forceEthereal = false) {
   return cachedTransporter;
 }
 
-
 export function resetTransporterCache() {
   cachedTransporter = null;
   etherealAccount = null;
@@ -140,6 +139,7 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
   const fromEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@qpass.com';
   const fromName = process.env.BREVO_SENDER_NAME || 'QPass';
   const from = `${fromName} <${fromEmail}>`;
+  const maskedTo = to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
 
   try {
     const transporter = await getTransporter();
@@ -157,7 +157,7 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
 
     logger.info(
       {
-        to,
+        to: maskedTo,
         subject,
         messageId: info.messageId,
         previewUrl,
@@ -172,7 +172,7 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
       previewUrl,
     };
   } catch (error) {
-    logger.error({ err: error, to, subject }, 'SMTP connection or send failure (non-blocking)');
+    logger.error({ err: error, to: maskedTo, subject }, 'SMTP connection or send failure (non-blocking)');
     return {
       success: false,
       error: error.message || 'SMTP connection failure',
@@ -182,4 +182,3 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
     };
   }
 }
-

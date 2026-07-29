@@ -32,19 +32,19 @@ describe('Auth API Integration Tests', () => {
 
   describe('POST /api/v1/auth/register', () => {
 
-    it('should return 400 if payload is missing required fields', async () => {
+    it('should return 422 if payload is missing required fields', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
           name: 'Incomplete User',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
       expect(response.body.message).toBeDefined();
     });
 
-    it('should return 400 for invalid email format', async () => {
+    it('should return 422 for invalid email format', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -53,7 +53,7 @@ describe('Auth API Integration Tests', () => {
           password: 'SecurePassword123',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
     });
 
@@ -81,7 +81,7 @@ describe('Auth API Integration Tests', () => {
 
   describe('POST /api/v1/auth/login', () => {
 
-    it('should return 400 for invalid email format', async () => {
+    it('should return 422 for invalid email format', async () => {
       const response = await request(app)
         .post('/api/v1/auth/login')
         .send({
@@ -89,7 +89,7 @@ describe('Auth API Integration Tests', () => {
           password: 'password123',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
     });
 
@@ -125,15 +125,16 @@ describe('Auth API Integration Tests', () => {
   describe('POST /api/v1/auth/forgot-password & reset-password', () => {
     let generatedResetToken;
 
-    it('should return 404 for forgot-password with non-existent email', async () => {
+    it('should return 200 for forgot-password with non-existent email (no enumeration)', async () => {
       const response = await request(app)
         .post('/api/v1/auth/forgot-password')
         .send({
           email: 'notfound@example.com',
         });
 
-      expect(response.status).toBe(404);
-      expect(response.body.status).toBe('error');
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data).toEqual({});
     });
 
     it('should return 200 and generate reset token for existing user', async () => {

@@ -121,7 +121,16 @@ describe('Notification Service Integration Tests', () => {
 
   it('should retrieve all sent notifications for recipient from database', async () => {
     const records = await getNotificationsByRecipient(testRecipient);
-    expect(records.length).toBeGreaterThanOrEqual(5);
-    expect(records[0].status).toBe('SENT');
-  });
-});
+    expect(records).toEqual(
+      expect.arrayContaining(
+        ['registration', 'qr', 'payment', 'staff', 'password-reset'].map((template) =>
+          expect.objectContaining({
+            recipient: testRecipient,
+            template,
+            status: 'SENT',
+            sentAt: expect.any(Date),
+          })
+        )
+      )
+    );
+  });});
