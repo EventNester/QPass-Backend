@@ -1,18 +1,11 @@
 import { assignStaff, listStaff, removeStaff } from "./staff.service.js";
-import { assignStaffSchema } from "./staff.schema.js";
 import { success, created } from "../../utils/response.js";
-import { ValidationError } from "../../utils/error.js";
 import { systemMessages } from "../../config/index.js";
 
 export async function assignStaffController(req, res, next) {
   try {
     const { eventId } = req.params;
-    const parsed = assignStaffSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ValidationError(parsed.error.issues[0].message);
-    }
-
-    const assignment = await assignStaff(eventId, req.user.sub, parsed.data);
+    const assignment = await assignStaff(eventId, req.user.sub, req.body);
     return created(res, assignment, systemMessages.SUCCESS.STAFF.ASSIGNED);
   } catch (error) {
     next(error);

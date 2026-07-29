@@ -28,21 +28,32 @@ async function generateUniqueSlug(title) {
 
 // Create an event
 export const createEvent = async (eventData, ownerId) => {
-  const slug = await generateUniqueSlug(eventData.title);
+  const MAX_RETRIES = 3;
 
-  const event = await prisma.event.create({
-    data: {
-      title: eventData.title,
-      description: eventData.description,
-      venue: eventData.venue,
-      startTime: eventData.startTime,
-      endTime: eventData.endTime,
-      slug,
-      ownerId,
-    },
-  });
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const slug = await generateUniqueSlug(eventData.title);
 
-  return event;
+      const event = await prisma.event.create({
+        data: {
+          title: eventData.title,
+          description: eventData.description,
+          venue: eventData.venue,
+          startTime: eventData.startTime,
+          endTime: eventData.endTime,
+          slug,
+          ownerId,
+        },
+      });
+
+      return event;
+    } catch (err) {
+      if (err.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
 };
 
 // Get one event
@@ -188,8 +199,6 @@ export const publishEvent = async (eventId, ownerId) => {
     );
   }
 
-  const slug = await generateUniqueSlug(event.title);
-
   const published = await prisma.event.updateMany({
     where: {
       id: eventId,
@@ -199,7 +208,6 @@ export const publishEvent = async (eventId, ownerId) => {
     },
     data: {
       status: constants.EVENT_STATUS.PUBLISHED,
-      slug,
       publishedAt: new Date(),
     },
   });
