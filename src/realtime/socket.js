@@ -60,7 +60,7 @@ export async function initSocket(server) {
     logger.info("Socket.IO Redis adapter connected");
   } catch (err) {
     logger.error("Socket.IO Redis adapter failed, falling back to in-memory:", err.message);
-    await Promise.allSettled([pubClient?.disconnect(), subClient?.disconnect()]);
+    await Promise.allSettled([pubClient?.quit(), subClient?.quit()]);
     pubClient = null;
     subClient = null;
   }
@@ -129,11 +129,11 @@ export function getIO() {
 
 export async function closeSocket() {
   if (pubClient) {
-    try { await pubClient.disconnect(); } catch (err) { logger.error("Failed to close pub Redis client", err); }
+    try { await pubClient.quit(); } catch (err) { logger.error("Failed to close pub Redis client", err); }
     pubClient = null;
   }
   if (subClient) {
-    try { await subClient.disconnect(); } catch (err) { logger.error("Failed to close sub Redis client", err); }
+    try { await subClient.quit(); } catch (err) { logger.error("Failed to close sub Redis client", err); }
     subClient = null;
   }
   if (io) {

@@ -14,12 +14,6 @@ import { requireAuth } from "../auth/auth.middleware.js";
 
 const router = Router();
 
-// Create Event
-router.post("/", requireAuth, createEventController);
-
-// List Events
-router.get("/", listEventsController);
-
 /**
  * @openapi
  * /api/v1/events/{id}/publish:
@@ -128,13 +122,6 @@ router.post("/:id/publish", requireAuth, publishEventController);
 // Cancel Event
 router.post("/:id/cancel", requireAuth, cancelEventController);
 
-// Get One Event
-router.get("/:id", getEventController);
-
-// Update Event
-router.patch("/:id", requireAuth, updateEventController);
-
-// Delete Event
 /**
  * @openapi
  * /api/v1/events:
