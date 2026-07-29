@@ -1,4 +1,6 @@
-import { systemMessages } from "../../config/index.js";
+import { systemMessages, constants } from "../../config/index.js";
+
+export const MAX_ROWS = constants.IMPORT.MAX_ROWS;
 // Explicit alias map for column header normalization.
 // Prevents greedy .includes() matches (e.g. "filename" matching "name").
 const KEY_MAP = {
@@ -123,24 +125,18 @@ export function validateRows(rows, options = {}) {
     const phone = (normalizedRow.phone || "")
       .toString()
       .trim()
-      .replace(/[\s\-()]/g, "");
+      .replace(/[\s\-.()]/g, "");
     const ticketType = (normalizedRow.ticketType || "").toString().trim();
     const organization = (normalizedRow.organization || "").toString().trim();
 
-    // Skip truly empty rows silently
+    // Skip rows with no contact info
     if (!name && !email && !phone) {
-      const hasContent = Object.values(row).some(
-        (v) => v !== null && v !== undefined && v.toString().trim() !== ""
-      );
-      if (hasContent) {
-        errors.push({ row: rowNumber, field: "row", error: msg.EMPTY_ROW });
-      }
       return;
     }
 
     // Name is always required
     if (!name) {
-      errors.push({ row: rowNumber, field: "name", error: msg.NAME_REQUIRED });
+      errors.push({ row: rowNumber, field: "name", error: msg.MISSING_NAME });
       return;
     }
 
@@ -159,7 +155,7 @@ export function validateRows(rows, options = {}) {
       errors.push({
         row: rowNumber,
         field: "email",
-        error: msg.INVALID_EMAIL,
+        error: msg.INVALID_EMAIL_FORMAT,
       });
       return;
     }
@@ -236,7 +232,7 @@ export function validateRows(rows, options = {}) {
       errors.push({
         row: rowNumber,
         field: "capacity",
-        error: msg.CAPACITY_EXCEEDED,
+        error: `${msg.CAPACITY_EXCEEDED} (row ${rowNumber} of ${remainingCapacity} allowed)`,
       });
       return;
     }

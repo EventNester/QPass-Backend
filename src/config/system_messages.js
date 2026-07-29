@@ -131,9 +131,9 @@ export default {
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
     IMPORT: {
-      NAME_REQUIRED: "Name is required",
+      MISSING_NAME: "Name is required",
       CONTACT_REQUIRED: "At least one of email or phone is required",
-      INVALID_EMAIL: "Invalid email format",
+      INVALID_EMAIL_FORMAT: "Invalid email format",
       INVALID_PHONE: "Invalid phone number format",
       DUPLICATE_EMAIL: "Duplicate email within the same batch",
       DUPLICATE_PHONE: "Duplicate phone within the same batch",
