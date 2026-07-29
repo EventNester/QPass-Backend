@@ -1,6 +1,4 @@
 import { systemMessages } from "../../config/index.js";
-import { logger } from "../../config/index.js";
-
 // Explicit alias map for column header normalization.
 // Prevents greedy .includes() matches (e.g. "filename" matching "name").
 const KEY_MAP = {
@@ -54,9 +52,9 @@ const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
  */
 function normalizeKey(rawKey) {
   if (!rawKey) return null;
-  const cleaned = rawKey.toLowerCase().replace(/[\s_\-]+/g, "");
+  const cleaned = rawKey.toLowerCase().replace(/[\s_-]+/g, "");
   for (const [field, aliases] of Object.entries(KEY_MAP)) {
-    if (aliases.some((a) => a.replace(/[\s_\-]+/g, "") === cleaned)) {
+    if (aliases.some((a) => a.replace(/[\s_-]+/g, "") === cleaned)) {
       return field;
     }
   }
