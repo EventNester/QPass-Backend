@@ -11,16 +11,24 @@ const REDIS_PREFIX = 'pwd_reset:';
 
 export async function forgotPassword(email) {
   const user = await prisma.user.findUnique({ where: { email } });
+
   if (!user) {
     logger.warn({ email }, 'Password reset requested for non-existent email');
+    await new Promise((r) => setTimeout(r, 200));
     return {};
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
   const redis = getRedisClient();
 
+  try {
+    await sendPasswordResetEmail(user.email, resetToken);
+  } catch {
+    logger.error({ email }, 'Password reset email send failed');
+    return {};
+  }
+
   await redis.set(`${REDIS_PREFIX}${resetToken}`, user.id, 'EX', RESET_TOKEN_TTL_SECONDS);
-  await sendPasswordResetEmail(user.email, resetToken);
 
   return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }

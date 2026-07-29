@@ -32,19 +32,19 @@ describe('Auth API Integration Tests', () => {
 
   describe('POST /api/v1/auth/register', () => {
 
-    it('should return 400 if payload is missing required fields', async () => {
+    it('should return 422 if payload is missing required fields', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
           name: 'Incomplete User',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
       expect(response.body.message).toBeDefined();
     });
 
-    it('should return 400 for invalid email format', async () => {
+    it('should return 422 for invalid email format', async () => {
       const response = await request(app)
         .post('/api/v1/auth/register')
         .send({
@@ -53,7 +53,7 @@ describe('Auth API Integration Tests', () => {
           password: 'SecurePassword123',
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
     });
 

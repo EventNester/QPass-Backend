@@ -1,5 +1,5 @@
 import { z } from "zod";
-import systemMessages from "../../config/system_messages.js";
+import { systemMessages } from "../../config/index.js";
 
 const v = systemMessages.VALIDATION;
 
