@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { validateRows } from "./validation.utils.js";
+import { validateRows, MAX_ROWS } from "./validation.utils.js";
 import { systemMessages, logger } from "../../config/index.js";
 
 /**
@@ -45,6 +45,16 @@ export function parseXLSX(buffer, options = {}) {
     const worksheet = workbook.Sheets[firstSheetName];
 
     const records = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+
+    if (records.length > MAX_ROWS) {
+      return {
+        validRows: [],
+        errors: [
+          { row: 0, field: "file", error: systemMessages.ERROR.IMPORT.ROW_LIMIT_EXCEEDED },
+        ],
+      };
+    }
+
     return validateRows(records, options);
   } catch (error) {
     logger.error({ err: error, fileType: "xlsx" }, "XLSX file parse failed");

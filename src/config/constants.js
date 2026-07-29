@@ -76,4 +76,8 @@ export default {
     DEFAULT_LIMIT: 20,
     MAX_LIMIT: 100,
   },
+
+  IMPORT: {
+    MAX_ROWS: 1000,
+  },
 };

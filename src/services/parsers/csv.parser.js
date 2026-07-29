@@ -1,8 +1,6 @@
 import { parse } from "csv-parse/sync";
-import { validateRows } from "./validation.utils.js";
+import { validateRows, MAX_ROWS } from "./validation.utils.js";
 import { systemMessages, logger } from "../../config/index.js";
-
-const MAX_ROWS = 1000;
 
 /**
  * Parses a CSV file buffer and validates the rows.
