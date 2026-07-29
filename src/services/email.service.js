@@ -43,18 +43,20 @@ export async function getTransporter(forceEthereal = false) {
     return cachedTransporter;
   }
 
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, BREVO_API_KEY, BREVO_SENDER_EMAIL } = process.env;
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, BREVO_API_KEY, BREVO_SMTP_KEY, BREVO_SENDER_EMAIL } = process.env;
 
-  if (!useEthereal && ((SMTP_HOST && SMTP_USER && SMTP_PASS) || BREVO_API_KEY)) {
+  if (!useEthereal && ((SMTP_HOST && SMTP_USER && SMTP_PASS) || BREVO_SMTP_KEY || BREVO_API_KEY)) {
     const host = SMTP_HOST || 'smtp-relay.brevo.com';
     const port = Number(SMTP_PORT) || 587;
     const user = SMTP_USER || BREVO_SENDER_EMAIL;
-    const pass = SMTP_PASS || BREVO_API_KEY;
+    const pass = SMTP_PASS || BREVO_SMTP_KEY || BREVO_API_KEY;
 
     cachedTransporter = nodemailer.createTransport({
       host,
       port,
       auth: { user, pass },
+      connectionTimeout: 10000,
+      socketTimeout: 15000,
     });
     return cachedTransporter;
   }
@@ -68,6 +70,8 @@ export async function getTransporter(forceEthereal = false) {
       user: account.user,
       pass: account.pass,
     },
+    connectionTimeout: 10000,
+    socketTimeout: 15000,
   });
 
   return cachedTransporter;
@@ -80,7 +84,10 @@ export function resetTransporterCache() {
 }
 
 export async function renderTemplate(templateName, variables = {}) {
-  const fileName = TEMPLATE_MAP[templateName] || (templateName.endsWith('.ejs') ? templateName : `${templateName}.ejs`);
+  const fileName = TEMPLATE_MAP[templateName];
+  if (!fileName) {
+    throw new Error(`Unknown email template: ${templateName}`);
+  }
   const templatePath = path.join(templatesDir, fileName);
 
   try {
@@ -95,7 +102,6 @@ export async function renderTemplate(templateName, variables = {}) {
     throw error;
   }
 }
-
 async function sendWithRetry(transporter, mailOptions, maxAttempts = 3) {
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -140,9 +146,11 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
   const info = await sendWithRetry(transporter, mailOptions, maxAttempts);
   const previewUrl = nodemailer.getTestMessageUrl(info) || null;
 
+  const maskedTo = to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
+
   logger.info(
     {
-      to,
+      to: maskedTo,
       subject,
       messageId: info.messageId,
       previewUrl,
