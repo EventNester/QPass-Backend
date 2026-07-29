@@ -38,11 +38,20 @@ export async function refreshToken(token) {
 
   const decoded = verifyRefreshToken(token);
 
+  const user = await prisma.user.findUnique({
+    where: { id: decoded.sub },
+    select: { id: true, name: true, email: true, role: true, deletedAt: true },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
+  }
+
   const payload = {
-    sub: decoded.sub,
-    name: decoded.name,
-    email: decoded.email,
-    role: decoded.role,
+    sub: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
   };
 
   const accessToken = signAccessToken(payload);

@@ -43,18 +43,18 @@ describe("QrService", () => {
     });
 
     it("should throw if a token already exists for the registration", async () => {
-      prisma.qrToken.findUnique.mockResolvedValue({ id: "existing" });
+      prisma.qrToken.create.mockRejectedValue({ code: 'P2002' });
 
       await expect(
         qrService.generateToken("reg-1", new Date())
       ).rejects.toThrow("QR token already exists for this registration");
     });
 
-    it("should not call create if token already exists", async () => {
-      prisma.qrToken.findUnique.mockResolvedValue({ id: "existing" });
+    it("should not call create multiple times on duplicate", async () => {
+      prisma.qrToken.create.mockRejectedValue({ code: 'P2002' });
 
       await qrService.generateToken("reg-1", new Date()).catch(() => {});
-      expect(prisma.qrToken.create).not.toHaveBeenCalled();
+      expect(prisma.qrToken.create).toHaveBeenCalledTimes(1);
     });
   });
 
