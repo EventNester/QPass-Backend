@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Payment Verified - <%= eventName %></title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+    .content { padding: 20px 0; color: #334155; line-height: 1.6; }
+    .receipt { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin: 20px 0; }
+    .footer { text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="color: #1e293b; margin: 0;"><%= appName || 'QPass' %></h1>
+    </div>
+    <div class="content">
+      <h2>Hello, <%= name %>!</h2>
+      <p>We have successfully verified your payment for <strong><%= eventName %></strong>.</p>
+      <div class="receipt">
+        <p style="margin: 5px 0;"><strong>Amount Paid:</strong> <%= typeof currency !== 'undefined' ? currency : 'USD' %> <%= amount %></p>
+        <% if (typeof reference !== 'undefined' && reference) { %>
+          <p style="margin: 5px 0;"><strong>Payment Reference:</strong> <%= reference %></p>
+        <% } %>
+        <% if (typeof date !== 'undefined' && date) { %>
+          <p style="margin: 5px 0;"><strong>Date:</strong> <%= date %></p>
+        <% } %>
+      </div>
+      <p>Your ticket has been confirmed. Thank you for your payment!</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= year || new Date().getFullYear() %> <%= appName || 'QPass' %>. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

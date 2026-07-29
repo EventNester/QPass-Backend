@@ -25,20 +25,21 @@ async function checkEventOwnership(eventId, userId) {
 export async function createTicketType(eventId, userId, data) {
   await checkEventOwnership(eventId, userId);
 
-  // Get the current max sortOrder to append this new ticket type at the end
-  const maxSortOrder = await prisma.ticketType.aggregate({
-    where: { eventId },
-    _max: { sortOrder: true },
-  });
-  
-  const sortOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
+  const ticketType = await prisma.$transaction(async (tx) => {
+    const maxSortOrder = await tx.ticketType.aggregate({
+      where: { eventId },
+      _max: { sortOrder: true },
+    });
 
-  const ticketType = await prisma.ticketType.create({
-    data: {
-      eventId,
-      ...data,
-      sortOrder,
-    },
+    const sortOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
+
+    return tx.ticketType.create({
+      data: {
+        eventId,
+        ...data,
+        sortOrder,
+      },
+    });
   });
 
   return ticketType;
@@ -77,26 +78,25 @@ export async function updateTicketType(eventId, ticketTypeId, userId, data) {
 export async function deleteTicketType(eventId, ticketTypeId, userId) {
   await checkEventOwnership(eventId, userId);
 
-  const ticketType = await prisma.ticketType.findFirst({
-    where: { id: ticketTypeId, eventId },
-    include: {
-      _count: {
-        select: { registrations: true }
-      }
+  await prisma.$transaction(async (tx) => {
+    const ticketType = await tx.ticketType.findFirst({
+      where: { id: ticketTypeId, eventId },
+    });
+
+    if (!ticketType) {
+      throw new NotFoundError(msg.GENERAL.NOT_FOUND);
     }
-  });
 
-  if (!ticketType) {
-    throw new NotFoundError(msg.GENERAL.NOT_FOUND);
-  }
-
-  // Guard: Reject deletion if any registrations are associated with this ticket type
-  if (ticketType._count.registrations > 0) {
-    throw new ConflictError("Cannot delete ticket type with existing registrations");
-  }
-
-  await prisma.ticketType.delete({
-    where: { id: ticketTypeId },
+    try {
+      await tx.ticketType.delete({
+        where: { id: ticketTypeId },
+      });
+    } catch (err) {
+      if (err.code === 'P2003') {
+        throw new ConflictError("Cannot delete ticket type with existing registrations");
+      }
+      throw err;
+    }
   });
 
   return true;
