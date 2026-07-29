@@ -12,7 +12,7 @@ export async function assignStaffController(req, res, next) {
       throw new ValidationError(parsed.error.issues[0].message);
     }
 
-    const assignment = await assignStaff(eventId, req.user.id, parsed.data);
+    const assignment = await assignStaff(eventId, req.user.sub, parsed.data);
     return created(res, assignment, systemMessages.SUCCESS.STAFF.ASSIGNED);
   } catch (error) {
     next(error);
@@ -22,7 +22,7 @@ export async function assignStaffController(req, res, next) {
 export async function listStaffController(req, res, next) {
   try {
     const { eventId } = req.params;
-    const staff = await listStaff(eventId, req.user.id);
+    const staff = await listStaff(eventId, req.user.sub);
     return success(res, staff, systemMessages.SUCCESS.STAFF.LISTED);
   } catch (error) {
     next(error);
@@ -32,7 +32,7 @@ export async function listStaffController(req, res, next) {
 export async function removeStaffController(req, res, next) {
   try {
     const { eventId, staffId } = req.params;
-    const result = await removeStaff(eventId, staffId, req.user.id);
+    const result = await removeStaff(eventId, staffId, req.user.sub);
     return success(res, result, systemMessages.SUCCESS.STAFF.REMOVED);
   } catch (error) {
     next(error);

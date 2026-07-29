@@ -77,6 +77,7 @@ describe("Event Service Tests", () => {
           venue: mockEventData.venue,
           startTime: mockEventData.startTime,
           endTime: mockEventData.endTime,
+          slug: expect.any(String),
           ownerId: mockOwnerId,
         },
       });

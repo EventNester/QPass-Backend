@@ -25,24 +25,35 @@ async function checkEventOwnership(eventId, userId) {
 export async function createTicketType(eventId, userId, data) {
   await checkEventOwnership(eventId, userId);
 
-  const ticketType = await prisma.$transaction(async (tx) => {
-    const maxSortOrder = await tx.ticketType.aggregate({
-      where: { eventId },
-      _max: { sortOrder: true },
-    });
+  const MAX_RETRIES = 3;
 
-    const sortOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const ticketType = await prisma.$transaction(async (tx) => {
+        const maxSortOrder = await tx.ticketType.aggregate({
+          where: { eventId },
+          _max: { sortOrder: true },
+        });
 
-    return tx.ticketType.create({
-      data: {
-        eventId,
-        ...data,
-        sortOrder,
-      },
-    });
-  });
+        const sortOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
 
-  return ticketType;
+        return tx.ticketType.create({
+          data: {
+            eventId,
+            ...data,
+            sortOrder,
+          },
+        });
+      });
+
+      return ticketType;
+    } catch (err) {
+      if (err.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 export async function getTicketTypes(eventId, userId) {

@@ -101,6 +101,7 @@ describe('Auth Service Tests', () => {
     });
 
     test('should refresh access token correctly', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
       const { refreshToken: token } = generateTokens(mockUser);
       mRedisClient.get.mockResolvedValue(null);
       const result = await refreshToken(token);

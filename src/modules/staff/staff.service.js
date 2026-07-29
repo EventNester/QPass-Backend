@@ -56,6 +56,14 @@ export async function assignStaff(eventId, ownerId, data) {
     isNewUser = true;
   }
 
+  const existingAssignment = await prisma.eventStaffAssignment.findUnique({
+    where: { eventId_userId: { eventId, userId: user.id } },
+  });
+
+  if (existingAssignment) {
+    throw new ConflictError(msg.STAFF.ALREADY_ASSIGNED);
+  }
+
   if (user.role === 'ATTENDEE') {
     await prisma.user.update({
       where: { id: user.id },
@@ -63,14 +71,6 @@ export async function assignStaff(eventId, ownerId, data) {
     });
   } else if (user.role !== 'STAFF') {
     throw new ForbiddenError('Cannot assign privileged user as staff');
-  }
-
-  const existingAssignment = await prisma.eventStaffAssignment.findUnique({
-    where: { eventId_userId: { eventId, userId: user.id } },
-  });
-
-  if (existingAssignment) {
-    throw new ConflictError(msg.STAFF.ALREADY_ASSIGNED);
   }
 
   const [assignment] = await prisma.$transaction(async (tx) => {
