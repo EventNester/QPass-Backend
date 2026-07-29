@@ -44,20 +44,20 @@ class QrService {
     const rawToken = randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
 
-    const existing = await prisma.qrToken.findUnique({
-      where: { registrationId },
-    });
-    if (existing) {
-      throw new Error(msg.TICKET.ALREADY_EXISTS);
+    try {
+      await prisma.qrToken.create({
+        data: {
+          registrationId,
+          tokenHash,
+          expiresAt,
+        },
+      });
+    } catch (err) {
+      if (err.code === 'P2002') {
+        throw new Error(msg.TICKET.ALREADY_EXISTS, { cause: err });
+      }
+      throw err;
     }
-
-    await prisma.qrToken.create({
-      data: {
-        registrationId,
-        tokenHash,
-        expiresAt,
-      },
-    });
 
     return rawToken;
   }
