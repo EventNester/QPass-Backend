@@ -3,6 +3,7 @@ import { generateTokens, refreshToken, registerUser, authenticateUser, blacklist
 import { forgotPassword, resetPassword } from './password.service.js';
 import { success, created } from '../../utils/response.js';
 import { systemMessages } from '../../config/index.js';
+import { ValidationError } from '../../utils/error.js';
 
 import { registerSchema, loginSchema, refreshSchema, logoutSchema, forgotPasswordSchema, resetPasswordSchema } from './auth.schema.js';
 import { requireAuth } from './auth.middleware.js';
@@ -44,7 +45,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     const { name, email, password } = parsed.data;
 
@@ -98,7 +99,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: "error", message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     const { email, password } = parsed.data;
 
@@ -141,11 +142,11 @@ router.post('/login', authLimiter, async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/refresh', async (req, res, next) => {
+router.post('/refresh', authLimiter, async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     const { refreshToken: token } = parsed.data;
 
@@ -191,7 +192,7 @@ router.post('/logout', requireAuth, async (req, res, next) => {
   try {
     const parsed = logoutSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     await blacklistRefreshToken(parsed.data.refreshToken);
     return success(res, null, systemMessages.SUCCESS.AUTH.LOGOUT);
@@ -233,7 +234,7 @@ router.post('/forgot-password', authLimiter, async (req, res, next) => {
   try {
     const parsed = forgotPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     const result = await forgotPassword(parsed.data.email);
     return success(res, result, systemMessages.SUCCESS.AUTH.PASSWORD_RESET_SENT);
@@ -277,7 +278,7 @@ router.post('/reset-password', authLimiter, async (req, res, next) => {
   try {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ status: 'error', message: parsed.error.issues[0].message });
+      return next(new ValidationError(parsed.error.issues[0].message));
     }
     await resetPassword(parsed.data.token, parsed.data.password);
     return success(res, null, systemMessages.SUCCESS.AUTH.PASSWORD_RESET_SUCCESS);

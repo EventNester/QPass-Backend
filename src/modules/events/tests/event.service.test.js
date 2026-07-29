@@ -20,8 +20,6 @@ vi.mock("../../../utils/slug.js", () => ({
   generateSlug: vi.fn(() => "test-event-abc123"),
 }));
 
-import { generateSlug } from "../../../utils/slug.js";
-
 vi.mock("../../../database/index.js", () => ({
   default: {
     event: {
@@ -60,7 +58,7 @@ describe("Event Service Tests", () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe("createEvent", () => {
@@ -240,23 +238,20 @@ describe("Event Service Tests", () => {
   });
 
   describe("publishEvent", () => {
-    test("should publish a draft event and generate a slug", async () => {
+    test("should publish a draft event and preserve its slug", async () => {
       const publishedEvent = {
         ...mockEvent,
         status: constants.EVENT_STATUS.PUBLISHED,
-        slug: "test-event-abc123",
         publishedAt: new Date(),
       };
 
       prisma.event.findFirst
         .mockResolvedValueOnce(mockEvent)
-        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(publishedEvent);
       prisma.event.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await publishEvent("event_1", mockOwnerId);
 
-      expect(generateSlug).toHaveBeenCalledWith(mockEvent.title);
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: {
           id: "event_1",
@@ -266,7 +261,6 @@ describe("Event Service Tests", () => {
         },
         data: {
           status: constants.EVENT_STATUS.PUBLISHED,
-          slug: "test-event-abc123",
           publishedAt: expect.any(Date),
         },
       });
@@ -304,16 +298,6 @@ describe("Event Service Tests", () => {
       await expect(
         publishEvent("event_1", "attacker_user")
       ).rejects.toThrow(ForbiddenError);
-    });
-
-    test("should throw after max slug generation retries", async () => {
-      prisma.event.findFirst
-        .mockResolvedValueOnce(mockEvent)
-        .mockResolvedValue({ id: "other_event" });
-
-      await expect(publishEvent("event_1", mockOwnerId)).rejects.toThrow(
-        "Failed to generate unique slug after max retries"
-      );
     });
   });
 
