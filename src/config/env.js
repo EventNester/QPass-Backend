@@ -33,10 +33,23 @@ const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z.string().optional().default(""),
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
+  SMTP_HOST: z.string().optional().default(""),
+  SMTP_PORT: z.coerce.number().optional().default(587),
+  SMTP_USER: z.string().optional().default(""),
+  SMTP_PASS: z.string().optional().default(""),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((v) => v === "true"),
+  SMTP_FROM: z.string().optional().default(""),
+
   BREVO_API_KEY: z.string().optional().default(""),
   BREVO_SMTP_KEY: z.string().optional().default(""),
   BREVO_SENDER_EMAIL: z.string().optional().default("noreply@qpass.com"),
   BREVO_SENDER_NAME: z.string().optional().default("QPass"),
+
+  FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
   SENTRY_DSN: z.string().optional().default(""),
 });

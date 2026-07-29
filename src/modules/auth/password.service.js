@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import prisma from '../../database/index.js';
 import { getRedisClient } from '../../config/redis.js';
-import { NotFoundError, UnauthorizedError } from '../../utils/error.js';
-import { systemMessages } from '../../config/index.js';
+import { UnauthorizedError } from '../../utils/error.js';
+import { logger, systemMessages } from '../../config/index.js';
 import { hashPassword } from './auth.service.js';
 import { sendPasswordResetEmail } from '../../utils/email.js';
 
@@ -12,7 +12,8 @@ const REDIS_PREFIX = 'pwd_reset:';
 export async function forgotPassword(email) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    throw new NotFoundError(systemMessages.ERROR.GENERAL.NOT_FOUND);
+    logger.warn({ email }, 'Password reset requested for non-existent email');
+    return {};
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
@@ -21,7 +22,7 @@ export async function forgotPassword(email) {
   await redis.set(`${REDIS_PREFIX}${resetToken}`, user.id, 'EX', RESET_TOKEN_TTL_SECONDS);
   await sendPasswordResetEmail(user.email, resetToken);
 
-  return { resetToken };
+  return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }
 
 export async function resetPassword(token, newPassword) {
