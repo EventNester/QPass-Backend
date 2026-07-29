@@ -28,6 +28,11 @@ export default {
       INITIALIZED: "Payment initialized successfully",
       VERIFIED: "Payment verified successfully",
     },
+    STAFF: {
+      ASSIGNED: "Staff assigned successfully",
+      LISTED: "Staff list retrieved successfully",
+      REMOVED: "Staff removed successfully",
+    },
     REPORT: {
       GENERATED: "Report generated successfully",
       EXPORTED: "Data exported successfully",
@@ -82,6 +87,10 @@ export default {
       FAILED: "Payment verification failed",
       ALREADY_VERIFIED: "Payment has already been verified",
       INVALID_REFERENCE: "Invalid payment reference",
+    },
+    STAFF: {
+      ALREADY_ASSIGNED: "Staff member is already assigned to this event",
+      NOT_FOUND: "Staff assignment not found",
     },
     GENERAL: {
       NOT_FOUND: "Resource not found",
