@@ -697,8 +697,6 @@ export async function processImportFile({
   let failedRows = parseErrors.length + validationErrors.length;
 
   const allErrors = [...parseErrors, ...validationErrors];
-  const issuedTokens = [];
-
   for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
     const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
 
@@ -753,7 +751,6 @@ export async function processImportFile({
               expiresAt: event.endTime,
             },
           });
-          issuedTokens.push({ registrationId: registration.id, rawToken });
         }
       });
 
