@@ -150,13 +150,16 @@ describe('Auth API Integration Tests', () => {
       expect(response.body.status).toBe('success');
       expect(response.body.data.accessToken).toBeDefined();
       expect(response.body.data.refreshToken).toBeDefined();
+    });
 
+    it('should return 401 when refresh token is reused (replay protection)', async () => {
       const replayResponse = await request(app)
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: refreshTokenValue });
 
       expect(replayResponse.status).toBe(401);
     });
+
     it('should return 401 for an invalid refresh token', async () => {
       const response = await request(app)
         .post('/api/v1/auth/refresh')
@@ -284,6 +287,4 @@ describe('Auth API Integration Tests', () => {
       expect(response.body.status).toBe('error');
     });
   });
-
 });
-
