@@ -2,10 +2,12 @@ import {
   createTicketType, 
   getTicketTypes, 
   updateTicketType, 
-  deleteTicketType 
+  deleteTicketType,
+  getTicketDetails,
+  listEventTickets,
+  exportEventTickets
 } from "./tickets.service.js";
 import { generateTicketPdf } from "./ticket-pdf.service.js";
-import { createRegistrationCsvStream } from "./ticket-export.service.js";
 import { success, created } from "../../utils/response.js";
 
 export const createTicketTypeController = async (req, res, next) => {
@@ -52,6 +54,28 @@ export const deleteTicketTypeController = async (req, res, next) => {
   }
 };
 
+export const getTicketController = async (req, res, next) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.sub;
+    const ticket = await getTicketDetails(ticketId, userId);
+    return success(res, ticket);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listTicketsController = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.sub;
+    const result = await listEventTickets(eventId, userId, req.query);
+    return success(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const downloadTicketController = async (req, res, next) => {
   try {
     const { ticketId } = req.params;
@@ -64,15 +88,37 @@ export const downloadTicketController = async (req, res, next) => {
     next(error);
   }
 };
+
 export const exportTicketsController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
+    const { format } = req.body;
     const userId = req.user.sub;
-    const stream = await createRegistrationCsvStream(eventId, userId);
-    const filename = `registrations-${eventId}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    stream.on('error', next).pipe(res);
+
+    const { contentType, data, extension } = await exportEventTickets(eventId, userId, format);
+
+    res.setHeader("Content-Type", contentType.includes("csv") ? "text/csv; charset=utf-8" : contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="tickets-export.${extension}"`);
+    return res.send(data);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const downloadTicketPdfController = async (req, res, next) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.sub;
+
+    const ticket = await getTicketDetails(ticketId, userId);
+    const { generateIndividualTicketPdf } = await import("./ticket-pdf.service.js");
+
+    const pdfBuffer = await generateIndividualTicketPdf(ticket, ticket.qrDataUrl);
+
+    const eventSlug = ticket.event?.slug || 'event';
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${eventSlug}-ticket.pdf"`);
+    return res.send(pdfBuffer);
   } catch (error) {
     next(error);
   }
