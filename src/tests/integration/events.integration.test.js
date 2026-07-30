@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
+import { cleanDatabase } from '../helpers/cleanup.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   globalLimiter: (_req, _res, next) => next(),
@@ -15,19 +16,7 @@ describe('Events API Integration Tests', () => {
   const laterDate = new Date(Date.now() + 172800000).toISOString();
 
   beforeAll(async () => {
-    await prisma.checkIn.deleteMany();
-    await prisma.qrToken.deleteMany();
-    await prisma.registration.deleteMany();
-    await prisma.ticketCode.deleteMany();
-    await prisma.ticketType.deleteMany();
-    await prisma.importBatch.deleteMany();
-    await prisma.payment.deleteMany();
-    await prisma.invoice.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.auditLog.deleteMany();
-    await prisma.eventStaffAssignment.deleteMany();
-    await prisma.event.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase();
 
     const regRes = await request(app)
       .post('/api/v1/auth/register')

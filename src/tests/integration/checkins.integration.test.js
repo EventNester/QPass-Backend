@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
 import { hashToken } from '../../utils/crypto.js';
+import { cleanDatabase } from '../helpers/cleanup.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   globalLimiter: (_req, _res, next) => next(),
@@ -20,19 +21,7 @@ describe('Checkins API Integration Tests', () => {
   const laterDate = new Date(Date.now() + 172800000);
 
   beforeAll(async () => {
-    await prisma.checkIn.deleteMany();
-    await prisma.qrToken.deleteMany();
-    await prisma.registration.deleteMany();
-    await prisma.ticketCode.deleteMany();
-    await prisma.ticketType.deleteMany();
-    await prisma.importBatch.deleteMany();
-    await prisma.payment.deleteMany();
-    await prisma.invoice.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.auditLog.deleteMany();
-    await prisma.eventStaffAssignment.deleteMany();
-    await prisma.event.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanDatabase();
 
     const orgReg = await request(app)
       .post('/api/v1/auth/register')
