@@ -17,6 +17,15 @@ vi.mock('../../../middlewares/rate-limit.middleware.js', () => ({
   authLimiter: (_req, _res, next) => next(),
 }));
 
+vi.mock('../tickets.service.js', () => ({
+  createTicketType: vi.fn(),
+  getTicketTypes: vi.fn(),
+  updateTicketType: vi.fn(),
+  deleteTicketType: vi.fn(),
+}));
+
+import * as ticketService from '../tickets.service.js';
+
 const mockTicketType = {
   id: 'tt_1',
   eventId: 'event_1',
@@ -30,15 +39,6 @@ const mockTicketType = {
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
-
-vi.mock('../tickets.service.js', () => ({
-  createTicketType: vi.fn(),
-  getTicketTypes: vi.fn(),
-  updateTicketType: vi.fn(),
-  deleteTicketType: vi.fn(),
-}));
-
-import * as ticketService from '../tickets.service.js';
 
 describe('TicketType Routes', () => {
   beforeEach(() => {
