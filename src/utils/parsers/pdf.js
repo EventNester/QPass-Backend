@@ -4,29 +4,38 @@ import { systemMessages } from '../../config/index.js';
 const msg = systemMessages.ERROR.IMPORT;
 
 export async function parsePdf(buffer, _filename) {
-  const instance = new PDFParse(buffer);
+  const instance = new PDFParse({ data: buffer });
+  const allRows = [];
+  const allErrors = [];
 
   try {
-    await instance.load();
+    const tableResult = await instance.getTable();
+    if (tableResult?.pages?.length > 0) {
+      for (const page of tableResult.pages) {
+        if (!page.tables || page.tables.length === 0) continue;
+        for (const table of page.tables) {
+          const result = extractTableRows(table);
+          allRows.push(...result.rows);
+          allErrors.push(...result.errors);
+        }
+      }
+      if (allRows.length > 0) {
+        return { rows: allRows, errors: allErrors };
+      }
+    }
+
+    const textResult = await instance.getText();
+    const text = textResult?.text;
+    if (!text || !text.trim()) {
+      return { rows: [], errors: [{ row: 0, field: null, error: msg.PDF_PARSE_FAILED }] };
+    }
+
+    return parseTextRows(text);
   } catch {
     return { rows: [], errors: [{ row: 0, field: null, error: msg.PDF_PARSE_FAILED }] };
+  } finally {
+    await instance.destroy().catch(() => {});
   }
-
-  const tables = instance.getTable();
-  if (tables && tables.length > 0) {
-    const table = tables[0];
-    const result = extractTableRows(table);
-    if (result.rows.length > 0) {
-      return result;
-    }
-  }
-
-  const text = instance.getText();
-  if (!text || !text.trim()) {
-    return { rows: [], errors: [{ row: 0, field: null, error: msg.PDF_PARSE_FAILED }] };
-  }
-
-  return parseTextRows(text);
 }
 
 function extractTableRows(table) {
@@ -51,7 +60,7 @@ function extractTableRows(table) {
     }
   }
 
-  if (!headerMap.name && !headerMap.email) {
+  if (headerMap.name === undefined && headerMap.email === undefined) {
     return { rows: [], errors: [{ row: 0, field: null, error: 'Could not detect name or email columns in PDF table' }] };
   }
 
@@ -67,7 +76,7 @@ function extractTableRows(table) {
       continue;
     }
 
-    rows.push({ name, email, phone: phone || null, ticketType: ticketType || null });
+    rows.push({ sourceRow: i + 2, name, email, phone: phone || null, ticketType: ticketType || null });
   }
 
   return { rows, errors };
@@ -103,7 +112,7 @@ function parseTextRows(text) {
 
     const name = line.replace(emailRegex, '').replace(/[,;|]/g, '').trim();
 
-    rows.push({ name, email, phone: null, ticketType: null });
+    rows.push({ sourceRow: i + 1, name, email, phone: null, ticketType: null });
   }
 
   return { rows, errors };

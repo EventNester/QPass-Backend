@@ -4,7 +4,12 @@ import { systemMessages } from '../../config/index.js';
 const msg = systemMessages.ERROR.IMPORT;
 
 export function parseXlsx(buffer, _filename) {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  let workbook;
+  try {
+    workbook = XLSX.read(buffer, { type: 'buffer' });
+  } catch {
+    return { rows: [], errors: [{ row: 0, field: null, error: msg.XLSX_PARSE_FAILED }] };
+  }
 
   if (workbook.SheetNames.length === 0) {
     return { rows: [], errors: [{ row: 0, field: null, error: msg.NO_WORKSHEETS }] };
@@ -27,11 +32,16 @@ export function parseXlsx(buffer, _filename) {
   }, {});
 
   const colMap = {};
+const HEADER_ALIASES = {
+  name: ['name', 'fullname', 'attendeename'],
+  email: ['email', 'emailaddress', 'mail', 'attendeeemail'],
+  phone: ['phone', 'phonenumber', 'telephone', 'mobile', 'contact'],
+  ticketType: ['tickettype', 'tickettypeid', 'ticket', 'type'],
+};
+
   for (const [col, normalized] of Object.entries(columns)) {
-    if (/^name|fullname|attendeename$/.test(normalized)) colMap.name = col;
-    else if (/^email|mail|e?mail|attendeeemail$/.test(normalized)) colMap.email = col;
-    else if (/^phone|phoneNumber|telephone|mobile|contact$/.test(normalized)) colMap.phone = col;
-    else if (/^tickettype|tickettypeid|ticket|type$/.test(normalized)) colMap.ticketType = col;
+    const field = Object.keys(HEADER_ALIASES).find((f) => HEADER_ALIASES[f].includes(normalized));
+    if (field && !colMap[field]) colMap[field] = col;
   }
 
   if (!colMap.name && !colMap.email) {
@@ -50,14 +60,14 @@ export function parseXlsx(buffer, _filename) {
 
     if (!name && !email) {
       errors.push({
-        row: i + 2,
+        row: i + 1,
         field: null,
         error: 'Row is empty or missing required columns',
       });
       continue;
     }
 
-    rows.push({ name, email, phone: phone || null, ticketType: ticketType || null });
+    rows.push({ sourceRow: i + 2, name, email, phone: phone || null, ticketType: ticketType || null });
   }
 
   return { rows, errors };

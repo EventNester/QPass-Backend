@@ -6,20 +6,21 @@ const msg = systemMessages.ERROR.IMPORT;
 export function parseCsv(buffer, _filename) {
   const text = typeof buffer === 'string' ? buffer : buffer.toString('utf8');
 
-  const records = parse(text, {
-    columns: true,
-    skip_empty_lines: true,
-    trim: true,
-    relax_column_count: true,
-    bom: true,
-  });
+  let records;
+  try {
+    records = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+      bom: true,
+    });
+  } catch {
+    return { rows: [], errors: [{ row: 0, field: null, error: msg.CSV_PARSE_FAILED }] };
+  }
 
   if (records.length === 0) {
     return { rows: [], errors: [] };
-  }
-
-  if (records.length > 1000) {
-    return { rows: [], errors: [{ row: 0, field: null, error: msg.ROW_LIMIT_EXCEEDED }] };
   }
 
   const rows = [];
@@ -27,7 +28,7 @@ export function parseCsv(buffer, _filename) {
 
   for (let i = 0; i < records.length; i++) {
     const record = records[i];
-    const row = normalizeRow(record);
+    const row = normalizeRow(record, i);
     if (row) {
       rows.push(row);
     } else {
@@ -42,22 +43,23 @@ export function parseCsv(buffer, _filename) {
   return { rows, errors };
 }
 
-function normalizeRow(record) {
+function normalizeRow(record, index) {
   const keys = Object.keys(record).reduce((acc, k) => {
     acc[k.toLowerCase().replace(/[\s_-]+/g, '')] = record[k];
     return acc;
   }, {});
 
-  const name = keys.name || keys.fullname || keys.attendeename || keys['attendee name'] || '';
-  const email = keys.email || keys['email address'] || keys.mail || keys['e-mail'] || keys.attendeeemail || '';
-  const phone = keys.phone || keys.phoneNumber || keys.telephone || keys.mobile || keys.phoneNumber || keys.contact || '';
-  const ticketType = keys.tickettype || keys.tickettypeid || keys.ticket || keys.type || keys.ticket || keys['ticket type'] || '';
+  const name = keys.name || keys.fullname || keys.attendeename || '';
+  const email = keys.email || keys.emailaddress || keys.mail || keys.attendeeemail || '';
+  const phone = keys.phone || keys.phonenumber || keys.telephone || keys.mobile || keys.contact || '';
+  const ticketType = keys.tickettype || keys.tickettypeid || keys.ticket || keys.type || '';
 
   if (!name && !email) {
     return null;
   }
 
   return {
+    sourceRow: index + 2,
     name: String(name).trim(),
     email: String(email).trim(),
     phone: phone ? String(phone).trim() : null,

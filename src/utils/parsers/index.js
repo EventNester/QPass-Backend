@@ -6,6 +6,7 @@ import { BadRequestError } from '../error.js';
 import { systemMessages } from '../../config/index.js';
 
 const msg = systemMessages.ERROR.UPLOAD;
+const importMsg = systemMessages.ERROR.IMPORT;
 
 const FORMAT_MAP = {
   '.csv': 'csv',
@@ -15,13 +16,30 @@ const FORMAT_MAP = {
   '.docx': 'docx',
 };
 
+const MIME_MAP = {
+  'text/csv': 'csv',
+  'text/tab-separated-values': 'csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xlsx',
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/msword': 'docx',
+};
+
+const MAX_IMPORT_ROWS = 1000;
+
 function detectFormat(originalname) {
   if (!originalname) return null;
   const ext = originalname.toLowerCase().slice(originalname.lastIndexOf('.'));
   return FORMAT_MAP[ext] || null;
 }
 
-export async function parseFile(buffer, originalname) {
+function detectMimeFormat(mimeType) {
+  if (!mimeType) return null;
+  return MIME_MAP[mimeType.toLowerCase()] || null;
+}
+
+export async function parseFile(buffer, originalname, fileType) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new BadRequestError('Import file is empty');
   }
@@ -31,18 +49,36 @@ export async function parseFile(buffer, originalname) {
     throw new BadRequestError(msg.INVALID_TYPE);
   }
 
+  if (fileType) {
+    const mimeFormat = detectMimeFormat(fileType);
+    if (mimeFormat && mimeFormat !== format) {
+      throw new BadRequestError(msg.INVALID_TYPE);
+    }
+  }
+
+  let result;
   switch (format) {
     case 'csv':
-      return parseCsv(buffer, originalname);
+      result = parseCsv(buffer, originalname);
+      break;
     case 'xlsx':
-      return parseXlsx(buffer, originalname);
+      result = await parseXlsx(buffer, originalname);
+      break;
     case 'pdf':
-      return parsePdf(buffer, originalname);
+      result = await parsePdf(buffer, originalname);
+      break;
     case 'docx':
-      return parseDocx(buffer, originalname);
+      result = await parseDocx(buffer, originalname);
+      break;
     default:
       throw new BadRequestError(msg.INVALID_TYPE);
   }
+
+  if (result.rows.length > MAX_IMPORT_ROWS) {
+    return { rows: [], errors: [{ row: 0, field: null, error: importMsg.ROW_LIMIT_EXCEEDED }] };
+  }
+
+  return result;
 }
 
 export { parseCsv } from './csv.js';
