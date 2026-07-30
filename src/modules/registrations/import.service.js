@@ -2,6 +2,7 @@ import prisma from '../../database/index.js';
 import { logger } from '../../config/index.js';
 import crypto from 'crypto';
 import { BadRequestError, NotFoundError, ConflictError } from '../../utils/error.js';
+import { parseFile } from '../../utils/parsers/index.js';
 import { sendNotification } from '../../services/notification.service.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -539,4 +540,255 @@ export async function listImportBatchesByEvent(eventId) {
     where: { eventId },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/**
+ * Full import pipeline from file upload to completed batch.
+ *
+ * 1. Parse file rows via the format-specific parser.
+ * 2. Validate each row (email format, required fields, batch-level dupes).
+ * 3. De-duplicate against existing registrations for the event.
+ * 4. Create TicketCode + Registration + QrToken per valid row in batches.
+ * 5. Send a batch summary email with success/failure counts.
+ * 6. Create an audit log entry.
+ *
+ * @param {Object} options
+ * @param {string} options.eventId - Target event ID
+ * @param {string} options.uploadedById - User ID uploading the file
+ * @param {Buffer} options.fileBuffer - Raw file buffer
+ * @param {string} options.filename - Original filename (used for format detection)
+ * @param {string} [options.fileType] - MIME type override
+ * @param {boolean} [options.sendEmails=true] - Whether to send batch summary
+ * @returns {Promise<Object>} The completed ImportBatch record
+ */
+export async function processImportFile({
+  eventId,
+  uploadedById,
+  fileBuffer,
+  filename,
+  fileType,
+  sendEmails = true,
+}) {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, title: true, endTime: true, ownerId: true, deletedAt: true },
+  });
+
+  if (!event || event.deletedAt) {
+    throw new NotFoundError('Event not found');
+  }
+
+  const parsed = await parseFile(fileBuffer, filename);
+
+  const { rows, errors: parseErrors } = parsed;
+
+  const batch = await prisma.importBatch.create({
+    data: {
+      eventId,
+      uploadedById,
+      originalFilename: filename,
+      fileType: fileType || 'unknown',
+      totalRows: rows.length,
+      status: 'PROCESSING',
+      errorReport: parseErrors.length > 0 ? parseErrors : null,
+    },
+  });
+
+  const seenEmails = new Set();
+  const validationErrors = [];
+  const validEntries = [];
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowNumber = i + 2;
+    const row = rows[i];
+    const validation = validateRow(row, rowNumber, seenEmails);
+
+    if (!validation.valid) {
+      validationErrors.push({
+        row: rowNumber,
+        email: validation.email,
+        error: validation.error,
+      });
+    } else {
+      validEntries.push({ rowNumber, validation });
+    }
+  }
+
+  const existingEmailSet = new Set();
+  if (validEntries.length > 0) {
+    const emails = validEntries.map((e) => e.validation.email);
+    const existingRegs = await prisma.registration.findMany({
+      where: { eventId, attendeeEmail: { in: emails } },
+      select: { attendeeEmail: true },
+    });
+    for (const r of existingRegs) {
+      existingEmailSet.add(r.attendeeEmail);
+    }
+  }
+
+  const toCreate = [];
+  for (const entry of validEntries) {
+    if (existingEmailSet.has(entry.validation.email)) {
+      validationErrors.push({
+        row: entry.rowNumber,
+        email: entry.validation.email,
+        error: 'Attendee is already registered for this event',
+      });
+    } else {
+      toCreate.push(entry);
+    }
+  }
+
+  const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
+  if (ticketTypeIds.length > 0) {
+    const validTicketTypes = await prisma.ticketType.findMany({
+      where: { id: { in: ticketTypeIds }, eventId, active: true },
+      select: { id: true, capacity: true, quantitySold: true },
+    });
+    const validTtMap = new Map(validTicketTypes.map((tt) => [tt.id, tt]));
+
+    const filtered = [];
+    for (const entry of toCreate) {
+      const ttId = entry.validation.ticketTypeId;
+      if (!ttId) {
+        filtered.push(entry);
+        continue;
+      }
+      const tt = validTtMap.get(ttId);
+      if (!tt) {
+        validationErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Invalid or inactive ticket type',
+        });
+        continue;
+      }
+      if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+        validationErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Ticket type has reached capacity',
+        });
+        continue;
+      }
+      filtered.push(entry);
+    }
+    toCreate.length = 0;
+    toCreate.push(...filtered);
+  }
+
+  let successRows = 0;
+  let failedRows = parseErrors.length + validationErrors.length;
+
+  const allErrors = [...parseErrors, ...validationErrors];
+
+  for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+    const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const entry of currentBatch) {
+          const ticketCode = await tx.ticketCode.create({
+            data: {
+              eventId,
+              code: generateTicketCode(eventId),
+              status: 'USED',
+              attendeeEmail: entry.validation.email,
+              attendeeName: entry.validation.name,
+            },
+          });
+
+          const registration = await tx.registration.create({
+            data: {
+              eventId,
+              ticketCodeId: ticketCode.id,
+              attendeeEmail: entry.validation.email,
+              attendeeName: entry.validation.name,
+              phone: entry.validation.phone || null,
+              ticketTypeId: entry.validation.ticketTypeId || null,
+              source: 'IMPORT',
+              status: 'CONFIRMED',
+              qrIssued: true,
+              qrIssuedAt: new Date(),
+            },
+          });
+
+          await tx.qrToken.create({
+            data: {
+              registrationId: registration.id,
+              tokenHash: crypto.createHash('sha256').update(crypto.randomBytes(32).toString('hex')).digest('hex'),
+              expiresAt: event.endTime,
+            },
+          });
+        }
+      });
+
+      successRows += currentBatch.length;
+    } catch (error) {
+      logger.error({ err: error, batchStart: i }, 'Import batch transaction failed');
+      for (const entry of currentBatch) {
+        failedRows++;
+        allErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Database error during batch processing',
+        });
+      }
+    }
+  }
+
+  const finalStatus = successRows === 0 ? 'FAILED' : 'COMPLETED';
+
+  const updatedBatch = await prisma.importBatch.update({
+    where: { id: batch.id },
+    data: {
+      successRows,
+      failedRows,
+      status: finalStatus,
+      errorReport: allErrors.length > 0 ? allErrors : null,
+      completedAt: new Date(),
+    },
+  });
+
+  if (sendEmails) {
+    sendNotification({
+      recipient: event.title, // sent to organizer's notification context
+      subject: `Import Complete: ${successRows} imported, ${failedRows} errors`,
+      template: 'import-summary',
+      context: {
+        eventTitle: event.title,
+        totalRows: rows.length,
+        successRows,
+        failedRows,
+        errors: allErrors,
+      },
+      userId: uploadedById,
+      eventId,
+    }).catch((err) => {
+      logger.warn({ err: err.message, batchId: batch.id }, 'Failed to send import summary notification');
+    });
+  }
+
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorId: uploadedById,
+        action: 'IMPORT',
+        entity: 'ImportBatch',
+        entityId: updatedBatch.id,
+        afterSnapshot: {
+          eventId,
+          totalRows: rows.length,
+          successRows,
+          failedRows,
+          filename,
+        },
+      },
+    });
+  } catch (error) {
+    logger.warn({ err: error.message }, 'Failed to create audit log for import');
+  }
+
+  return updatedBatch;
 }
