@@ -44,31 +44,41 @@ export async function getRegistrationByEmail(eventId, email) {
 }
 
 /**
- * List registrations for an event with pagination.
+ * List registrations for an event with pagination and optional filters.
  * @param {string} eventId - UUID of the event
  * @param {number} [page=1] - 1-indexed page number
  * @param {number} [limit=20] - Items per page
+ * @param {Object} [filters={}] - Optional filters (status, paymentStatus)
  * @returns {Promise<Object>} Paginated result { registrations, pagination }
  */
 const MAX_PAGE_SIZE = 100;
 
-export async function listRegistrationsByEvent(eventId, page = 1, limit = 20) {
+export async function listRegistrationsByEvent(eventId, page = 1, limit = 20, filters = {}) {
   const take = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(limit) || 20));
   const currentPage = Math.max(1, Number(page) || 1);
   const skip = (currentPage - 1) * take;
 
+  const where = { eventId };
+  if (filters.status) {
+    where.status = filters.status;
+  }
+  if (filters.paymentStatus) {
+    where.paymentStatus = filters.paymentStatus;
+  }
+
   const [registrations, total] = await Promise.all([
     prisma.registration.findMany({
-      where: { eventId },
+      where,
       orderBy: { createdAt: 'desc' },
       skip,
       take,
       include: {
         ticketCode: true,
+        ticketType: true,
       },
     }),
     prisma.registration.count({
-      where: { eventId },
+      where,
     }),
   ]);
 
@@ -79,5 +89,6 @@ export async function listRegistrationsByEvent(eventId, page = 1, limit = 20) {
       limit: take,
       total,
       totalPages: Math.ceil(total / take),
-    },  };
+    },
+  };
 }
