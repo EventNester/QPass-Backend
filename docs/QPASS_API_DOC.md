@@ -389,15 +389,13 @@ Get public event details and available ticket types. No authentication required.
 
 #### `POST /api/v1/public/events/:slug/register`
 
-Register for an event. Free events are confirmed instantly. Paid events return a Paystack payment URL.
+Register for an event. Free events are confirmed instantly.
 
 **Auth:** No
 
 **Body:** `{ "name": "Jane Doe", "email": "jane@example.com", "phone": "+2348012345678", "ticketTypeId": "..." }`
 
-**Response `200` (free):** `{ "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED" } }`
-
-**Response `200` (paid):** `{ "registration": { "id", "status": "PENDING" }, "paymentUrl": "https://checkout.paystack.com/..." }`
+**Response `200`:** `{ "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED" } }`
 
 ---
 
@@ -537,30 +535,6 @@ Undo a check-in. Creates an audit log entry with a before-snapshot.
 
 ---
 
-### Payments
-
----
-
-#### `POST /api/v1/payments/webhook`
-
-Paystack webhook callback. Handles `charge.success` events to confirm payments and issue tickets. Idempotent — duplicate webhooks are safely ignored.
-
-**Auth:** Paystack HMAC-SHA512 signature verification
-
-**Response `200`:** `{ "status": "success" }`
-
----
-
-#### `POST /api/v1/payments/verify/:reference`
-
-Manually verify a payment with Paystack. Use as a fallback when webhooks fail.
-
-**Auth:** No
-
-**Response `200`:** `{ "payment": { "id", "paystackReference", "amount", "currency", "status" } }`
-
----
-
 ### Reports & Dashboard
 
 ---
@@ -613,6 +587,4 @@ Export registration data as CSV or PDF.
 | `TicketCodeStatus` | `UNUSED`, `USED`, `REVOKED` |
 | `RegistrationStatus` | `PENDING`, `CONFIRMED`, `CANCELLED` |
 | `CheckInResult` | `VALID`, `DUPLICATE`, `INVALID` |
-| `PaymentStatus` | `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` |
-| `InvoiceStatus` | `PENDING`, `PAID`, `OVERDUE`, `CANCELLED` |
 | `NotificationStatus` | `PENDING`, `SENT`, `FAILED`, `READ` |
