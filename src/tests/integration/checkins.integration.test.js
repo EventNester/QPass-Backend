@@ -1,0 +1,340 @@
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import request from 'supertest';
+import { randomBytes } from 'crypto';
+import app from '../../app.js';
+import prisma from '../../database/index.js';
+import { hashToken } from '../../utils/crypto.js';
+import { cleanDatabase } from '../helpers/cleanup.js';
+
+vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
+  globalLimiter: (_req, _res, next) => next(),
+  authLimiter: (_req, _res, next) => next(),
+}));
+
+describe('Checkins API Integration Tests', () => {
+  let organizerToken;
+  let staffToken;
+  let eventId;
+  let rawToken;
+  let checkinId;
+  const futureDate = new Date(Date.now() + 86400000);
+  const laterDate = new Date(Date.now() + 172800000);
+
+  beforeAll(async () => {
+    await cleanDatabase();
+
+    const orgReg = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        name: 'Checkin Organizer',
+        email: 'checkin-org@example.com',
+        password: 'SecurePassword123',
+      });
+
+    organizerToken = orgReg.body.data.accessToken;
+    const organizerId = orgReg.body.data.user.id;
+
+    await prisma.user.update({
+      where: { id: organizerId },
+      data: { role: 'ORGANIZER' },
+    });
+
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'checkin-org@example.com', password: 'SecurePassword123' });
+
+    organizerToken = loginRes.body.data.accessToken;
+
+    const staffReg = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        name: 'Checkin Staff',
+        email: 'checkin-staff@example.com',
+        password: 'SecurePassword123',
+      });
+
+    staffToken = staffReg.body.data.accessToken;
+    const staffUserId = staffReg.body.data.user.id;
+
+    await prisma.user.update({
+      where: { id: staffUserId },
+      data: { role: 'STAFF' },
+    });
+
+    const staffLoginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'checkin-staff@example.com', password: 'SecurePassword123' });
+
+    staffToken = staffLoginRes.body.data.accessToken;
+
+    const eventRes = await request(app)
+      .post('/api/v1/events')
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({
+        title: 'Checkin Test Event',
+        description: 'For checkin testing',
+        venue: 'Checkin Venue',
+        startTime: futureDate.toISOString(),
+        endTime: laterDate.toISOString(),
+      });
+
+    eventId = eventRes.body.data.id;
+
+    const ticketRes = await request(app)
+      .post(`/api/v1/events/${eventId}/ticket-types`)
+      .set('Authorization', `Bearer ${organizerToken}`)
+      .send({ name: 'General', price: 0 });
+
+    const ticketTypeId = ticketRes.body.data.id;
+
+    const ticketCode = await prisma.ticketCode.create({
+      data: {
+        eventId,
+        code: `TICKET-${randomBytes(4).toString('hex').toUpperCase()}`,
+        attendeeEmail: 'attendee@example.com',
+        attendeeName: 'Test Attendee',
+      },
+    });
+
+    const registration = await prisma.registration.create({
+      data: {
+        eventId,
+        ticketCodeId: ticketCode.id,
+        attendeeEmail: 'attendee@example.com',
+        attendeeName: 'Test Attendee',
+        ticketTypeId,
+        source: 'IMPORT',
+        status: 'CONFIRMED',
+        confirmationCode: `CONF-${randomBytes(4).toString('hex').toUpperCase()}`,
+      },
+    });
+
+    rawToken = randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
+
+    await prisma.qrToken.create({
+      data: {
+        registrationId: registration.id,
+        tokenHash,
+        expiresAt: new Date(laterDate.getTime() + 86400000),
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  describe('POST /api/v1/checkins/:eventId/scan', () => {
+    it('should return 401 without auth', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .send({ token: rawToken });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 403 for attendee role', async () => {
+      const attendeeReg = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Plain Attendee',
+          email: 'plain-attendee@example.com',
+          password: 'SecurePassword123',
+        });
+
+      const attendeeToken = attendeeReg.body.data.accessToken;
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${attendeeToken}`)
+        .send({ token: rawToken });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should return 422 for missing token', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({});
+
+      expect(response.status).toBe(422);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 200 with VALID result for a valid scan', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: rawToken, deviceInfo: 'iPhone 15' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('VALID');
+      expect(response.body.data.attendeeName).toBe('Test Attendee');
+      expect(response.body.data.checkinId).toBeDefined();
+
+      checkinId = response.body.data.checkinId;
+    });
+
+    it('should return 200 with DUPLICATE result for second scan of same QR', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: rawToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('DUPLICATE');
+    });
+
+    it('should return 200 with INVALID result for unknown token', async () => {
+      const fakeToken = randomBytes(32).toString('hex');
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: fakeToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('INVALID');
+    });
+
+    it('should return 200 with INVALID result for wrong event', async () => {
+      const wrongEventRes = await request(app)
+        .post('/api/v1/events')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          title: 'Wrong Event',
+          startTime: futureDate.toISOString(),
+          endTime: laterDate.toISOString(),
+        });
+
+      const wrongEventId = wrongEventRes.body.data.id;
+
+      const otherRawToken = randomBytes(32).toString('hex');
+      const otherHash = hashToken(otherRawToken);
+
+      const otherTicketCode = await prisma.ticketCode.create({
+        data: {
+          eventId: wrongEventId,
+          code: `TICKET-${randomBytes(4).toString('hex').toUpperCase()}`,
+          attendeeEmail: 'wrong@example.com',
+          attendeeName: 'Wrong Event Attendee',
+        },
+      });
+
+      const otherReg = await prisma.registration.create({
+        data: {
+          eventId: wrongEventId,
+          ticketCodeId: otherTicketCode.id,
+          attendeeEmail: 'wrong@example.com',
+          attendeeName: 'Wrong Event Attendee',
+          source: 'IMPORT',
+          status: 'CONFIRMED',
+        },
+      });
+
+      await prisma.qrToken.create({
+        data: {
+          registrationId: otherReg.id,
+          tokenHash: otherHash,
+          expiresAt: new Date(laterDate.getTime() + 86400000),
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: otherRawToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('INVALID');
+    });
+
+    it('should allow staff to scan', async () => {
+      const freshReg = await prisma.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: (
+            await prisma.ticketCode.create({
+              data: {
+                eventId,
+                code: `TICKET-${randomBytes(4).toString('hex').toUpperCase()}`,
+                attendeeEmail: 'staff-scan@example.com',
+                attendeeName: 'Staff Scan Attendee',
+              },
+            })
+          ).id,
+          attendeeEmail: 'staff-scan@example.com',
+          attendeeName: 'Staff Scan Attendee',
+          source: 'IMPORT',
+          status: 'CONFIRMED',
+        },
+      });
+
+      const staffRawToken = randomBytes(32).toString('hex');
+      const staffHash = hashToken(staffRawToken);
+
+      await prisma.qrToken.create({
+        data: {
+          registrationId: freshReg.id,
+          tokenHash: staffHash,
+          expiresAt: new Date(laterDate.getTime() + 86400000),
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({ token: staffRawToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.result).toBe('VALID');
+    });
+  });
+
+  describe('GET /api/v1/checkins/:eventId/checkins', () => {
+    it('should return 401 without auth', async () => {
+      const response = await request(app)
+        .get(`/api/v1/checkins/${eventId}/checkins`);
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 200 with checkin list', async () => {
+      const response = await request(app)
+        .get(`/api/v1/checkins/${eventId}/checkins`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data).toBeInstanceOf(Array);
+      expect(response.body.data.length).toBeGreaterThanOrEqual(1);
+      expect(response.body.data[0].registration).toBeDefined();
+      expect(response.body.data[0].staff).toBeDefined();
+    });
+  });
+
+  describe('POST /api/v1/checkins/:eventId/checkins/:checkInId/undo', () => {
+    it('should return 200 and undo the checkin', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+    });
+
+    it('should return 404 for already undone checkin', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      expect(response.status).toBe(404);
+    });
+  });
+});
