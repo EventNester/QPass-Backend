@@ -34,6 +34,22 @@ export async function sendNotification({
       maxAttempts,
     });
 
+    if (!result.success) {
+      const updatedNotification = await prisma.notification.update({
+        where: { id: notification.id },
+        data: {
+          status: 'FAILED',
+          failureReason: result.error || 'Unknown error',
+        },
+      });
+
+      return {
+        success: false,
+        notification: updatedNotification,
+        error: result.error,
+      };
+    }
+
     const updatedNotification = await prisma.notification.update({
       where: { id: notification.id },
       data: {
@@ -114,6 +130,18 @@ export async function retryNotification(notificationId, context = {}) {
       context,
     });
 
+    if (!result.success) {
+      const updated = await prisma.notification.update({
+        where: { id: notificationId },
+        data: {
+          status: 'FAILED',
+          failureReason: result.error || 'Unknown error',
+        },
+      });
+
+      return { success: false, notification: updated, error: result.error };
+    }
+
     const updated = await prisma.notification.update({
       where: { id: notificationId },
       data: {
@@ -137,3 +165,4 @@ export async function retryNotification(notificationId, context = {}) {
     return { success: false, notification: updated, error: error.message };
   }
 }
+
