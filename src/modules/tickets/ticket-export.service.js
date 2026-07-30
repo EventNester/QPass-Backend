@@ -22,7 +22,11 @@ function escapeCsvField(value) {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  let str = String(value);
+  // Neutralize formula injection when opened in spreadsheet apps
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

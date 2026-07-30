@@ -1,13 +1,13 @@
 import PDFDocument from 'pdfkit';
 import { qrService } from './qr.service.js';
 import prisma from '../../database/index.js';
-import { NotFoundError } from '../../utils/error.js';
+import { NotFoundError, ForbiddenError } from '../../utils/error.js';
 import { systemMessages } from '../../config/index.js';
 
 const msg = systemMessages.ERROR;
 const NAME_MAX_CHARS_PER_LINE = 40;
 
-export async function generateTicketPdf(ticketId) {
+export async function generateTicketPdf(ticketId, userId) {
   const registration = await prisma.registration.findUnique({
     where: { id: ticketId },
     include: {
@@ -18,8 +18,18 @@ export async function generateTicketPdf(ticketId) {
     },
   });
 
-  if (!registration) {
+  if (!registration || registration.event?.deletedAt) {
     throw new NotFoundError(msg.TICKET.NOT_FOUND);
+  }
+
+  if (registration.event.ownerId !== userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user || user.email !== registration.attendeeEmail) {
+      throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+    }
   }
 
   const doc = new PDFDocument({
