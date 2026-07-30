@@ -98,16 +98,12 @@ export async function renderTemplate(templateName, variables = {}) {
   const fileName = TEMPLATE_MAP[templateName] || (safeName.endsWith('.ejs') ? safeName : `${safeName}.ejs`);
   const templatePath = path.join(templatesDir, fileName);
 
-  try {
-    const html = await ejs.renderFile(templatePath, {
-      appName: process.env.BREVO_SENDER_NAME || 'QPass',
-      year: new Date().getFullYear(),
-      ...variables,
-    });
-    return html;
-  } catch (error) {
-    throw error;
-  }
+  const html = await ejs.renderFile(templatePath, {
+    appName: process.env.BREVO_SENDER_NAME || 'QPass',
+    year: new Date().getFullYear(),
+    ...variables,
+  });
+  return html;
 }
 
 async function sendWithRetry(transporter, mailOptions, maxAttempts = 3) {
