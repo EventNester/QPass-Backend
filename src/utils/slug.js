@@ -20,3 +20,12 @@ export function generateSlug(title) {
 
   return `${base}-${suffix}`;
 }
+
+/**
+ * Generate a human-readable confirmation code.
+ * @returns {string} Confirmation code in format CONF-XXXXXXXX (8 hex chars)
+ */
+export function generateConfirmationCode() {
+  const rand = crypto.randomBytes(4).toString('hex').toUpperCase();
+  return `CONF-${rand}`;
+}

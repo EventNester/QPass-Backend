@@ -1,8 +1,6 @@
 import prisma from '../../database/index.js';
 import { NotFoundError } from '../../utils/error.js';
 
-export { registerPublic, importRegistrations, parseImportFile, validateRow } from './import.service.js';
-
 
 /**
  * Get a registration record by its unique ID.
@@ -52,9 +50,12 @@ export async function getRegistrationByEmail(eventId, email) {
  * @param {number} [limit=20] - Items per page
  * @returns {Promise<Object>} Paginated result { registrations, pagination }
  */
+const MAX_PAGE_SIZE = 100;
+
 export async function listRegistrationsByEvent(eventId, page = 1, limit = 20) {
-  const take = Math.max(1, limit);
-  const skip = (Math.max(1, page) - 1) * take;
+  const take = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(limit) || 20));
+  const currentPage = Math.max(1, Number(page) || 1);
+  const skip = (currentPage - 1) * take;
 
   const [registrations, total] = await Promise.all([
     prisma.registration.findMany({
@@ -74,10 +75,9 @@ export async function listRegistrationsByEvent(eventId, page = 1, limit = 20) {
   return {
     registrations,
     pagination: {
-      page,
+      page: currentPage,
       limit: take,
       total,
       totalPages: Math.ceil(total / take),
-    },
-  };
+    },  };
 }

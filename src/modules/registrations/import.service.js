@@ -1,5 +1,6 @@
 import prisma from '../../database/index.js';
 import { logger } from '../../config/index.js';
+import crypto from 'crypto';
 import { BadRequestError, NotFoundError, ConflictError } from '../../utils/error.js';
 import { sendNotification } from '../../services/notification.service.js';
 
@@ -37,6 +38,43 @@ function splitCsvLine(line) {
 }
 
 /**
+ * Split CSV text into logical rows, handling newlines within double-quoted fields.
+ * @param {string} text - Raw CSV text
+ * @returns {string[]} Array of row strings
+ */
+function splitCsvLines(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        current += '""';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+        current += '"';
+      }
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (current.trim()) {
+        rows.push(current);
+      }
+      current = '';
+      if (char === '\r' && text[i + 1] === '\n') i++;
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) {
+    rows.push(current);
+  }
+
+  return rows;
+}
+/**
  * Parse CSV text or array into structured row objects.
  * Throws BadRequestError (400) if the file is empty or has no data rows.
  * @param {string|Buffer|Array<Object>} fileContent - Raw CSV or parsed array
@@ -61,7 +99,7 @@ export function parseImportFile(fileContent) {
     throw new BadRequestError('Import file is empty. No rows found.');
   }
 
-  const lines = cleanedStr.split(/\r?\n/).filter((line) => line.trim() !== '');
+  const lines = splitCsvLines(cleanedStr);
   if (lines.length <= 1) {
     throw new BadRequestError('Import file is empty. No rows found.');
   }
@@ -165,7 +203,7 @@ export function validateRow(row, rowNumber, seenEmails) {
  */
 function generateTicketCode(eventId) {
   const prefix = eventId ? eventId.slice(0, 4).toUpperCase() : 'EVNT';
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const rand = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `${prefix}-${rand}`;
 }
 
@@ -215,9 +253,11 @@ export async function importRegistrations({
   const errorReport = [];
   let successRows = 0;
   let failedRows = 0;
+  const BATCH_SIZE = 50;
 
+  const validEntries = [];
   for (let i = 0; i < rows.length; i++) {
-    const rowNumber = i + 1;
+    const rowNumber = i + 2;
     const row = rows[i];
     const validation = validateRow(row, rowNumber, seenEmails);
 
@@ -228,77 +268,137 @@ export async function importRegistrations({
         email: validation.email,
         error: validation.error,
       });
-      continue;
+    } else {
+      validEntries.push({ rowNumber, validation });
     }
+  }
 
-    try {
-      const existingRegistration = await prisma.registration.findFirst({
-        where: {
-          eventId,
-          attendeeEmail: validation.email,
-        },
-      });
+  if (validEntries.length > 0) {
+    const emails = validEntries.map((e) => e.validation.email);
+    const existingRegs = await prisma.registration.findMany({
+      where: { eventId, attendeeEmail: { in: emails } },
+      select: { attendeeEmail: true },
+    });
+    const existingEmailSet = new Set(existingRegs.map((r) => r.attendeeEmail));
 
-      if (existingRegistration) {
+    const toCreate = [];
+    for (const entry of validEntries) {
+      if (existingEmailSet.has(entry.validation.email)) {
         failedRows++;
         errorReport.push({
-          row: rowNumber,
-          email: validation.email,
+          row: entry.rowNumber,
+          email: entry.validation.email,
           error: 'Attendee is already registered for this event',
         });
-        continue;
+      } else {
+        toCreate.push(entry);
       }
+    }
 
-      const codeStr = generateTicketCode(eventId);
-      const ticketCode = await prisma.ticketCode.create({
-        data: {
-          eventId,
-          code: codeStr,
-          status: 'USED',
-          attendeeEmail: validation.email,
-          attendeeName: validation.name,
-        },
+    const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
+    if (ticketTypeIds.length > 0) {
+      const validTicketTypes = await prisma.ticketType.findMany({
+        where: { id: { in: ticketTypeIds }, eventId, active: true },
+        select: { id: true, capacity: true, quantitySold: true },
       });
+      const validTtMap = new Map(validTicketTypes.map((tt) => [tt.id, tt]));
 
-      await prisma.registration.create({
-        data: {
-          eventId,
-          ticketCodeId: ticketCode.id,
-          attendeeEmail: validation.email,
-          attendeeName: validation.name,
-          phone: validation.phone || null,
-          ticketTypeId: validation.ticketTypeId || null,
-          source: 'IMPORT',
-          status: 'CONFIRMED',
-        },
-      });
+      const filtered = [];
+      for (const entry of toCreate) {
+        const ttId = entry.validation.ticketTypeId;
+        if (!ttId) {
+          filtered.push(entry);
+          continue;
+        }
+        const tt = validTtMap.get(ttId);
+        if (!tt) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Invalid or inactive ticket type',
+          });
+          continue;
+        }
+        if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Ticket type has reached capacity',
+          });
+          continue;
+        }
+        filtered.push(entry);
+      }
+      toCreate.length = 0;
+      toCreate.push(...filtered);
+    }
 
+    for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+      const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
 
-      successRows++;
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const entry of currentBatch) {
+            const ticketCode = await tx.ticketCode.create({
+              data: {
+                eventId,
+                code: generateTicketCode(eventId),
+                status: 'USED',
+                attendeeEmail: entry.validation.email,
+                attendeeName: entry.validation.name,
+              },
+            });
 
-      if (sendEmails) {
-        await sendNotification({
-          recipient: validation.email,
-          subject: `Registration Confirmed: ${event.title}`,
-          template: 'registration',
-          context: {
-            name: validation.name,
-            eventTitle: event.title,
-            email: validation.email,
-          },
-          userId: uploadedById,
-          eventId,
-        }).catch((err) => {
-          logger.warn({ err: err.message, email: validation.email }, 'Failed to send import registration notification');
+            await tx.registration.create({
+              data: {
+                eventId,
+                ticketCodeId: ticketCode.id,
+                attendeeEmail: entry.validation.email,
+                attendeeName: entry.validation.name,
+                phone: entry.validation.phone || null,
+                ticketTypeId: entry.validation.ticketTypeId || null,
+                source: 'IMPORT',
+                status: 'CONFIRMED',
+              },
+            });
+          }
         });
+
+        successRows += currentBatch.length;
+
+        if (sendEmails) {
+          await Promise.all(
+            currentBatch.map((entry) =>
+              sendNotification({
+                recipient: entry.validation.email,
+                subject: `Registration Confirmed: ${event.title}`,
+                template: 'registration',
+                context: {
+                  name: entry.validation.name,
+                  eventTitle: event.title,
+                  email: entry.validation.email,
+                },
+                userId: uploadedById,
+                eventId,
+              }).catch((err) => {
+                logger.warn({ err: err.message, email: entry.validation.email }, 'Failed to send import registration notification');
+              })
+            )
+          );
+        }
+      } catch (error) {
+        logger.error({ err: error, batchStart: i }, 'Batch processing failed');
+        for (const entry of currentBatch) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Database error during batch processing',
+          });
+        }
       }
-    } catch (error) {
-      failedRows++;
-      errorReport.push({
-        row: rowNumber,
-        email: validation.email,
-        error: error.message || 'Database error during registration',
-      });
     }
   }
 
@@ -307,7 +407,6 @@ export async function importRegistrations({
   const updatedBatch = await prisma.importBatch.update({
     where: { id: batch.id },
     data: {
-      totalRows: rows.length,
       successRows,
       failedRows,
       status: finalStatus,
@@ -358,40 +457,55 @@ export async function registerPublic({ eventId, name, email, phone, ticketTypeId
     throw new NotFoundError('Event not found');
   }
 
-  const existingRegistration = await prisma.registration.findFirst({
-    where: {
-      eventId,
-      attendeeEmail: normalizedEmail,
-    },
-  });
-
-  if (existingRegistration) {
-    throw new ConflictError('Attendee with this email is already registered for this event');
+  if (event.status !== 'PUBLISHED') {
+    throw new BadRequestError('Event is not open for registration');
   }
 
-  const codeStr = generateTicketCode(eventId);
-  const ticketCode = await prisma.ticketCode.create({
-    data: {
-      eventId,
-      code: codeStr,
-      status: 'USED',
-      attendeeEmail: normalizedEmail,
-      attendeeName: name.trim(),
-    },
-  });
+  if (ticketTypeId) {
+    const ticketType = await prisma.ticketType.findFirst({
+      where: { id: ticketTypeId, eventId, active: true },
+      select: { id: true, capacity: true, quantitySold: true },
+    });
+    if (!ticketType) {
+      throw new BadRequestError('Invalid or inactive ticket type');
+    }
+    if (ticketType.capacity !== null && ticketType.quantitySold >= ticketType.capacity) {
+      throw new BadRequestError('Ticket type has reached capacity');
+    }
+  }
 
-  const registration = await prisma.registration.create({
-    data: {
-      eventId,
-      ticketCodeId: ticketCode.id,
-      attendeeEmail: normalizedEmail,
-      attendeeName: name.trim(),
-      phone: phone || null,
-      ticketTypeId: ticketTypeId || null,
-      source: 'PUBLIC_LINK',
-      status: 'CONFIRMED',
-    },
-  });
+  let registration;
+  try {
+    registration = await prisma.$transaction(async (tx) => {
+      const ticketCode = await tx.ticketCode.create({
+        data: {
+          eventId,
+          code: generateTicketCode(eventId),
+          status: 'USED',
+          attendeeEmail: normalizedEmail,
+          attendeeName: name.trim(),
+        },
+      });
+
+      return tx.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: ticketCode.id,
+          attendeeEmail: normalizedEmail,
+          attendeeName: name.trim(),
+          phone: phone || null,
+          ticketTypeId: ticketTypeId || null,
+          source: 'PUBLIC_LINK',
+          status: 'CONFIRMED',
+        },
+      });
+    });
+  } catch (error) {
+    if (error.code === 'P2002') {
+      throw new ConflictError('Attendee with this email is already registered for this event');
+    }
+    throw error;
+  }
 
   await sendNotification({
     recipient: normalizedEmail,

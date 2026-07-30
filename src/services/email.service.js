@@ -55,9 +55,11 @@ export async function getTransporter(forceEthereal = false) {
       host,
       port,
       auth: { user, pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
-    return cachedTransporter;
-  }
+    return cachedTransporter;  }
 
   const account = await getEtherealAccount();
   cachedTransporter = nodemailer.createTransport({
@@ -92,7 +94,8 @@ export async function verifySmtpConnection() {
 }
 
 export async function renderTemplate(templateName, variables = {}) {
-  const fileName = TEMPLATE_MAP[templateName] || (templateName.endsWith('.ejs') ? templateName : `${templateName}.ejs`);
+  const safeName = path.basename(templateName);
+  const fileName = TEMPLATE_MAP[templateName] || (safeName.endsWith('.ejs') ? safeName : `${safeName}.ejs`);
   const templatePath = path.join(templatesDir, fileName);
 
   try {
@@ -103,9 +106,7 @@ export async function renderTemplate(templateName, variables = {}) {
     });
     return html;
   } catch (error) {
-    logger.error({ err: error, templateName, templatePath }, 'Failed to render email template; using fallback HTML');
-    const appName = process.env.BREVO_SENDER_NAME || 'QPass';
-    return `<div style="font-family: Arial, sans-serif; padding: 20px;"><p>Notification from ${appName}</p><p>${variables.subject || ''}</p></div>`;
+    throw error;
   }
 }
 
@@ -126,14 +127,23 @@ async function sendWithRetry(transporter, mailOptions, maxAttempts = 3) {
   throw lastError;
 }
 
+/**
+ * Send an email with optional template rendering and retry logic.
+ * Does not throw on failure — returns { success: false, error } instead.
+ *
+ * @param {Object} options - Email options
+ * @param {string} options.to - Recipient email address
+ * @param {string} options.subject - Email subject line
+ * @param {string} [options.template] - Template name (key in TEMPLATE_MAP)
+ * @param {Object} [options.context] - Template variables
+ * @param {string} [options.text] - Plain text body
+ * @param {string} [options.html] - HTML body (overrides template)
+ * @param {number} [options.maxAttempts=3] - Max send retry attempts
+ * @returns {Promise<{success: boolean, messageId: string|null, info: Object|null, previewUrl: string|null, error?: string}>} Send result
+ */
 export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
-  }
-
-  let renderedHtml = html;
-  if (template && !renderedHtml) {
-    renderedHtml = await renderTemplate(template, { subject, ...context });
   }
 
   const fromEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@qpass.com';
@@ -142,6 +152,11 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
   const maskedTo = to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
 
   try {
+    let renderedHtml = html;
+    if (template && !renderedHtml) {
+      renderedHtml = await renderTemplate(template, { ...context, subject });
+    }
+
     const transporter = await getTransporter();
 
     const mailOptions = {
