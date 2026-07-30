@@ -4,16 +4,19 @@ import {
   validateRow,
   importRegistrations,
   registerPublic,
+  processImportFile,
 } from '../import.service.js';
 import prisma from '../../../database/index.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/error.js';
+import { BadRequestError, ConflictError, NotFoundError, ForbiddenError } from '../../../utils/error.js';
 import * as notificationService from '../../../services/notification.service.js';
+import { parseFile } from '../../../utils/parsers/index.js';
 
 vi.mock('../../../database/index.js', () => {
   const mockPrisma = {
     $transaction: vi.fn((cb) => cb(mockPrisma)),
     event: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
     },
     importBatch: {
       create: vi.fn(),
@@ -26,15 +29,30 @@ vi.mock('../../../database/index.js', () => {
     },
     ticketType: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    user: {
+      findUnique: vi.fn(),
     },
     registration: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
     },
+    qrToken: {
+      create: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
+    },
   };
   return { default: mockPrisma };
 });
+
+vi.mock('../../../utils/parsers/index.js', () => ({
+  parseFile: vi.fn(),
+}));
 
 vi.mock('../../../services/notification.service.js', () => ({
   sendNotification: vi.fn().mockResolvedValue({ success: true }),
@@ -201,6 +219,214 @@ describe('Import & Registration Service Edge Cases', () => {
       expect(res.status).toBe('FAILED');
       expect(res.successRows).toBe(0);
       expect(res.failedRows).toBe(2);
+    });
+  });
+
+  describe('processImportFile (Full Import Pipeline)', () => {
+    const eventId = 'event-uuid-1';
+    const uploadedById = 'admin-uuid-1';
+    const defaultEvent = { id: eventId, title: 'Tech Conf', endTime: new Date('2026-12-31'), ownerId: uploadedById, deletedAt: null };
+    const fileBuffer = Buffer.from('name,email\nAlice,alice@example.com\nBob,bob@example.com', 'utf8');
+    const filename = 'attendees.csv';
+
+    beforeEach(() => {
+      prisma.event.findUnique.mockResolvedValue(defaultEvent);
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1', eventId });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([]);
+      prisma.registration.create.mockImplementation(async ({ data }) => ({ id: 'reg-new', ...data }));
+      prisma.ticketCode.create.mockResolvedValue({ id: 'tc-1' });
+      prisma.qrToken.create.mockResolvedValue({ id: 'qt-1' });
+      prisma.ticketType.findMany.mockResolvedValue([]);
+      prisma.ticketType.update.mockResolvedValue({});
+      prisma.user.findUnique.mockResolvedValue({ email: 'organizer@example.com' });
+      prisma.$transaction.mockImplementation(async (cb) => cb(prisma));
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com' },
+          { sourceRow: 3, name: 'Bob', email: 'bob@example.com' },
+        ],
+        errors: [],
+      });
+    });
+
+    it('should throw ForbiddenError when user does not own the event', async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...defaultEvent, ownerId: 'other-user' });
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('should throw NotFoundError when event does not exist', async () => {
+      prisma.event.findUnique.mockResolvedValue(null);
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw NotFoundError when event is soft-deleted', async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...defaultEvent, deletedAt: new Date() });
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should store parse errors in batch errorReport', async () => {
+      parseFile.mockResolvedValue({
+        rows: [],
+        errors: [{ row: 1, error: 'Invalid format at row 1' }],
+      });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(prisma.importBatch.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            errorReport: [{ row: 1, error: 'Invalid format at row 1' }],
+          }),
+        })
+      );
+      expect(result.status).toBe('FAILED');
+    });
+
+    it('should reject rows with validation errors and report them', async () => {
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com' },
+          { sourceRow: 3, name: '', email: 'bob@example.com' },
+        ],
+        errors: [],
+      });
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(1);
+      expect(result.failedRows).toBe(1);
+      expect(result.errorReport).toHaveLength(1);
+      expect(result.errorReport[0].error).toBe('Attendee name is required');
+    });
+
+    it('should reject rows whose email already exists in the event', async () => {
+      prisma.registration.findMany.mockResolvedValue([{ attendeeEmail: 'alice@example.com' }]);
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(1);
+      expect(result.failedRows).toBe(1);
+      expect(result.errorReport[0].error).toBe('Attendee is already registered for this event');
+    });
+
+    it('should reject rows with invalid ticket type', async () => {
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-invalid' },
+        ],
+        errors: [],
+      });
+      prisma.ticketType.findMany.mockResolvedValue([{ id: 'tt-valid', capacity: null, quantitySold: 0 }]);
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(0);
+      expect(result.failedRows).toBe(1);
+      expect(result.errorReport[0].error).toBe('Invalid or inactive ticket type');
+    });
+
+    it('should reject rows when ticket type has reached capacity', async () => {
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-full' },
+        ],
+        errors: [],
+      });
+      prisma.ticketType.findMany.mockResolvedValue([{ id: 'tt-full', capacity: 10, quantitySold: 10 }]);
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(0);
+      expect(result.failedRows).toBe(1);
+      expect(result.errorReport[0].error).toBe('Ticket type has reached capacity');
+    });
+
+    it('should create ticketCode, registration, and qrToken for each valid row', async () => {
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(2);
+      expect(result.failedRows).toBe(0);
+      expect(result.status).toBe('COMPLETED');
+      expect(prisma.ticketCode.create).toHaveBeenCalledTimes(2);
+      expect(prisma.registration.create).toHaveBeenCalledTimes(2);
+      expect(prisma.qrToken.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should process rows in batches of 50', async () => {
+      const manyRows = Array.from({ length: 120 }, (_, i) => ({
+        sourceRow: i + 2,
+        name: `User ${i + 1}`,
+        email: `user${i + 1}@example.com`,
+      }));
+      parseFile.mockResolvedValue({ rows: manyRows, errors: [] });
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(120);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle transaction failures and continue with remaining batches', async () => {
+      prisma.$transaction
+        .mockRejectedValueOnce(new Error('DB timeout'))
+        .mockImplementationOnce(async (cb) => cb(prisma));
+      const manyRows = Array.from({ length: 60 }, (_, i) => ({
+        sourceRow: i + 2,
+        name: `User ${i + 1}`,
+        email: `user${i + 1}@example.com`,
+      }));
+      parseFile.mockResolvedValue({ rows: manyRows, errors: [] });
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(10);
+      expect(result.failedRows).toBe(50);
+      expect(result.errorReport.filter((e) => e.error === 'Database error during batch processing')).toHaveLength(50);
+    });
+
+    it('should skip sending notification when sendEmails is false', async () => {
+      await processImportFile({ eventId, uploadedById, fileBuffer, filename, sendEmails: false });
+      expect(notificationService.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('should send notification with import summary when sendEmails is true', async () => {
+      await processImportFile({ eventId, uploadedById, fileBuffer, filename, sendEmails: true });
+      expect(notificationService.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipient: 'organizer@example.com',
+          subject: expect.stringContaining('Import Complete'),
+          template: 'import-summary',
+          eventId,
+          context: expect.objectContaining({ successRows: 2, failedRows: 0 }),
+        })
+      );
+    });
+    it('should not fail when notification fails (fire-and-forget)', async () => {
+      notificationService.sendNotification.mockRejectedValueOnce(new Error('SMTP error'));
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).resolves.toBeDefined();
+    });
+
+    it('should create an audit log entry on completion', async () => {
+      await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorId: uploadedById,
+          action: 'IMPORT',
+          entity: 'ImportBatch',
+        }),
+      });
+    });
+
+    it('should not throw when audit log creation fails', async () => {
+      prisma.auditLog.create.mockRejectedValueOnce(new Error('DB error'));
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).resolves.toBeDefined();
+    });
+
+    it('should compute final status as FAILED when zero rows succeed', async () => {
+      parseFile.mockResolvedValue({
+        rows: [{ sourceRow: 2, name: '', email: '' }],
+        errors: [],
+      });
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.status).toBe('FAILED');
+      expect(result.successRows).toBe(0);
     });
   });
 
