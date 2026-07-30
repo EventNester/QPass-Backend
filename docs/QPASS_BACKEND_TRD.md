@@ -4,7 +4,6 @@
 |-------|-------|
 | **Product** | QPass QR Code-Based Event Attendance & Ticketing System |
 | **Stack** | Node.js 22, Express 5, Prisma ORM, PostgreSQL, Redis, Socket.IO, Zod, Vitest, Nodemailer |
-| **Payment** | Paystack TEST MODE |
 | **Timebox** | 2-week MVP |
 | **Date** | July 2026 |
 | **Authors** | Crosstrack Group 13 |
@@ -13,13 +12,13 @@
 
 ## 1. Executive Summary
 
-QPass is an event registration, ticketing, payment, and attendance intelligence platform that enables event organizers to create, manage, verify, and analyze events from a single platform. The backend uses Node.js 22, Express 5, Prisma ORM with PostgreSQL, Redis for distributed locking, Socket.IO for real-time updates, and Paystack for payment processing.
+QPass is an event registration, ticketing, and attendance intelligence platform that enables event organizers to create, manage, verify, and analyze events from a single platform. The backend uses Node.js 22, Express 5, Prisma ORM with PostgreSQL, Redis for distributed locking, Socket.IO for real-time updates.
 
 > **Core flow:** Organizer creates event → attendees import or self-register → unique QR credential issued → staff scan QR on event day → duplicate blocked → organizers see/export attendance data.
 
-**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration (free + paid), QR code generation/scanning with duplicate detection, Paystack test payments, SMTP email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
+**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration, QR code generation/scanning with duplicate detection, SMTP email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
 
-**Deferred:** Full KYC, OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
+**Deferred (Phase 2):** Payment processing (Paystack integration, paid registration, webhooks), full KYC, OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
 
 ---
 
@@ -64,16 +63,16 @@ Become Africa's most trusted attendance verification & ticket management platfor
 | Event CRUD + publish | Owner-only. Slug-based public URLs. DRAFT → PUBLISHED → ACTIVE → COMPLETED/CANCELLED. |
 | TicketType management | Per-event categories (VIP, Regular, Student). Price in naira, optional capacity. |
 | Attendee import (CSV/XLSX/PDF/DOCX) | Row validation, batch tracking, per-row error reporting. 5MB max. Synchronous (<1000 rows). |
-| Public registration | Slug-based link. Free → instant confirmation + QR. Paid → Paystack → QR. |
+| Public registration | Slug-based link. Instant confirmation + QR. |
 | QR code generation | One per registration. SHA-256 hashed server-side. Raw token delivered to attendee. Expires event end + 24h. |
-| Paystack test payments | Initialize, verify, webhook (idempotent). Amounts in naira. Server-side amount verification. |
-| SMTP email | 5 templates: registration, QR, payment, staff invite, password reset. Non-blocking. |
+| Payment processing (Phase 2) | Paystack integration, paid registration, webhooks. Deferred from MVP. |
+| SMTP email | 4 templates: registration, QR, staff invite, password reset. Non-blocking. |
 | QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by organizer only. |
 | Staff management | Assign/remove staff. Email invitation for new staff users. |
 | Dashboard stats | Registrations, check-ins, no-shows, capacity utilization, ticket breakdown. Real-time via Socket.IO. |
 | CSV export | Attendance and registration lists as downloadable CSV/PDF. |
 | PDF ticket downloads | Server-generated PDF with event details, QR code, attendee info, confirmation code. |
-| Audit logging | Event CRUD, registration, QR issue, scan, payment, staff actions. |
+| Audit logging | Event CRUD, registration, QR issue, scan, staff actions. |
 | Health check + Swagger | `GET /health` with DB/Redis status. Auto-generated OpenAPI docs. |
 
 ### 3.2 Deferred (Post-MVP)
@@ -91,8 +90,8 @@ Clients (Organizer Dashboard / Attendee Portal / Staff Scanner)
     → Express 5 (Helmet, CORS, Rate-limit, JSON, pino-http)
         → Router (/health, /api/v1/*, /api-docs)
             → Middleware (validate Zod → requireAuth → requireRole)
-                → Module Layer (auth, events, tickets, registrations, checkins, payments, staff, notifications, reports, admin, pdf)
-                    → Prisma/PostgreSQL | Redis | Integrations (Paystack, SMTP, Sentry) | Socket.IO
+                    → Module Layer (auth, events, tickets, registrations, checkins, staff, notifications, reports, admin, pdf)
+                    → Prisma/PostgreSQL | Redis | Integrations (SMTP, Sentry) | Socket.IO
 ```
 
 ### 4.2 Module Convention
@@ -120,7 +119,7 @@ Every module under `src/modules/<module>/` follows:
 | Auth | jsonwebtoken + bcryptjs | JWT tokens, password hashing |
 | PDF/QR | pdfkit 0.19 + qrcode 1.5 | Ticket PDF, QR images |
 | File Parsing | csv-parse, xlsx, pdf-parse, mammoth | Import (CSV/XLSX/PDF/DOCX) |
-| HTTP Client | axios 1.x | Paystack API calls |
+| HTTP Client | axios 1.x | External API calls |
 | Email | Nodemailer (SMTP) | Transactional email |
 | Logging | pino + pino-http | Structured JSON logging |
 | Security | helmet 8 + express-rate-limit 7 | Headers, rate limiting |
@@ -156,7 +155,6 @@ src/
 │   ├── tickets/                        # controller, service, routes, schema, qr.service
 │   ├── registrations/                  # controller, service, routes, schema, import.service, public.service
 │   ├── checkins/                       # controller, service, routes, schema, duplicate-detector
-│   ├── payments/                       # controller, service, routes, paystack.service, webhook.handler
 │   ├── staff/                          # controller, service, routes, schema
 │   ├── notifications/                  # email.service, notification.service, templates/*.html
 │   ├── reports/                        # dashboard.service, export.service
@@ -164,7 +162,6 @@ src/
 │   └── pdf/                            # ticket-pdf.service (pdfkit)
 ├── integrations/
 │   ├── email/                          # smtp.js, templates.js
-│   ├── paystack/                       # client.js, webhook.js
 │   └── sentry/                         # client.js
 ├── realtime/                           # socket.js, rooms.js
 ├── routes/                             # index.js, v1.js, health.js
@@ -188,30 +185,24 @@ enum EventStatus    { DRAFT  PUBLISHED  ACTIVE  COMPLETED  CANCELLED }
 enum TicketCodeStatus { UNUSED  USED  REVOKED }
 enum RegistrationStatus { PENDING  CONFIRMED  CANCELLED }
 enum CheckInResult  { VALID  DUPLICATE  INVALID }
-enum PaymentStatus  { PENDING  SUCCESS  FAILED  REFUNDED }
-enum InvoiceStatus  { PENDING  PAID  OVERDUE  CANCELLED }
 enum NotificationStatus { PENDING  SENT  FAILED  READ }
 ```
 
 ### 5.2 Models
 
-**User** - id (uuid), name, email (unique), passwordHash (bcrypt 12), role (default ATTENDEE, server-side only), status (ACTIVE), createdAt, updatedAt, deletedAt (soft delete). Relations: events, staffAssignments, payments, auditLogs, checkins.
+**User** - id (uuid), name, email (unique), passwordHash (bcrypt 12), role (default ATTENDEE, server-side only), status (ACTIVE), createdAt, updatedAt, deletedAt (soft delete). Relations: events, staffAssignments, auditLogs, checkins.
 
-**Event** - id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), isPaid (false), capacity?, currency ("NGN"), registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, payments, invoices, ticketCodes.
+**Event** - id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), capacity?, registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, ticketCodes.
 
 **TicketType** - id, eventId (FK→Event), name, description?, price (naira, 0=free), capacity?, quantitySold (0), active (true), sortOrder (0), createdAt, updatedAt. Index: [eventId]. Relations: event, registrations.
 
-**Registration** - id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), paymentStatus (PENDING), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (PENDING), createdAt, updatedAt. Unique: [eventId, ticketCodeId]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins.
+**Registration** - id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (CONFIRMED), createdAt, updatedAt. Unique: [eventId, ticketCodeId]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins.
 
 **TicketCode** - id, eventId (FK→Event), code, status (UNUSED), usedAt?, attendeeEmail?, attendeeName?, createdAt. Unique: [eventId, code]. Indexes: [eventId], [code].
 
 **QrToken** - id, registrationId (unique, FK→Registration), tokenHash (unique, SHA-256), issuedAt, expiresAt (event.endTime + 24h), revokedAt?, scanCount (0). Index: [tokenHash]. Only hash stored; raw token delivered to attendee.
 
 **CheckIn** - id, eventId (FK→Event), registrationId (FK→Registration), staffId (FK→User), scannedAt, result (VALID/DUPLICATE/INVALID), deviceInfo?, ipAddress?. Unique: [eventId, registrationId]. Indexes: [eventId], [registrationId].
-
-**Payment** - id, eventId (FK→Event), userId (FK→User), registrationId? (unique, FK→Registration), paystackReference (unique), amount (naira), currency ("NGN"), status (PENDING), gateway ("PAYSTACK"), metadata? (Json), verifiedAt?, createdAt, paidAt?. Indexes: [eventId], [userId], [paystackReference].
-
-**Invoice** - id, eventId (FK→Event), paymentId (unique, FK→Payment), invoiceNumber (unique), amount, issueDate, dueDate, status (PENDING).
 
 **Notification** - id, recipient, channel, template, status (PENDING), userId? (FK→User), eventId? (FK→Event), registrationId? (FK→Registration), providerMessageId?, failureReason?, sentAt?, readAt?, createdAt. Index: [recipient]. Failures never block core actions.
 
@@ -250,9 +241,7 @@ enum NotificationStatus { PENDING  SENT  FAILED  READ }
 1. Organizer publishes event → slug generated, status → PUBLISHED
 2. Attendee visits `/api/v1/public/events/{slug}` → sees event details + ticket types
 3. Submits: `name`, `email`, `phone?`, `ticketTypeId`, `customFields?`
-4. **Free:** Confirm immediately → Registration (CONFIRMED) → TicketCode → QR → email
-5. **Paid:** Registration (PENDING) + Payment (PENDING) → Paystack `/transaction/initialize` → return `{ registration, paymentUrl }`
-6. **Webhook (`charge.success`):** Verify HMAC-SHA512 → verify transaction → update Payment (SUCCESS) → update Registration (CONFIRMED) → create TicketCode → QR → email → audit → Socket.IO
+4. Registration (CONFIRMED) → TicketCode → QR → email → audit
 
 ---
 
@@ -306,7 +295,7 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
 | 20 | GET | `/public/events/:slug` | Public | Event details + ticket types |
-| 21 | POST | `/public/events/:slug/register` | Public | Register. No account required. Free → instant. Paid → `{ registration, paymentUrl }`. |
+| 21 | POST | `/public/events/:slug/register` | Public | Register. No account required. Instant confirmation + QR. |
 
 ### 7.6 Tickets
 
@@ -335,14 +324,7 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 
 Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | NOT_AUTHORIZED`. All HTTP 200 except NOT_AUTHORIZED (403).
 
-### 7.9 Payments
-
-| # | Method | Endpoint | Auth | Purpose |
-|---|--------|----------|------|---------|
-| 32 | POST | `/payments/webhook` | Paystack signature | Callback (idempotent) |
-| 33 | POST | `/payments/verify/:reference` | Public | Manual verify (fallback) |
-
-### 7.10 Reports & Dashboard
+### 7.9 Reports & Dashboard
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
@@ -387,24 +369,7 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 
 ---
 
-## 9. Payment Integration (Paystack TEST MODE)
-
-```env
-PAYSTACK_SECRET_KEY=sk_test_xxx
-PAYSTACK_PUBLIC_KEY=pk_test_xxx
-PAYSTACK_WEBHOOK_SECRET=whsec_xxx
-```
-
-**Flow:**
-1. **Initialize:** `POST /transaction/initialize` → `{ email, amount (naira), currency: "NGN", callback_url, metadata }` → `{ authorization_url, access_code, reference }`
-2. **Webhook (`charge.success`):** Verify HMAC-SHA512 → `GET /transaction/verify/{reference}` → if success: update Payment (SUCCESS, paidAt, verifiedAt) → update Registration (CONFIRMED) → create TicketCode → QR → email → audit → Socket.IO
-3. **Manual verify:** `POST /payments/verify/:reference` - fallback for webhook failures
-
-**Rules:** Amounts in naira. **Never trust client amount**; always pull from `TicketType.price`. Webhook must be idempotent. Use raw request body for HMAC verification.
-
----
-
-## 10. Email Service (SMTP via Nodemailer)
+## 9. Email Service (SMTP via Nodemailer)
 
 ```env
 SMTP_HOST=smtp.gmail.com  |  SMTP_PORT=587  |  SMTP_SECURE=false
@@ -414,9 +379,8 @@ SMTP_FROM=QPass <noreply@qpass.com>
 
 | Template | Trigger | Subject |
 |----------|---------|---------|
-| `registration-confirmed.html` | Free reg / imported | Registration Confirmed — {eventTitle} |
+| `registration-confirmed.html` | Registration confirmed | Registration Confirmed — {eventTitle} |
 | `qr-generated.html` | QR issued | Your QR Ticket — {eventTitle} |
-| `payment-success.html` | Payment verified | Payment Confirmed — {eventTitle} |
 | `staff-invitation.html` | Staff assigned | You're Invited as Staff — {eventTitle} |
 | `password-reset.html` | Reset requested | Reset Your QPass Password |
 
@@ -424,7 +388,9 @@ SMTP_FROM=QPass <noreply@qpass.com>
 
 ---
 
-## 11. PDF Ticket Downloads
+## 10. PDF Ticket Downloads
+
+> **Note:** Payment status is not included in MVP — all tickets are confirmed on registration.
 
 `GET /tickets/:ticketId/download`; generated on-demand via `pdfkit`.
 
@@ -432,7 +398,7 @@ SMTP_FROM=QPass <noreply@qpass.com>
 
 ---
 
-## 12. PDF/DOCX Attendee File Parsing
+## 11. PDF/DOCX Attendee File Parsing
 
 | Format | Library | Method |
 |--------|---------|--------|
@@ -445,7 +411,7 @@ SMTP_FROM=QPass <noreply@qpass.com>
 
 ---
 
-## 13. Real-time System (Socket.IO)
+## 12. Real-time System (Socket.IO)
 
 Attached to HTTP server in `server.js`. CORS via `SOCKET_CORS_ORIGIN`.
 
@@ -458,7 +424,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 ---
 
-## 14. Security
+## 13. Security
 
 | Concern | Implementation |
 |---------|---------------|
@@ -467,20 +433,19 @@ Client auth: JWT in handshake auth header, validated server-side.
 | Input | Zod schemas every endpoint. File type + size (5MB, CSV/XLSX/PDF/DOCX). |
 | PII | Name, email, phone, metadata only. No PII in QR payload. No public attendee list. |
 | QR | Opaque random token, SHA-256 hashed, event-bound, one-time use, expires event+24h. |
-| Payment | HMAC-SHA512 webhook verify. Server-side transaction verify. Never trust client amount. |
 | Audit | All key actions: actor (nullable for webhooks), entity, ID, before/after snapshots. |
 | Rate limit | Global: 100/15min. Auth: 5/15min. Health excluded. |
 | Transport | HTTPS production. Helmet headers. Generic error messages. Prisma parameterized queries. |
 
 ---
 
-## 15. Implementation Plan
+## 14. Implementation Plan
 
-### Phase 1: Foundation (Days 1–3) — Auth + Events + Ticket Types
+### Phase 1: Foundation (Days 1–3); Auth + Events + Ticket Types
 
 | Task | Details |
 |------|---------|
-| Schema migration | New enums (RegistrationMode, RegistrationSource), new fields on User/Event/Registration/Payment/Notification/AuditLog, new models (TicketType, ImportBatch) |
+| Schema migration | New enums (RegistrationMode, RegistrationSource), new fields on User/Event/Registration/Notification/AuditLog, new models (TicketType, ImportBatch) |
 | Auth module | Register, login, refresh, logout, password reset. JWT + bcrypt + Redis blacklist. `requireAuth` middleware. Strip `role` from input, default ATTENDEE, rate limit, generic errors. |
 | Event CRUD | Create (DRAFT), list (paginated, filter by status), get, edit, publish (slug), cancel. Ownership enforcement. |
 | TicketType CRUD | Create, list, edit, delete (only if no registrations). Per-event scoped. |
@@ -488,46 +453,39 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 **Exit:** Organizer can register/login, create/publish events, configure tickets. Swagger shows all endpoints.
 
-### Phase 2: Registration & QR (Days 4–7) — Both Flows + Import + Email
+### Phase 2: Registration & QR (Days 4–7); Both Flows + Import + Email
 
 | Task | Details |
 |------|---------|
 | File parsers | CSV (csv-parse), XLSX (xlsx), PDF (pdf-parse + table detection), DOCX (mammoth + table extraction) |
 | Import service | Row validation, ImportBatch tracking, registration + QR creation per row, error reporting |
-| Public registration | Slug lookup, free confirm, paid → Paystack initialize |
+| Public registration | Slug lookup, confirm registration, issue QR |
 | QR service | Token generation, SHA-256 hashing, image creation |
 | Ticket routes | View, list, PDF download (pdfkit) |
 | Email service | Nodemailer SMTP, 5 templates, Notification record tracking |
 | Upload middleware | Multer (CSV/XLSX/PDF/DOCX, 5MB) |
 | Staff management | Assign/remove, invite email for new users |
 
-**Exit:** Import works for all 4 formats. Public reg (free + paid) works. QR emailed. Tickets downloadable as PDF. Staff assignable.
+**Exit:** Import works for all 4 formats. Public registration works. QR emailed. Tickets downloadable as PDF. Staff assignable.
 
-### Phase 3: Payments & Check-in (Days 8–10) — Paystack + Scan + Real-time
+### Phase 3: Check-in, Reporting & Release (Days 8–14); Scan + Real-time + Stats + Deploy
 
 | Task | Details |
 |------|---------|
-| Paystack integration | Client (initialize, verify), webhook verifier (HMAC-SHA512), payment routes |
-| Webhook handler | Idempotent: verify → update Payment → update Registration → create QR → email → audit → Socket.IO |
 | Socket.IO | Server init, CORS, JWT auth, room management |
 | Enhance checkins | Staff auth check, Socket.IO emission on scan, undo endpoint |
-
-**Exit:** Paid flow end-to-end. All scan results correct. Dashboard real-time.
-
-### Phase 4: Reporting & Release (Days 11–14) — Stats + Tests + Deploy
-
-| Task | Details |
-|------|---------|
 | Dashboard + exports | Stats service, PDF/CSV export (attendance + registrations), audit log queries |
 | Seed + docs | Admin/organizer users, sample events, Swagger annotations |
-| Tests | Integration (auth, events, registrations, check-ins, payments), Unit (QR, import, Paystack, auth) |
+| Tests | Integration (auth, events, registrations, check-ins), Unit (QR, import, auth) |
 | Deploy | Render config, security pass, lint clean |
 
-**Exit:** Full demo. Tests pass. Lint clean. Deployed. Health 200.
+**Exit:** All scan results correct. Dashboard real-time. Tests pass. Lint clean. Deployed. Health 200.
+
+> **Phase 2 deferred:** Payment processing (Paystack integration, paid registration, webhooks) is deferred to a future phase. All registrations are confirmed immediately on registration.
 
 ---
 
-## 16. Testing
+## 15. Testing
 
 ### Unit Tests
 
@@ -536,7 +494,6 @@ Client auth: JWT in handshake auth header, validated server-side.
 | `auth.service` | Password hashing, token gen, refresh rotation, blacklist |
 | `qr.service` | Token gen, hash uniqueness, expiry |
 | `import.service` | Row validation, CSV/XLSX/PDF/DOCX parsing, duplicates, capacity |
-| `paystack.service` | Webhook signature, idempotent processing, amount validation |
 | `ticket-pdf.service` | PDF generation, QR embedding, content correctness |
 
 ### Integration Tests
@@ -545,9 +502,8 @@ Client auth: JWT in handshake auth header, validated server-side.
 |--------|-----------|
 | `auth` | Register → login → refresh → logout → password reset → unauthorized |
 | `events` | Create → edit → publish → list → cancel → unauthorized |
-| `registrations` | Free → paid → capacity → duplicate → CSV/PDF/DOCX import |
+| `registrations` | Registration → capacity → duplicate → CSV/PDF/DOCX import |
 | `checkins` | Valid → duplicate → wrong event → expired → unauthorized → undo |
-| `payments` | Initialize → webhook → idempotent → invalid signature → manual verify |
 
 ```bash
 npm run test:run       # All tests
@@ -555,11 +511,11 @@ npm run test:coverage  # With coverage
 npm run lint           # Lint check
 ```
 
-**Test env:** Separate PostgreSQL (`qpass_test`), Redis DB 1, Mailtrap/Ethereal for email, Paystack test keys.
+**Test env:** Separate PostgreSQL (`qpass_test`), Redis DB 1, Mailtrap/Ethereal for email.
 
 ---
 
-## 17. Deployment
+## 16. Deployment
 
 ### Docker
 
@@ -575,7 +531,6 @@ Build: `npm install && npx prisma migrate deploy && npx prisma generate`. Start:
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
 DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
-PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, PAYSTACK_WEBHOOK_SECRET,
 SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM,
 SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 ```
@@ -584,33 +539,32 @@ SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 
 1. `GET /health` → 200 with `{ database: "ok", redis: "ok" }`
 2. `/api-docs` loads Swagger UI
-3. Register → login → create event → test Paystack webhook → send test email
+3. Register → login → create event → send test email
 
 ---
 
-## 18. Acceptance Criteria
+## 17. Acceptance Criteria
 
 | # | Scenario | Criteria |
 |---|----------|----------|
 | 1 | Organizer creates event | Register → login → create (DRAFT) → edit → publish (slug generated) |
 | 2 | Closed import | Upload CSV/XLSX/PDF/DOCX → summary with success/fail → attendees appear → QR emailed → duplicates flagged |
-| 3 | Public free registration | Visit `/e/{slug}` → see event + tickets → register → CONFIRMED + QR email |
-| 4 | Public paid registration | Select paid ticket → Paystack test → confirmed, QR issued, email sent |
-| 5 | Staff check-in (VALID) | Assigned staff scans → VALID → name returned → dashboard updates |
-| 6 | Duplicate scan | Second scan → DUPLICATE → no new record |
-| 7 | Wrong event scan | QR from Event A at Event B → WRONG_EVENT |
-| 8 | Unauthorized staff | Non-assigned staff → 403 NOT_AUTHORIZED |
-| 9 | Dashboard stats | Correct counts. Real-time updates during event. |
-| 10 | CSV/PDF export | Attendance/registration CSV/PDF opens correctly |
-| 11 | PDF ticket download | PDF with QR, event details, ticket type |
-| 12 | Audit trail | All key actions logged with actor, entity, timestamp |
-| 13 | Email delivery | All emails via SMTP. Notification records track SENT/FAILED. |
-| 14 | Password reset | Request → email → link → new password → login works |
-| 15 | Health check | `GET /health` → 200 with DB + Redis status |
+| 3 | Public registration | Visit `/e/{slug}` → see event + tickets → register → CONFIRMED + QR email |
+| 4 | Staff check-in (VALID) | Assigned staff scans → VALID → name returned → dashboard updates |
+| 5 | Duplicate scan | Second scan → DUPLICATE → no new record |
+| 6 | Wrong event scan | QR from Event A at Event B → WRONG_EVENT |
+| 7 | Unauthorized staff | Non-assigned staff → 403 NOT_AUTHORIZED |
+| 8 | Dashboard stats | Correct counts. Real-time updates during event. |
+| 9 | CSV/PDF export | Attendance/registration CSV/PDF opens correctly |
+| 10 | PDF ticket download | PDF with QR, event details, ticket type |
+| 11 | Audit trail | All key actions logged with actor, entity, timestamp |
+| 12 | Email delivery | All emails via SMTP. Notification records track SENT/FAILED. |
+| 13 | Password reset | Request → email → link → new password → login works |
+| 14 | Health check | `GET /health` → 200 with DB + Redis status |
 
 ---
 
-## 19. Risk Mitigation
+## 18. Risk Mitigation
 
 | Risk | Mitigation |
 |------|-----------|
@@ -618,7 +572,6 @@ SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 | QR screenshot sharing | One-time use + revocation. Future: rotating/dynamic QR. |
 | Server downtime | Health checks, auto-restart, connection pooling. |
 | Camera failure | Manual lookup by name/email fallback. |
-| Webhook failure | Manual verify endpoint. Idempotent processing. |
 | File parsing failures | Row-level errors, partial imports, graceful degradation. |
 | Email failure | Non-blocking. Notification tracks failure. |
 
