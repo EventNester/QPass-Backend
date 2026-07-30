@@ -55,15 +55,15 @@ export const deleteTicketTypeController = async (req, res, next) => {
 export const downloadTicketController = async (req, res, next) => {
   try {
     const { ticketId } = req.params;
-    const doc = await generateTicketPdf(ticketId);
+    const userId = req.user.sub;
+    const doc = await generateTicketPdf(ticketId, userId);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
-    doc.pipe(res);
+    doc.on('error', next).pipe(res);
   } catch (error) {
     next(error);
   }
 };
-
 export const exportTicketsController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
@@ -72,7 +72,7 @@ export const exportTicketsController = async (req, res, next) => {
     const filename = `registrations-${eventId}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    stream.pipe(res);
+    stream.on('error', next).pipe(res);
   } catch (error) {
     next(error);
   }

@@ -32,18 +32,26 @@ vi.mock('../../../database/index.js', () => ({
     registration: {
       findUnique: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
 import { generateTicketPdf } from '../ticket-pdf.service.js';
 import prisma from '../../../database/index.js';
 import { qrService } from '../qr.service.js';
-import { NotFoundError } from '../../../utils/error.js';
+import { NotFoundError, ForbiddenError } from '../../../utils/error.js';
+
+const OWNER_USER = 'owner-user-id';
+const ATTENDEE_USER = 'attendee-user-id';
+const ATTENDEE_EMAIL = 'test@example.com';
+const STRANGER_USER = 'stranger-user-id';
 
 function buildMockRegistration(overrides = {}) {
   return {
     id: 'reg-1',
-    attendeeEmail: 'test@example.com',
+    attendeeEmail: ATTENDEE_EMAIL,
     attendeeName: overrides.attendeeName ?? 'Ada Lovelace',
     phone: '+2348012345678',
     status: 'CONFIRMED',
@@ -52,6 +60,8 @@ function buildMockRegistration(overrides = {}) {
     qrIssuedAt: new Date(),
     createdAt: new Date(),
     event: {
+      ownerId: OWNER_USER,
+      deletedAt: null,
       title: 'Tech Summit 2026',
       startTime: new Date('2026-08-15T09:00:00Z'),
       endTime: new Date('2026-08-15T17:00:00Z'),
@@ -77,19 +87,42 @@ describe('generateTicketPdf', () => {
     vi.clearAllMocks();
   });
 
-  it('should return a PDFDocument stream for a valid registration', async () => {
+  it('should return a PDFDocument stream for event owner', async () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration());
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
     expect(doc.end).toBeDefined();
     expect(doc.fontSize).toBeDefined();
   });
 
+  it('should return a PDFDocument stream for registration attendee', async () => {
+    prisma.registration.findUnique.mockResolvedValue(buildMockRegistration());
+    prisma.user.findUnique.mockResolvedValue({ id: ATTENDEE_USER, email: ATTENDEE_EMAIL });
+    vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
+
+    const doc = await generateTicketPdf('reg-1', ATTENDEE_USER);
+    expect(doc).toBeDefined();
+  });
+
   it('should throw NotFoundError when registration does not exist', async () => {
     prisma.registration.findUnique.mockResolvedValue(null);
-    await expect(generateTicketPdf('nonexistent')).rejects.toThrow(NotFoundError);
+    await expect(generateTicketPdf('nonexistent', OWNER_USER)).rejects.toThrow(NotFoundError);
+  });
+
+  it('should throw ForbiddenError for a stranger', async () => {
+    prisma.registration.findUnique.mockResolvedValue(buildMockRegistration());
+    prisma.user.findUnique.mockResolvedValue({ id: STRANGER_USER, email: 'stranger@evil.com' });
+
+    await expect(generateTicketPdf('reg-1', STRANGER_USER)).rejects.toThrow(ForbiddenError);
+  });
+
+  it('should throw ForbiddenError when user lookup fails', async () => {
+    prisma.registration.findUnique.mockResolvedValue(buildMockRegistration());
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(generateTicketPdf('reg-1', STRANGER_USER)).rejects.toThrow(ForbiddenError);
   });
 
   it('should handle long attendee names without error', async () => {
@@ -97,7 +130,7 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ attendeeName: longName }));
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
@@ -106,14 +139,14 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ attendeeName: specialName }));
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
   it('should handle missing qrToken gracefully (fallback text)', async () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ qrToken: null }));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
@@ -121,7 +154,7 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration());
     vi.spyOn(qrService, 'createQrImage').mockRejectedValue(new Error('QR generation failed'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
@@ -129,7 +162,7 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ phone: null }));
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
@@ -137,7 +170,7 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ ticketType: null }));
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 
@@ -145,7 +178,7 @@ describe('generateTicketPdf', () => {
     prisma.registration.findUnique.mockResolvedValue(buildMockRegistration({ confirmationCode: null }));
     vi.spyOn(qrService, 'createQrImage').mockResolvedValue(Buffer.from('mock-png'));
 
-    const doc = await generateTicketPdf('reg-1');
+    const doc = await generateTicketPdf('reg-1', OWNER_USER);
     expect(doc).toBeDefined();
   });
 });
