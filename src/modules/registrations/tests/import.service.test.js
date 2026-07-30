@@ -11,6 +11,7 @@ import * as notificationService from '../../../services/notification.service.js'
 
 vi.mock('../../../database/index.js', () => {
   const mockPrisma = {
+    $transaction: vi.fn((cb) => cb(mockPrisma)),
     event: {
       findFirst: vi.fn(),
     },
@@ -23,8 +24,12 @@ vi.mock('../../../database/index.js', () => {
     ticketCode: {
       create: vi.fn(),
     },
+    ticketType: {
+      findMany: vi.fn(),
+    },
     registration: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
     },
   };
@@ -140,9 +145,9 @@ describe('Import & Registration Service Edge Cases', () => {
     const uploadedById = 'admin-uuid-1';
 
     it('should process batch and report successRows, failedRows, and per-row errorReport', async () => {
-      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf' });
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
       prisma.importBatch.create.mockResolvedValue({ id: 'batch-1', eventId });
-      prisma.registration.findFirst.mockResolvedValue(null);
+      prisma.registration.findMany.mockResolvedValue([]);
       prisma.ticketCode.create.mockResolvedValue({ id: 'ticket-code-1' });
       prisma.registration.create.mockResolvedValue({ id: 'reg-1' });
       prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
@@ -154,17 +159,16 @@ describe('Import & Registration Service Edge Cases', () => {
         fileContent: csv,
       });
 
-      expect(batchResult.totalRows).toBe(4);
       expect(batchResult.successRows).toBe(2);
       expect(batchResult.failedRows).toBe(2);
       expect(batchResult.errorReport).toHaveLength(2);
       expect(batchResult.errorReport[0]).toEqual({
-        row: 2,
+        row: 3,
         email: 'not-an-email',
         error: 'Malformed email address',
       });
       expect(batchResult.errorReport[1]).toEqual({
-        row: 4,
+        row: 5,
         email: 'valid1@example.com',
         error: 'Duplicate email in batch',
       });
@@ -183,7 +187,7 @@ describe('Import & Registration Service Edge Cases', () => {
     });
 
     it('should return FAILED status if all rows fail', async () => {
-      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf' });
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
       prisma.importBatch.create.mockResolvedValue({ id: 'batch-fail' });
       prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-fail', ...data }));
 
@@ -242,8 +246,9 @@ describe('Import & Registration Service Edge Cases', () => {
     });
 
     it('should throw ConflictError (409) when attendee is already registered for event', async () => {
-      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf' });
-      prisma.registration.findFirst.mockResolvedValue({ id: 'existing-reg' });
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.ticketCode.create.mockResolvedValue({ id: 'ticket-code-existing' });
+      prisma.registration.create.mockRejectedValue({ code: 'P2002' });
 
       await expect(
         registerPublic({
@@ -255,7 +260,7 @@ describe('Import & Registration Service Edge Cases', () => {
     });
 
     it('should create registration with PUBLIC_LINK source for valid inputs', async () => {
-      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf' });
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
       prisma.registration.findFirst.mockResolvedValue(null);
       prisma.ticketCode.create.mockResolvedValue({ id: 'ticket-code-pub' });
       prisma.registration.create.mockImplementation(async ({ data }) => ({

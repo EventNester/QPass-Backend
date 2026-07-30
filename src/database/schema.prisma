@@ -226,7 +226,7 @@ model Registration {
   payment       Payment?
   notifications Notification[]
 
-  @@unique([eventId, ticketCodeId])
+  @@unique([eventId, attendeeEmail])
   @@index([eventId])
   @@index([attendeeEmail])
   @@map("registrations")

@@ -129,12 +129,12 @@ describe('Email Service', () => {
       expect(fakeTransporter.sendMail).toHaveBeenCalledTimes(3);
     });
 
-    test('should not crash on template rendering errors and return fallback HTML', async () => {
-      const html = await renderTemplate('non-existent-template', {
-        subject: 'Fallback Test',
-      });
-      expect(html).toContain('Notification from');
-      expect(html).toContain('Fallback Test');
+    test('should throw on template rendering errors (non-existent template)', async () => {
+      await expect(
+        renderTemplate('non-existent-template', {
+          subject: 'Fallback Test',
+        })
+      ).rejects.toThrow();
     });
   });
 

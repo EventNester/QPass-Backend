@@ -23,7 +23,6 @@ export class BadRequestError extends AppError {
   }
 }
 
-
 export class ConflictError extends AppError {
   constructor(message = msg.GENERAL.ALREADY_EXISTS) {
     super(message, 409);
