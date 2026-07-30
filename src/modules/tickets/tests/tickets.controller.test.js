@@ -81,6 +81,7 @@ describe('Tickets Controller Tests', () => {
       await getTicketTypesController(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
+      expect(responseUtils.success).not.toHaveBeenCalled();
     });
   });
 
@@ -103,6 +104,7 @@ describe('Tickets Controller Tests', () => {
       await updateTicketTypeController(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
+      expect(responseUtils.success).not.toHaveBeenCalled();
     });
   });
 
@@ -124,6 +126,7 @@ describe('Tickets Controller Tests', () => {
       await deleteTicketTypeController(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
+      expect(responseUtils.success).not.toHaveBeenCalled();
     });
   });
 });
