@@ -27,7 +27,6 @@ describe('Tickets API Integration Tests', () => {
         email: 'ticket-org@example.com',
         password: 'SecurePassword123',
       });
-
     organizerToken = orgReg.body.data.accessToken;
 
     const otherReg = await request(app)
@@ -37,7 +36,6 @@ describe('Tickets API Integration Tests', () => {
         email: 'other-user@example.com',
         password: 'SecurePassword123',
       });
-
     otherToken = otherReg.body.data.accessToken;
 
     const eventRes = await request(app)
@@ -50,22 +48,22 @@ describe('Tickets API Integration Tests', () => {
         startTime: futureDate,
         endTime: laterDate,
       });
-
     eventId = eventRes.body.data.id;
-  });
+  }, 30000);
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    try {
+      await cleanDatabase();
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   describe('POST /api/v1/events/:eventId/ticket-types', () => {
     it('should return 401 without auth', async () => {
       const response = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
-        .send({
-          name: 'VIP',
-          price: 5000,
-        });
+        .send({ name: 'VIP', price: 5000 });
 
       expect(response.status).toBe(401);
     });
@@ -84,10 +82,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'Free Ticket',
-          price: -100,
-        });
+        .send({ name: 'Free Ticket', price: -100 });
 
       expect(response.status).toBe(422);
       expect(response.body.status).toBe('error');
@@ -97,10 +92,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${otherToken}`)
-        .send({
-          name: 'VIP',
-          price: 5000,
-        });
+        .send({ name: 'VIP', price: 5000 });
 
       expect(response.status).toBe(403);
       expect(response.body.status).toBe('error');
@@ -110,12 +102,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'VIP',
-          description: 'VIP access',
-          price: 5000,
-          capacity: 100,
-        });
+        .send({ name: 'VIP', description: 'VIP access', price: 5000, capacity: 100 });
 
       expect(response.status).toBe(201);
       expect(response.body.status).toBe('success');
@@ -133,10 +120,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'Regular',
-          price: 0,
-        });
+        .send({ name: 'Regular', price: 0 });
 
       expect(response.status).toBe(201);
       expect(response.body.data.name).toBe('Regular');
@@ -148,10 +132,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .post('/api/v1/events/00000000-0000-0000-0000-000000000000/ticket-types')
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'Ghost Ticket',
-          price: 100,
-        });
+        .send({ name: 'Ghost Ticket', price: 100 });
 
       expect(response.status).toBe(404);
     });
@@ -165,7 +146,7 @@ describe('Tickets API Integration Tests', () => {
       expect(response.status).toBe(401);
     });
 
-    it('should return 200 with all ticket types', async () => {
+    it('should return 200 with all ticket types sorted by sortOrder', async () => {
       const response = await request(app)
         .get(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${organizerToken}`);
@@ -176,7 +157,16 @@ describe('Tickets API Integration Tests', () => {
       expect(response.body.data.length).toBeGreaterThanOrEqual(2);
       expect(response.body.data[0].name).toBeDefined();
       expect(response.body.data[0].price).toBeDefined();
-      expect(response.body.data[0].sortOrder).toBeLessThan(response.body.data[1].sortOrder);
+      expect(response.body.data[0].sortOrder).toBe(0);
+      expect(response.body.data[1].sortOrder).toBe(1);
+    });
+
+    it('should return 403 for non-owner', async () => {
+      const response = await request(app)
+        .get(`/api/v1/events/${eventId}/ticket-types`)
+        .set('Authorization', `Bearer ${otherToken}`);
+
+      expect(response.status).toBe(403);
     });
   });
 
@@ -185,11 +175,7 @@ describe('Tickets API Integration Tests', () => {
       const response = await request(app)
         .patch(`/api/v1/events/${eventId}/ticket-types/${ticketTypeId}`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'VVIP',
-          price: 10000,
-          capacity: 50,
-        });
+        .send({ name: 'VVIP', price: 10000, capacity: 50 });
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('success');
@@ -198,7 +184,7 @@ describe('Tickets API Integration Tests', () => {
       expect(response.body.data.capacity).toBe(50);
     });
 
-    it('should return 200 and update just capacity', async () => {
+    it('should return 200 and update just capacity while preserving other fields', async () => {
       const response = await request(app)
         .patch(`/api/v1/events/${eventId}/ticket-types/${ticketTypeId}`)
         .set('Authorization', `Bearer ${organizerToken}`)
@@ -207,6 +193,24 @@ describe('Tickets API Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body.data.capacity).toBe(75);
       expect(response.body.data.name).toBe('VVIP');
+    });
+
+    it('should return 422 for empty update payload', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/events/${eventId}/ticket-types/${ticketTypeId}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({});
+
+      expect(response.status).toBe(422);
+    });
+
+    it('should return 403 for non-owner', async () => {
+      const response = await request(app)
+        .patch(`/api/v1/events/${eventId}/ticket-types/${ticketTypeId}`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ name: 'Hacked' });
+
+      expect(response.status).toBe(403);
     });
 
     it('should return 404 for non-existent ticket type', async () => {
@@ -226,15 +230,11 @@ describe('Tickets API Integration Tests', () => {
       const res = await request(app)
         .post(`/api/v1/events/${eventId}/ticket-types`)
         .set('Authorization', `Bearer ${organizerToken}`)
-        .send({
-          name: 'Deletable',
-          price: 100,
-        });
-
+        .send({ name: 'Deletable', price: 100 });
       deletableTicketId = res.body.data.id;
     });
 
-    it('should return 200 and delete the ticket type (no registrations)', async () => {
+    it('should return 200 and delete the ticket type', async () => {
       const response = await request(app)
         .delete(`/api/v1/events/${eventId}/ticket-types/${deletableTicketId}`)
         .set('Authorization', `Bearer ${organizerToken}`);
@@ -256,6 +256,20 @@ describe('Tickets API Integration Tests', () => {
         .delete(`/api/v1/events/${eventId}/ticket-types/${ticketTypeId}`);
 
       expect(response.status).toBe(401);
+    });
+
+    it('should return 403 for non-owner', async () => {
+      const anotherRes = await request(app)
+        .post(`/api/v1/events/${eventId}/ticket-types`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ name: 'Temp', price: 100 });
+      const tempId = anotherRes.body.data.id;
+
+      const response = await request(app)
+        .delete(`/api/v1/events/${eventId}/ticket-types/${tempId}`)
+        .set('Authorization', `Bearer ${otherToken}`);
+
+      expect(response.status).toBe(403);
     });
   });
 });
