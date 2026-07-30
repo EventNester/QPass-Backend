@@ -97,7 +97,6 @@ describe('Event Tickets (Registrations) API Integration Tests', () => {
         .get(`/api/v1/events/${eventId}/tickets`)
         .set('Authorization', `Bearer ${organizerToken}`);
       
-      if (response.status !== 200) console.error("List tickets error:", response.body);
       expect(response.status).toBe(200);
       expect(response.body.data.registrations.length).toBe(1);
       expect(response.body.data.registrations[0].attendeeName).toBe('John Doe');

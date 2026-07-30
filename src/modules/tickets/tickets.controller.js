@@ -83,7 +83,7 @@ export const exportTicketsController = async (req, res, next) => {
     
     const { contentType, data, extension } = await exportEventTickets(eventId, userId, format);
     
-    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Type", contentType.includes("csv") ? "text/csv; charset=utf-8" : contentType);
     res.setHeader("Content-Disposition", `attachment; filename="tickets-export.${extension}"`);
     return res.send(data);
   } catch (error) {

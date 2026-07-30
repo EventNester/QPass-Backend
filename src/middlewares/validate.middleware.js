@@ -36,10 +36,7 @@ export const validateParams = (schema) => (req, res, next) => {
 export const validateQuery = (schema) => (req, res, next) => {
   try {
     const validated = schema.parse(req.query || {});
-    for (const key in req.query) {
-      delete req.query[key];
-    }
-    Object.assign(req.query, validated);
+    req.query = validated;
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {

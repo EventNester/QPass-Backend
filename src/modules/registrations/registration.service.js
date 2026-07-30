@@ -53,8 +53,8 @@ export async function getRegistrationByEmail(eventId, email) {
  */
 const MAX_PAGE_SIZE = 100;
 
-export async function listRegistrationsByEvent(eventId, page = 1, limit = 20, filters = {}) {
-  const take = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(limit) || 20));
+export async function listRegistrationsByEvent(eventId, page = 1, limit = 20, filters = {}, unbounded = false) {
+  const take = unbounded ? Math.max(1, Number(limit) || 20) : Math.min(MAX_PAGE_SIZE, Math.max(1, Number(limit) || 20));
   const currentPage = Math.max(1, Number(page) || 1);
   const skip = (currentPage - 1) * take;
 

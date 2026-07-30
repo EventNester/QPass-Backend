@@ -1,5 +1,5 @@
 import prisma from "../../database/index.js";
-import { NotFoundError, ForbiddenError, ConflictError } from "../../utils/error.js";
+import { NotFoundError, ForbiddenError, ConflictError, BadRequestError } from "../../utils/error.js";
 import { systemMessages } from "../../config/index.js";
 
 const msg = systemMessages.ERROR;
@@ -119,7 +119,6 @@ export async function getTicketDetails(ticketId, userId) {
 
   const registration = await getRegistrationById(ticketId);
 
-  // Authorization: must be the event owner OR the attendee (email match)
   const event = await prisma.event.findUnique({
     where: { id: registration.eventId },
     select: { ownerId: true },
@@ -128,9 +127,15 @@ export async function getTicketDetails(ticketId, userId) {
   const isOwner = event && event.ownerId === userId;
   
   if (!isOwner) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || user.email.toLowerCase() !== registration.attendeeEmail.toLowerCase()) {
-      throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+    const isStaff = await prisma.eventStaffAssignment.findUnique({
+      where: { eventId_userId: { eventId: registration.eventId, userId } },
+    });
+
+    if (!isStaff) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.email.toLowerCase() !== registration.attendeeEmail.toLowerCase()) {
+        throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+      }
     }
   }
 
@@ -155,8 +160,7 @@ export async function exportEventTickets(eventId, userId, format) {
   await checkEventOwnership(eventId, userId);
 
   const { listRegistrationsByEvent } = await import("../registrations/registration.service.js");
-  // Fetch all registrations (up to a reasonable max like 10000 for export)
-  const { registrations } = await listRegistrationsByEvent(eventId, 1, 10000);
+  const { registrations } = await listRegistrationsByEvent(eventId, 1, 10000, {}, true);
   
   const event = await prisma.event.findUnique({ where: { id: eventId } });
 
@@ -186,5 +190,5 @@ export async function exportEventTickets(eventId, userId, format) {
     return { contentType: "application/pdf", data: pdfBuffer, extension: "pdf" };
   }
 
-  throw new Error("Unsupported format");
+  throw new BadRequestError("Unsupported export format");
 }
