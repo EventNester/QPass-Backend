@@ -14,11 +14,18 @@ export async function parseDocx(buffer, _filename) {
   const html = result.value;
 
   const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
-  const tableMatch = tableRegex.exec(html);
-
-  if (tableMatch) {
+  const allRows = [];
+  const allErrors = [];
+  let tableMatch;
+  while ((tableMatch = tableRegex.exec(html)) !== null) {
     const tableHtml = tableMatch[1];
-    return extractHtmlTableRows(tableHtml);
+    const tableRows = extractHtmlTableRows(tableHtml);
+    allRows.push(...tableRows.rows);
+    allErrors.push(...tableRows.errors);
+  }
+
+  if (allRows.length > 0 || allErrors.length > 0) {
+    return { rows: allRows, errors: allErrors };
   }
 
   const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
@@ -69,11 +76,11 @@ function extractHtmlTableRows(tableHtml) {
     const ticketType = headerMap.ticketType !== undefined ? cells[headerMap.ticketType] || '' : null;
 
     if (!name && !email) {
-      errors.push({ row: i + 2, field: null, error: 'Row is empty' });
+      errors.push({ row: i + 1, field: null, error: 'Row is empty' });
       continue;
     }
 
-    rows.push({ name, email, phone: phone || null, ticketType: ticketType || null });
+    rows.push({ sourceRow: i + 1, name, email, phone: phone || null, ticketType: ticketType || null });
   }
 
   return { rows, errors };
@@ -84,9 +91,23 @@ function extractCells(trHtml) {
   const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
   let cellMatch;
   while ((cellMatch = cellRegex.exec(trHtml)) !== null) {
-    cells.push(cellMatch[1].replace(/<[^>]+>/g, '').trim());
+    const raw = cellMatch[1].replace(/<[^>]+>/g, '').trim();
+    cells.push(decodeHtmlEntities(raw));
   }
   return cells;
+}
+
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(code))
+    .replace(/&nbsp;/g, ' ');
 }
 
 function parseDocxParagraphs(paragraphs) {
@@ -106,7 +127,7 @@ function parseDocxParagraphs(paragraphs) {
 
     const name = line.replace(emailRegex, '').replace(/[,;|]/g, '').trim();
 
-    rows.push({ name, email, phone: null, ticketType: null });
+    rows.push({ sourceRow: i + 1, name, email, phone: null, ticketType: null });
   }
 
   return { rows, errors };

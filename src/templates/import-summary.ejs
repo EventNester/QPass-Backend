@@ -44,11 +44,14 @@
       <% if (errors && errors.length > 0) { %>
       <div class="errors">
         <h4>Error Details</h4>
-        <% for (const err of errors) { %>
+        <% for (const err of errors.slice(0, 50)) { %>
         <div class="error-item">
           <strong>Row <%= err.row %>:</strong> <%= err.error %>
           <% if (err.email) { %>(<%= err.email %>)<% } %>
         </div>
+        <% } %>
+        <% if (errors.length > 50) { %>
+        <div class="error-item">…and <%= errors.length - 50 %> more. View the full report in the dashboard.</div>
         <% } %>
       </div>
       <% } %>

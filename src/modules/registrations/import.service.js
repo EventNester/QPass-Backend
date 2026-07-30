@@ -1,7 +1,7 @@
 import prisma from '../../database/index.js';
 import { logger } from '../../config/index.js';
 import crypto from 'crypto';
-import { BadRequestError, NotFoundError, ConflictError } from '../../utils/error.js';
+import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
 import { parseFile } from '../../utils/parsers/index.js';
 import { sendNotification } from '../../services/notification.service.js';
 
@@ -578,7 +578,11 @@ export async function processImportFile({
     throw new NotFoundError('Event not found');
   }
 
-  const parsed = await parseFile(fileBuffer, filename);
+  if (event.ownerId !== uploadedById) {
+    throw new ForbiddenError('You do not have access to this event');
+  }
+
+  const parsed = await parseFile(fileBuffer, filename, fileType);
 
   const { rows, errors: parseErrors } = parsed;
 
@@ -588,7 +592,7 @@ export async function processImportFile({
       uploadedById,
       originalFilename: filename,
       fileType: fileType || 'unknown',
-      totalRows: rows.length,
+      totalRows: rows.length + parseErrors.length,
       status: 'PROCESSING',
       errorReport: parseErrors.length > 0 ? parseErrors : null,
     },
@@ -599,20 +603,28 @@ export async function processImportFile({
   const validEntries = [];
   const BATCH_SIZE = 50;
 
-  for (let i = 0; i < rows.length; i++) {
-    const rowNumber = i + 2;
-    const row = rows[i];
-    const validation = validateRow(row, rowNumber, seenEmails);
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = row.sourceRow || (i + 2);
+      const validation = validateRow(row, rowNumber, seenEmails);
 
-    if (!validation.valid) {
-      validationErrors.push({
-        row: rowNumber,
-        email: validation.email,
-        error: validation.error,
-      });
-    } else {
-      validEntries.push({ rowNumber, validation });
+      if (!validation.valid) {
+        validationErrors.push({
+          row: rowNumber,
+          email: validation.email,
+          error: validation.error,
+        });
+      } else {
+        validEntries.push({ rowNumber, validation });
+      }
     }
+  } catch (error) {
+    await prisma.importBatch.update({
+      where: { id: batch.id },
+      data: { status: 'FAILED', completedAt: new Date() },
+    }).catch((err) => logger.error({ err, batchId: batch.id }, 'Failed to mark batch FAILED'));
+    throw error;
   }
 
   const existingEmailSet = new Set();
@@ -641,6 +653,7 @@ export async function processImportFile({
   }
 
   const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
+  const claimsByTicketType = new Map();
   if (ticketTypeIds.length > 0) {
     const validTicketTypes = await prisma.ticketType.findMany({
       where: { id: { in: ticketTypeIds }, eventId, active: true },
@@ -664,7 +677,8 @@ export async function processImportFile({
         });
         continue;
       }
-      if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+      const claimed = claimsByTicketType.get(ttId) || 0;
+      if (tt.capacity !== null && (tt.quantitySold + claimed) >= tt.capacity) {
         validationErrors.push({
           row: entry.rowNumber,
           email: entry.validation.email,
@@ -672,6 +686,7 @@ export async function processImportFile({
         });
         continue;
       }
+      claimsByTicketType.set(ttId, claimed + 1);
       filtered.push(entry);
     }
     toCreate.length = 0;
@@ -682,6 +697,7 @@ export async function processImportFile({
   let failedRows = parseErrors.length + validationErrors.length;
 
   const allErrors = [...parseErrors, ...validationErrors];
+  const issuedTokens = [];
 
   for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
     const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
@@ -689,6 +705,21 @@ export async function processImportFile({
     try {
       await prisma.$transaction(async (tx) => {
         for (const entry of currentBatch) {
+          const ttId = entry.validation.ticketTypeId;
+          if (ttId && claimsByTicketType.has(ttId)) {
+            const tt = await tx.ticketType.findUnique({
+              where: { id: ttId },
+              select: { id: true, capacity: true, quantitySold: true },
+            });
+            if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+              throw new Error('Ticket type has reached capacity');
+            }
+            await tx.ticketType.update({
+              where: { id: ttId },
+              data: { quantitySold: { increment: 1 } },
+            });
+          }
+
           const ticketCode = await tx.ticketCode.create({
             data: {
               eventId,
@@ -714,13 +745,15 @@ export async function processImportFile({
             },
           });
 
+          const rawToken = crypto.randomBytes(32).toString('hex');
           await tx.qrToken.create({
             data: {
               registrationId: registration.id,
-              tokenHash: crypto.createHash('sha256').update(crypto.randomBytes(32).toString('hex')).digest('hex'),
+              tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
               expiresAt: event.endTime,
             },
           });
+          issuedTokens.push({ registrationId: registration.id, rawToken });
         }
       });
 
@@ -752,13 +785,17 @@ export async function processImportFile({
   });
 
   if (sendEmails) {
+    const user = await prisma.user.findUnique({
+      where: { id: uploadedById },
+      select: { email: true },
+    });
     sendNotification({
-      recipient: event.title, // sent to organizer's notification context
+      recipient: user ? user.email : uploadedById,
       subject: `Import Complete: ${successRows} imported, ${failedRows} errors`,
       template: 'import-summary',
       context: {
         eventTitle: event.title,
-        totalRows: rows.length,
+        totalRows: rows.length + parseErrors.length,
         successRows,
         failedRows,
         errors: allErrors,
@@ -779,7 +816,7 @@ export async function processImportFile({
         entityId: updatedBatch.id,
         afterSnapshot: {
           eventId,
-          totalRows: rows.length,
+          totalRows: rows.length + parseErrors.length,
           successRows,
           failedRows,
           filename,

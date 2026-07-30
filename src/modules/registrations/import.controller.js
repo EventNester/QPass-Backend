@@ -1,20 +1,20 @@
 import { processImportFile, getImportBatchById, listImportBatchesByEvent } from './import.service.js';
 import { success } from '../../utils/response.js';
-import { ValidationError } from '../../utils/error.js';
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import prisma from '../../database/index.js';
+import { ForbiddenError } from '../../utils/error.js';
 
 export const importAttendeesController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
-
-    if (!UUID_REGEX.test(eventId)) {
-      throw new ValidationError('Invalid event ID format');
-    }
-
     const file = req.file;
-    if (!file) {
-      return res.status(400).json({ status: 'error', message: 'No file uploaded' });
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { ownerId: true },
+    });
+
+    if (!event || event.ownerId !== req.user.sub) {
+      throw new ForbiddenError('You do not have access to this event');
     }
 
     const result = await processImportFile({
@@ -43,13 +43,18 @@ export const getImportBatchController = async (req, res, next) => {
   try {
     const { eventId, batchId } = req.params;
 
-    if (!UUID_REGEX.test(eventId) || !UUID_REGEX.test(batchId)) {
-      throw new ValidationError('Invalid ID format');
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { ownerId: true },
+    });
+
+    if (!event || event.ownerId !== req.user.sub) {
+      throw new ForbiddenError('You do not have access to this event');
     }
 
     const batch = await getImportBatchById(batchId);
 
-    if (batch.eventId !== eventId) {
+    if (!batch || batch.eventId !== eventId) {
       return res.status(404).json({ status: 'error', message: 'Import batch not found for this event' });
     }
 
@@ -63,8 +68,13 @@ export const listImportBatchesController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
 
-    if (!UUID_REGEX.test(eventId)) {
-      throw new ValidationError('Invalid event ID format');
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { ownerId: true },
+    });
+
+    if (!event || event.ownerId !== req.user.sub) {
+      throw new ForbiddenError('You do not have access to this event');
     }
 
     const batches = await listImportBatchesByEvent(eventId);

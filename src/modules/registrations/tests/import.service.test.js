@@ -7,7 +7,7 @@ import {
   processImportFile,
 } from '../import.service.js';
 import prisma from '../../../database/index.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../../utils/error.js';
+import { BadRequestError, ConflictError, NotFoundError, ForbiddenError } from '../../../utils/error.js';
 import * as notificationService from '../../../services/notification.service.js';
 import { parseFile } from '../../../utils/parsers/index.js';
 
@@ -29,6 +29,11 @@ vi.mock('../../../database/index.js', () => {
     },
     ticketType: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    user: {
+      findUnique: vi.fn(),
     },
     registration: {
       findFirst: vi.fn(),
@@ -233,8 +238,23 @@ describe('Import & Registration Service Edge Cases', () => {
       prisma.ticketCode.create.mockResolvedValue({ id: 'tc-1' });
       prisma.qrToken.create.mockResolvedValue({ id: 'qt-1' });
       prisma.ticketType.findMany.mockResolvedValue([]);
+      prisma.ticketType.update.mockResolvedValue({});
+      prisma.user.findUnique.mockResolvedValue({ email: 'organizer@example.com' });
       prisma.$transaction.mockImplementation(async (cb) => cb(prisma));
-      parseFile.mockResolvedValue({ rows: [{ name: 'Alice', email: 'alice@example.com' }, { name: 'Bob', email: 'bob@example.com' }], errors: [] });
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com' },
+          { sourceRow: 3, name: 'Bob', email: 'bob@example.com' },
+        ],
+        errors: [],
+      });
+    });
+
+    it('should throw ForbiddenError when user does not own the event', async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...defaultEvent, ownerId: 'other-user' });
+      await expect(
+        processImportFile({ eventId, uploadedById, fileBuffer, filename })
+      ).rejects.toThrow(ForbiddenError);
     });
 
     it('should throw NotFoundError when event does not exist', async () => {
@@ -271,8 +291,8 @@ describe('Import & Registration Service Edge Cases', () => {
     it('should reject rows with validation errors and report them', async () => {
       parseFile.mockResolvedValue({
         rows: [
-          { name: 'Alice', email: 'alice@example.com' },
-          { name: '', email: 'bob@example.com' },
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com' },
+          { sourceRow: 3, name: '', email: 'bob@example.com' },
         ],
         errors: [],
       });
@@ -294,7 +314,7 @@ describe('Import & Registration Service Edge Cases', () => {
     it('should reject rows with invalid ticket type', async () => {
       parseFile.mockResolvedValue({
         rows: [
-          { name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-invalid' },
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-invalid' },
         ],
         errors: [],
       });
@@ -308,7 +328,7 @@ describe('Import & Registration Service Edge Cases', () => {
     it('should reject rows when ticket type has reached capacity', async () => {
       parseFile.mockResolvedValue({
         rows: [
-          { name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-full' },
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com', ticketTypeId: 'tt-full' },
         ],
         errors: [],
       });
@@ -331,6 +351,7 @@ describe('Import & Registration Service Edge Cases', () => {
 
     it('should process rows in batches of 50', async () => {
       const manyRows = Array.from({ length: 120 }, (_, i) => ({
+        sourceRow: i + 2,
         name: `User ${i + 1}`,
         email: `user${i + 1}@example.com`,
       }));
@@ -345,6 +366,7 @@ describe('Import & Registration Service Edge Cases', () => {
         .mockRejectedValueOnce(new Error('DB timeout'))
         .mockImplementationOnce(async (cb) => cb(prisma));
       const manyRows = Array.from({ length: 60 }, (_, i) => ({
+        sourceRow: i + 2,
         name: `User ${i + 1}`,
         email: `user${i + 1}@example.com`,
       }));
@@ -364,13 +386,14 @@ describe('Import & Registration Service Edge Cases', () => {
       await processImportFile({ eventId, uploadedById, fileBuffer, filename, sendEmails: true });
       expect(notificationService.sendNotification).toHaveBeenCalledWith(
         expect.objectContaining({
+          recipient: 'organizer@example.com',
           subject: expect.stringContaining('Import Complete'),
           template: 'import-summary',
           eventId,
+          context: expect.objectContaining({ successRows: 2, failedRows: 0 }),
         })
       );
     });
-
     it('should not fail when notification fails (fire-and-forget)', async () => {
       notificationService.sendNotification.mockRejectedValueOnce(new Error('SMTP error'));
       await expect(
@@ -398,7 +421,7 @@ describe('Import & Registration Service Edge Cases', () => {
 
     it('should compute final status as FAILED when zero rows succeed', async () => {
       parseFile.mockResolvedValue({
-        rows: [{ name: '', email: '' }],
+        rows: [{ sourceRow: 2, name: '', email: '' }],
         errors: [],
       });
       const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
