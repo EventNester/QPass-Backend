@@ -82,43 +82,63 @@ export async function generateTicketListPdf(registrations, event) {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
 
+      const margin = 40;
+      const usableWidth = 842 - margin * 2;
+      const colWidths = [140, 200, 120, 90, 90, usableWidth - 140 - 200 - 120 - 90 - 90];
+      const colX = [];
+      let acc = margin;
+      for (const w of colWidths) {
+        colX.push(acc);
+        acc += w;
+      }
+
       // Header
       doc.fontSize(20).font('Helvetica-Bold').text(`Ticket List: ${event.title}`, { align: 'center' });
       doc.fontSize(12).font('Helvetica').text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
       doc.moveDown(2);
 
-      // Table Headers
-      const colX = [40, 200, 350, 500, 600, 700];
-      const startY = doc.y;
+      const pageBottomLimit = 535;
+      const headerLabels = ['Name', 'Email', 'Ticket Type', 'Status', 'Payment', 'Ticket Code'];
 
-      doc.font('Helvetica-Bold').fontSize(10);
-      doc.text('Name', colX[0], startY);
-      doc.text('Email', colX[1], startY);
-      doc.text('Ticket Type', colX[2], startY);
-      doc.text('Status', colX[3], startY);
-      doc.text('Payment', colX[4], startY);
-      doc.text('Ticket Code', colX[5], startY);
-      
-      doc.moveTo(40, startY + 15).lineTo(750, startY + 15).stroke();
-      
-      let currentY = startY + 20;
+      function drawTableHeader(y) {
+        doc.font('Helvetica-Bold').fontSize(10);
+        for (let i = 0; i < headerLabels.length; i++) {
+          doc.text(headerLabels[i], colX[i], y, { width: colWidths[i], lineBreak: false });
+        }
+        doc.moveTo(margin, y + 12).lineTo(842 - margin, y + 12).stroke();
+        return y + 15;
+      }
+
+      let currentY = drawTableHeader(doc.y);
 
       // Table Rows
       doc.font('Helvetica').fontSize(9);
       for (const reg of registrations) {
-        if (currentY > 500) {
-          doc.addPage();
-          currentY = 40;
+        const cells = [
+          reg.attendeeName || 'N/A',
+          reg.attendeeEmail || 'N/A',
+          reg.ticketType?.name || 'N/A',
+          reg.status || 'N/A',
+          reg.paymentStatus || 'N/A',
+          reg.ticketCode?.code || 'N/A',
+        ];
+
+        let maxHeight = 0;
+        for (let i = 0; i < cells.length; i++) {
+          const h = doc.heightOfString(cells[i], { width: colWidths[i], lineBreak: true });
+          if (h > maxHeight) maxHeight = h;
         }
 
-        doc.text(reg.attendeeName || 'N/A', colX[0], currentY);
-        doc.text(reg.attendeeEmail || 'N/A', colX[1], currentY);
-        doc.text(reg.ticketType?.name || 'N/A', colX[2], currentY);
-        doc.text(reg.status || 'N/A', colX[3], currentY);
-        doc.text(reg.paymentStatus || 'N/A', colX[4], currentY);
-        doc.text(reg.ticketCode?.code || 'N/A', colX[5], currentY);
+        if (currentY + maxHeight + 5 > pageBottomLimit) {
+          doc.addPage();
+          currentY = drawTableHeader(margin);
+        }
 
-        currentY += 15;
+        for (let i = 0; i < cells.length; i++) {
+          doc.text(cells[i], colX[i], currentY, { width: colWidths[i], lineBreak: true });
+        }
+
+        currentY += maxHeight + 5;
       }
 
       doc.end();
