@@ -4,12 +4,14 @@ import {
   updateTicketType, 
   deleteTicketType 
 } from "./tickets.service.js";
+import { generateTicketPdf } from "./ticket-pdf.service.js";
+import { createRegistrationCsvStream } from "./ticket-export.service.js";
 import { success, created } from "../../utils/response.js";
 
 export const createTicketTypeController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const userId = req.user.sub; // Extracted from token by requireAuth
+    const userId = req.user.sub;
     const ticketType = await createTicketType(eventId, userId, req.body);
     return created(res, ticketType, "Ticket type created successfully");
   } catch (error) {
@@ -45,6 +47,32 @@ export const deleteTicketTypeController = async (req, res, next) => {
     const userId = req.user.sub;
     await deleteTicketType(eventId, id, userId);
     return success(res, null, "Ticket type deleted successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const downloadTicketController = async (req, res, next) => {
+  try {
+    const { ticketId } = req.params;
+    const doc = await generateTicketPdf(ticketId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="ticket-${ticketId}.pdf"`);
+    doc.pipe(res);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const exportTicketsController = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.sub;
+    const stream = await createRegistrationCsvStream(eventId, userId);
+    const filename = `registrations-${eventId}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    stream.pipe(res);
   } catch (error) {
     next(error);
   }
