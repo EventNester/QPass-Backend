@@ -112,3 +112,79 @@ export async function deleteTicketType(eventId, ticketTypeId, userId) {
 
   return true;
 }
+
+export async function getTicketDetails(ticketId, userId) {
+  const { getRegistrationById } = await import("../registrations/registration.service.js");
+  const { qrService } = await import("./qr.service.js");
+
+  const registration = await getRegistrationById(ticketId);
+
+  // Authorization: must be the event owner OR the attendee (email match)
+  const event = await prisma.event.findUnique({
+    where: { id: registration.eventId },
+    select: { ownerId: true },
+  });
+
+  const isOwner = event && event.ownerId === userId;
+  
+  if (!isOwner) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.email.toLowerCase() !== registration.attendeeEmail.toLowerCase()) {
+      throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+    }
+  }
+
+  // Generate QR data URL
+  let qrDataUrl = null;
+  if (registration.ticketCode?.code) {
+    const qrBuffer = await qrService.createQrImage(registration.ticketCode.code);
+    qrDataUrl = `data:image/png;base64,${qrBuffer.toString("base64")}`;
+  }
+
+  return { ...registration, qrDataUrl };
+}
+
+export async function listEventTickets(eventId, userId, filters = {}) {
+  await checkEventOwnership(eventId, userId);
+
+  const { listRegistrationsByEvent } = await import("../registrations/registration.service.js");
+  return listRegistrationsByEvent(eventId, filters.page, filters.limit, filters);
+}
+
+export async function exportEventTickets(eventId, userId, format) {
+  await checkEventOwnership(eventId, userId);
+
+  const { listRegistrationsByEvent } = await import("../registrations/registration.service.js");
+  // Fetch all registrations (up to a reasonable max like 10000 for export)
+  const { registrations } = await listRegistrationsByEvent(eventId, 1, 10000);
+  
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
+
+  if (format === "csv") {
+    // Generate CSV string
+    const headers = ["Name", "Email", "Ticket Type", "Status", "Payment", "Ticket Code"];
+    const rows = registrations.map(reg => [
+      reg.attendeeName || "",
+      reg.attendeeEmail || "",
+      reg.ticketType?.name || "",
+      reg.status || "",
+      reg.paymentStatus || "",
+      reg.ticketCode?.code || ""
+    ]);
+
+    const escapeCsv = (str) => `"${String(str).replace(/"/g, '""')}"`;
+    
+    const csvContent = [
+      headers.map(escapeCsv).join(","),
+      ...rows.map(row => row.map(escapeCsv).join(","))
+    ].join("\n");
+
+    return { contentType: "text/csv", data: csvContent, extension: "csv" };
+  } else if (format === "pdf") {
+    const { generateTicketListPdf } = await import("./ticket-pdf.service.js");
+    const pdfBuffer = await generateTicketListPdf(registrations, event);
+    return { contentType: "application/pdf", data: pdfBuffer, extension: "pdf" };
+  }
+
+  throw new Error("Unsupported format");
+}

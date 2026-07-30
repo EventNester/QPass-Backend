@@ -32,3 +32,23 @@ export const validateParams = (schema) => (req, res, next) => {
     next(error);
   }
 };
+
+export const validateQuery = (schema) => (req, res, next) => {
+  try {
+    const validated = schema.parse(req.query || {});
+    for (const key in req.query) {
+      delete req.query[key];
+    }
+    Object.assign(req.query, validated);
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({
+        status: "error",
+        message: systemMessages.ERROR.GENERAL.VALIDATION_ERROR,
+        errors: error.errors,
+      });
+    }
+    next(error);
+  }
+};

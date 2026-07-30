@@ -16,3 +16,14 @@ export const updateTicketTypeSchema = z.object({
 }).refine((data) => Object.keys(data).length > 0, {
   message: "At least one field must be provided to update",
 });
+
+export const ticketQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(["PENDING", "CONFIRMED", "CANCELLED"]).optional(),
+  paymentStatus: z.enum(["PENDING", "SUCCESS", "FAILED", "REFUNDED"]).optional(),
+});
+
+export const exportTicketSchema = z.object({
+  format: z.enum(["csv", "pdf"]),
+});
