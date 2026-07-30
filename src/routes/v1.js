@@ -7,6 +7,11 @@ import eventTicketsRouter from "../modules/tickets/event-tickets.routes.js";
 import individualTicketsRouter from "../modules/tickets/individual-tickets.routes.js";
 import staffRoutes from "../modules/staff/staff.routes.js";
 import importRoutes from "../modules/registrations/import.routes.js";
+import { requireAuth } from "../modules/auth/auth.middleware.js";
+import {
+  downloadTicketController,
+  exportTicketsController,
+} from "../modules/tickets/tickets.controller.js";
 
 const router = Router();
 
@@ -18,5 +23,8 @@ router.use("/events", importRoutes);
 router.use("/events", staffRoutes);
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);
+
+router.get("/tickets/:ticketId/download", requireAuth, downloadTicketController);
+router.post("/events/:eventId/tickets/export", requireAuth, exportTicketsController);
 
 export default router;
