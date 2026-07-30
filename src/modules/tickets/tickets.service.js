@@ -159,8 +159,14 @@ export async function listEventTickets(eventId, userId, filters = {}) {
 export async function exportEventTickets(eventId, userId, format) {
   await checkEventOwnership(eventId, userId);
 
-  const { listRegistrationsByEvent } = await import("../registrations/registration.service.js");
-  const { registrations } = await listRegistrationsByEvent(eventId, 1, 10000, {}, true);
+  const registrations = await prisma.registration.findMany({
+    where: { eventId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      ticketCode: true,
+      ticketType: true,
+    },
+  });
   
   const event = await prisma.event.findUnique({ where: { id: eventId } });
 
@@ -176,12 +182,15 @@ export async function exportEventTickets(eventId, userId, format) {
       reg.ticketCode?.code || ""
     ]);
 
-    const escapeCsv = (str) => `"${String(str).replace(/"/g, '""')}"`;
+    const escapeCsv = (value) => {
+      const str = String(value);
+      const safeValue = /^[\t\r\n ]*[=+\-@]/.test(str) ? `'${str}` : str;
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
     
     const csvContent = [
       headers.map(escapeCsv).join(","),
-      ...rows.map(row => row.map(escapeCsv).join(","))
-    ].join("\n");
+      ...rows.map(row => row.map(escapeCsv).join(","))    ].join("\n");
 
     return { contentType: "text/csv", data: csvContent, extension: "csv" };
   } else if (format === "pdf") {
