@@ -36,7 +36,12 @@ export const validateParams = (schema) => (req, res, next) => {
 export const validateQuery = (schema) => (req, res, next) => {
   try {
     const validated = schema.parse(req.query || {});
-    req.query = validated;
+    Object.defineProperty(req, 'query', {
+      value: validated,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
