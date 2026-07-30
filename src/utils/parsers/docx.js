@@ -17,9 +17,14 @@ export async function parseDocx(buffer, _filename) {
   const allRows = [];
   const allErrors = [];
   let tableMatch;
+  let rowOffset = 0;
   while ((tableMatch = tableRegex.exec(html)) !== null) {
     const tableHtml = tableMatch[1];
-    const tableRows = extractHtmlTableRows(tableHtml);
+    const tableRows = extractHtmlTableRows(tableHtml, rowOffset);
+    if (tableRows.rows.length === 0 && tableRows.errors.length === 1 && /Could not detect name or email columns/.test(tableRows.errors[0].error)) {
+      continue;
+    }
+    rowOffset += tableRows.rows.length;
     allRows.push(...tableRows.rows);
     allErrors.push(...tableRows.errors);
   }
@@ -39,7 +44,7 @@ export async function parseDocx(buffer, _filename) {
   return parseDocxParagraphs(paragraphs);
 }
 
-function extractHtmlTableRows(tableHtml) {
+function extractHtmlTableRows(tableHtml, rowOffset = 0) {
   const rows = [];
   const errors = [];
   const headerMap = {};
@@ -76,11 +81,11 @@ function extractHtmlTableRows(tableHtml) {
     const ticketType = headerMap.ticketType !== undefined ? cells[headerMap.ticketType] || '' : null;
 
     if (!name && !email) {
-      errors.push({ row: i + 1, field: null, error: 'Row is empty' });
+      errors.push({ row: rowOffset + i, field: null, error: 'Row is empty' });
       continue;
     }
 
-    rows.push({ sourceRow: i + 1, name, email, phone: phone || null, ticketType: ticketType || null });
+    rows.push({ sourceRow: rowOffset + i, name, email, phone: phone || null, ticketType: ticketType || null });
   }
 
   return { rows, errors };
