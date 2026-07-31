@@ -150,6 +150,8 @@ export default {
       NO_WORKSHEETS: "No worksheets found in XLSX file",
       INVALID_BUFFER: "Invalid file buffer",
       ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
+      NOT_EVENT_OWNER: "You do not have access to this event",
+      BATCH_NOT_FOUND: "Import batch not found for this event",
     },
 
     EMAIL: {

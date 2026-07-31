@@ -133,12 +133,12 @@ export function parseImportFile(fileContent) {
  * @returns {Object} Validation result { valid, row, email, name, phone, ticketTypeId, error }
  */
 export function validateRow(row, rowNumber, seenEmails) {
-  const rawEmail = row.email || row.attendeeEmail || '';
+  const rawEmail = row.email || row.attendeeEmail || row.attendeeemail || '';
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
-  const rawName = row.name || row.attendeeName || '';
+  const rawName = row.name || row.attendeeName || row.attendeename || '';
   const name = typeof rawName === 'string' ? rawName.trim() : '';
-  const phone = row.phone || row.phoneNumber || null;
-  const ticketTypeId = row.ticketTypeId || row.ticketType || null;
+  const phone = row.phone || row.phoneNumber || row.phonenumber || null;
+  const ticketTypeId = row.ticketTypeId || row.ticketType || row.tickettype || row.tickettypeid || null;
 
   if (!email) {
     return {
@@ -655,20 +655,22 @@ export async function processImportFile({
   const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
   const claimsByTicketType = new Map();
   if (ticketTypeIds.length > 0) {
-    const validTicketTypes = await prisma.ticketType.findMany({
-      where: { id: { in: ticketTypeIds }, eventId, active: true },
-      select: { id: true, capacity: true, quantitySold: true },
+    const eventTicketTypes = await prisma.ticketType.findMany({
+      where: { eventId, active: true },
+      select: { id: true, name: true, capacity: true, quantitySold: true },
     });
-    const validTtMap = new Map(validTicketTypes.map((tt) => [tt.id, tt]));
+    const validTtById = new Map(eventTicketTypes.map((tt) => [tt.id.toLowerCase(), tt]));
+    const validTtByName = new Map(eventTicketTypes.map((tt) => [(tt.name || '').toLowerCase(), tt]));
 
     const filtered = [];
     for (const entry of toCreate) {
-      const ttId = entry.validation.ticketTypeId;
-      if (!ttId) {
+      const rawValue = entry.validation.ticketTypeId;
+      if (!rawValue) {
         filtered.push(entry);
         continue;
       }
-      const tt = validTtMap.get(ttId);
+      const key = rawValue.trim().toLowerCase();
+      const tt = validTtById.get(key) || validTtByName.get(key);
       if (!tt) {
         validationErrors.push({
           row: entry.rowNumber,
@@ -677,7 +679,8 @@ export async function processImportFile({
         });
         continue;
       }
-      const claimed = claimsByTicketType.get(ttId) || 0;
+      entry.validation.ticketTypeId = tt.id;
+      const claimed = claimsByTicketType.get(tt.id) || 0;
       if (tt.capacity !== null && (tt.quantitySold + claimed) >= tt.capacity) {
         validationErrors.push({
           row: entry.rowNumber,
@@ -686,7 +689,7 @@ export async function processImportFile({
         });
         continue;
       }
-      claimsByTicketType.set(ttId, claimed + 1);
+      claimsByTicketType.set(tt.id, claimed + 1);
       filtered.push(entry);
     }
     toCreate.length = 0;
@@ -825,4 +828,61 @@ export async function processImportFile({
   }
 
   return updatedBatch;
+}
+
+/**
+ * Generate a template file for importing attendees.
+ * @param {'csv'|'pdf'} format - The requested template format.
+ * @returns {Promise<Buffer|string>} The template data (Buffer for PDF, string for CSV)
+ */
+export async function generateImportTemplate(format) {
+  if (format === 'pdf') {
+    const { default: PDFDocument } = await import('pdfkit');
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const chunks = [];
+        
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        doc.fontSize(20).text('QPass Attendee Import Template', { align: 'center' });
+        doc.moveDown();
+        
+        doc.fontSize(12).text('Please ensure your document contains a table with the following columns:');
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('Name', { continued: true }).font('Helvetica').text(' (Required)');
+        doc.font('Helvetica-Bold').text('Email', { continued: true }).font('Helvetica').text(' (Required)');
+        doc.font('Helvetica-Bold').text('Phone', { continued: true }).font('Helvetica').text(' (Optional)');
+        doc.font('Helvetica-Bold').text('TicketType', { continued: true }).font('Helvetica').text(' (Optional)');
+        
+        doc.moveDown();
+        doc.text('Example Table:', { underline: true });
+        doc.moveDown();
+
+        const tableTop = doc.y;
+        
+        doc.font('Helvetica-Bold');
+        doc.text('Name', 50, tableTop);
+        doc.text('Email', 200, tableTop);
+        doc.text('Phone', 350, tableTop);
+        doc.text('TicketType', 450, tableTop);
+        
+        doc.font('Helvetica');
+        doc.text('John Doe', 50, tableTop + 20);
+        doc.text('john@example.com', 200, tableTop + 20);
+        doc.text('08012345678', 350, tableTop + 20);
+        doc.text('VIP', 450, tableTop + 20);
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // Default to CSV
+  return '"Name","Email","Phone","TicketType"\n"John Doe","john@example.com","08012345678","VIP"';
 }
