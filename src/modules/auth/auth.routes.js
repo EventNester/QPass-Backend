@@ -142,7 +142,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/refresh', authLimiter, async (req, res, next) => {
+router.post('/refresh', async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
