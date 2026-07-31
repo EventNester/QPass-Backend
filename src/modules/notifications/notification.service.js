@@ -1,6 +1,6 @@
-import prisma from '../database/index.js';
+import prisma from '../../database/index.js';
 import { sendEmail } from './email.service.js';
-import { logger } from '../config/index.js';
+import { logger } from '../../config/index.js';
 
 export async function sendNotification({
   recipient,
@@ -18,6 +18,8 @@ export async function sendNotification({
       recipient,
       channel,
       template: template || 'custom',
+      subject: subject || null,
+      context: Object.keys(context).length > 0 ? context : null,
       status: 'PENDING',
       userId,
       eventId,
@@ -125,9 +127,9 @@ export async function retryNotification(notificationId, context = {}) {
   try {
     const result = await sendEmail({
       to: notification.recipient,
-      subject: `[Retry] Notification for ${notification.template}`,
+      subject: notification.subject || `[Retry] Notification for ${notification.template}`,
       template: notification.template,
-      context,
+      context: notification.context || context,
     });
 
     if (!result.success) {

@@ -136,6 +136,24 @@ describe('Email Service', () => {
         })
       ).rejects.toThrow();
     });
+
+    test('should strip style and script blocks from generated plain-text body', async () => {
+      const sendMailSpy = vi.fn().mockResolvedValue({ messageId: 'msg-text' });
+      vi.spyOn(nodemailer, 'createTransport').mockReturnValue({ sendMail: sendMailSpy });
+      resetTransporterCache();
+
+      const result = await sendEmail({
+        to: 'text@example.com',
+        subject: 'Text Test',
+        html: '<style>.btn{color:red}</style><script>alert("x")</script><p>Hello <b>World</b></p>',
+      });
+
+      expect(result.success).toBe(true);
+      const text = sendMailSpy.mock.calls[0][0].text;
+      expect(text).toBe('Hello World');
+      expect(text).not.toContain('color:red');
+      expect(text).not.toContain('alert');
+    });
   });
 
   describe('Ethereal support', () => {

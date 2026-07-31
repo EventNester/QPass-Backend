@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getConfig, logger } from '../config/index.js';
-import { sendNotification } from '../services/notification.service.js';
+import { sendNotification } from '../modules/notifications/notification.service.js';
 
 let transporter = null;
 

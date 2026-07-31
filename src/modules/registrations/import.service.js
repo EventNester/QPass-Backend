@@ -3,7 +3,7 @@ import { logger } from '../../config/index.js';
 import crypto from 'crypto';
 import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
 import { parseFile } from '../../utils/parsers/index.js';
-import { sendNotification } from '../../services/notification.service.js';
+import { sendNotification } from '../../modules/notifications/notification.service.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254; // RFC 5321 standard maximum length for email addresses
