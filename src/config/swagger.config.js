@@ -5,7 +5,7 @@ import { dirname, join } from "path";
 import logger from "./logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFINITION_PATH = join(__dirname, "../../docs/swagger.json");
+const DEFINITION_PATH = join(__dirname, "../../swagger.json");
 
 const FALLBACK_DEFINITION = {
   openapi: "3.0.0",

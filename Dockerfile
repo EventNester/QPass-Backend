@@ -12,7 +12,7 @@ RUN npm ci --omit=dev
 
 # Copy source code
 COPY src ./src
-COPY docs/swagger.json ./docs/swagger.json
+COPY swagger.json ./swagger.json
 
 # Generate Prisma client
 RUN npx prisma generate --schema=./src/database/schema.prisma
@@ -29,7 +29,7 @@ RUN adduser -S qpass -u 1001
 # Copy built application
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/docs ./docs
+COPY --from=builder /app/swagger.json ./swagger.json
 COPY --from=builder /app/package.json ./
 
 # Set ownership
