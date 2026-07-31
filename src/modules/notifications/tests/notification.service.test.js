@@ -1,9 +1,9 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { sendNotification, retryNotification, getNotificationById } from '../notification.service.js';
-import prisma from '../../database/index.js';
+import prisma from '../../../database/index.js';
 import * as emailService from '../email.service.js';
 
-vi.mock('../../database/index.js', () => {
+vi.mock('../../../database/index.js', () => {
   const mPrisma = {
     notification: {
       create: vi.fn(),

@@ -8,7 +8,7 @@ import {
 } from '../import.service.js';
 import prisma from '../../../database/index.js';
 import { BadRequestError, ConflictError, NotFoundError, ForbiddenError } from '../../../utils/error.js';
-import * as notificationService from '../../../services/notification.service.js';
+import * as notificationService from '../../../modules/notifications/notification.service.js';
 import { parseFile } from '../../../utils/parsers/index.js';
 
 vi.mock('../../../database/index.js', () => {
@@ -54,7 +54,7 @@ vi.mock('../../../utils/parsers/index.js', () => ({
   parseFile: vi.fn(),
 }));
 
-vi.mock('../../../services/notification.service.js', () => ({
+vi.mock('../../../modules/notifications/notification.service.js', () => ({
   sendNotification: vi.fn().mockResolvedValue({ success: true }),
 }));
 

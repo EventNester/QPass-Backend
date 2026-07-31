@@ -1,6 +1,6 @@
-import prisma from '../database/index.js';
+import prisma from '../../database/index.js';
 import { sendEmail } from './email.service.js';
-import { logger } from '../config/index.js';
+import { logger } from '../../config/index.js';
 
 export async function sendNotification({
   recipient,
