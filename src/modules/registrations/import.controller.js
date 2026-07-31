@@ -1,4 +1,5 @@
 import { processImportFile, getImportBatchById, listImportBatchesByEvent, generateImportTemplate } from './import.service.js';
+import { readFile } from 'node:fs/promises';
 import { success } from '../../utils/response.js';
 import prisma from '../../database/index.js';
 import { ForbiddenError, NotFoundError } from '../../utils/error.js';
@@ -29,7 +30,7 @@ export const importAttendeesController = async (req, res, next) => {
     const result = await processImportFile({
       eventId,
       uploadedById: req.user.id,
-      fileBuffer: file.buffer,
+      fileBuffer: await readFile(file.path),
       filename: file.originalname,
       fileType: file.mimetype,
       sendEmails: true,
