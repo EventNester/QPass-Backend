@@ -5,6 +5,7 @@ import {
   importRegistrations,
   registerPublic,
   processImportFile,
+  generateImportTemplate,
 } from '../import.service.js';
 import prisma from '../../../database/index.js';
 import { BadRequestError, ConflictError, NotFoundError, ForbiddenError } from '../../../utils/error.js';
@@ -155,6 +156,35 @@ describe('Import & Registration Service Edge Cases', () => {
       expect(second.valid).toBe(false);
       expect(second.row).toBe(2);
       expect(second.error).toBe('Duplicate email in batch');
+    });
+
+    it('should read ticket type from the lowercased template TicketType column', () => {
+      const seen = new Set();
+      const res = validateRow({ name: 'Template User', email: 'template@example.com', tickettype: 'VIP' }, 1, seen);
+      expect(res.valid).toBe(true);
+      expect(res.ticketTypeId).toBe('VIP');
+    });
+
+    it('should read ticket type from a lowercased TicketTypeId column', () => {
+      const seen = new Set();
+      const res = validateRow({ name: 'Template User', email: 'template@example.com', tickettypeid: 'tt-1' }, 1, seen);
+      expect(res.valid).toBe(true);
+      expect(res.ticketTypeId).toBe('tt-1');
+    });
+
+    it('should map the download template header through parseImportFile and validateRow', () => {
+      const rows = parseImportFile('Name,Email,Phone,TicketType\nJohn Doe,john@example.com,08012345678,VIP');
+      expect(rows[0]).toEqual({
+        name: 'John Doe',
+        email: 'john@example.com',
+        phone: '08012345678',
+        tickettype: 'VIP',
+      });
+
+      const seen = new Set();
+      const res = validateRow(rows[0], 2, seen);
+      expect(res.valid).toBe(true);
+      expect(res.ticketTypeId).toBe('VIP');
     });
   });
 
@@ -323,6 +353,33 @@ describe('Import & Registration Service Edge Cases', () => {
       expect(result.successRows).toBe(0);
       expect(result.failedRows).toBe(1);
       expect(result.errorReport[0].error).toBe('Invalid or inactive ticket type');
+    });
+
+    it('should resolve ticket type names to IDs within the event', async () => {
+      parseFile.mockResolvedValue({
+        rows: [
+          { sourceRow: 2, name: 'Alice', email: 'alice@example.com', ticketType: 'vip' },
+          { sourceRow: 3, name: 'Bob', email: 'bob@example.com', ticketType: 'VIP' },
+        ],
+        errors: [],
+      });
+      prisma.ticketType.findMany.mockResolvedValue([
+        { id: 'tt-vip', name: 'VIP', capacity: 10, quantitySold: 1 },
+        { id: 'tt-ga', name: 'General', capacity: null, quantitySold: 0 },
+      ]);
+      prisma.ticketType.findUnique.mockResolvedValue({ id: 'tt-vip', capacity: 10, quantitySold: 1 });
+      const result = await processImportFile({ eventId, uploadedById, fileBuffer, filename });
+      expect(result.successRows).toBe(2);
+      expect(result.failedRows).toBe(0);
+      expect(prisma.registration.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ ticketTypeId: 'tt-vip' }),
+        })
+      );
+      expect(prisma.ticketType.findMany).toHaveBeenCalledWith({
+        where: { eventId, active: true },
+        select: { id: true, name: true, capacity: true, quantitySold: true },
+      });
     });
 
     it('should reject rows when ticket type has reached capacity', async () => {
@@ -513,6 +570,26 @@ describe('Import & Registration Service Edge Cases', () => {
         }),
       });
       expect(notificationService.sendNotification).toHaveBeenCalled();
+    });
+  });
+
+  describe('generateImportTemplate', () => {
+    it('should return a CSV template string by default', async () => {
+      const csv = await generateImportTemplate();
+      expect(typeof csv).toBe('string');
+      expect(csv).toContain('"Name","Email","Phone","TicketType"');
+    });
+
+    it('should return a CSV template string when format is csv', async () => {
+      const csv = await generateImportTemplate('csv');
+      expect(csv).toContain('"Name","Email","Phone","TicketType"');
+    });
+
+    it('should return a valid PDF buffer when format is pdf', async () => {
+      const pdf = await generateImportTemplate('pdf');
+      expect(Buffer.isBuffer(pdf)).toBe(true);
+      expect(pdf.length).toBeGreaterThan(0);
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     });
   });
 });
