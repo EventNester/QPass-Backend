@@ -7,7 +7,6 @@ import eventTicketsRouter from "../modules/tickets/event-tickets.routes.js";
 import individualTicketsRouter from "../modules/tickets/individual-tickets.routes.js";
 import staffRoutes from "../modules/staff/staff.routes.js";
 import importRoutes from "../modules/registrations/import.routes.js";
-import publicRegistrationRoutes from "../modules/registrations/public-registration.routes.js";
 
 import { requireAuth } from "../modules/auth/auth.middleware.js";
 import {
@@ -23,8 +22,6 @@ router.use("/events/:eventId/tickets", eventTicketsRouter);
 router.use("/tickets", individualTicketsRouter);
 router.use("/events", importRoutes);
 router.use("/events", staffRoutes);
-
-router.use("/public", publicRegistrationRoutes);
 
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);
