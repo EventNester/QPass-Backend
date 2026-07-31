@@ -25,6 +25,7 @@ router.use("/events/:eventId/tickets", eventTicketsRouter);
 router.use("/tickets", individualTicketsRouter);
 router.use("/events", importRoutes);
 router.use("/events", staffRoutes);
+
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);
 
