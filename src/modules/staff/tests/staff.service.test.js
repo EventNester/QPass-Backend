@@ -51,7 +51,7 @@ vi.mock("bcryptjs", () => ({
 }));
 
 const mockSendNotification = vi.fn().mockResolvedValue({ success: true });
-vi.mock("../../../services/notification.service.js", () => ({
+vi.mock("../../../modules/notifications/notification.service.js", () => ({
   sendNotification: (...args) => mockSendNotification(...args),
 }));
 
