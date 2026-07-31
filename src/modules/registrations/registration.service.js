@@ -86,6 +86,7 @@ async function findOpenEventBySlug(slug) {
 /**
  * Verify event and ticket type capacity before confirming a registration.
  * Capacity is re-checked inside the creation transaction for atomicity.
+ * The free endpoint also rejects paid ticket types and paid events.
  *
  * @param {Object} event - Event record
  * @param {string} [ticketTypeId] - Optional ticket type UUID
@@ -103,6 +104,9 @@ async function assertCapacity(event, ticketTypeId) {
   }
 
   if (!ticketTypeId) {
+    if (event.isPaid) {
+      throw new BadRequestError(msg.REGISTRATION.PAID_EVENT);
+    }
     return null;
   }
 
@@ -114,6 +118,10 @@ async function assertCapacity(event, ticketTypeId) {
     throw new BadRequestError(msg.REGISTRATION.INVALID_TICKET_TYPE);
   }
 
+  if (ticketType.price > 0) {
+    throw new BadRequestError(msg.REGISTRATION.PAID_TICKET_TYPE);
+  }
+
   if (ticketType.capacity != null && ticketType.quantitySold >= ticketType.capacity) {
     throw new BadRequestError(msg.REGISTRATION.TICKET_TYPE_FULL);
   }
@@ -122,26 +130,24 @@ async function assertCapacity(event, ticketTypeId) {
 }
 
 /**
- * Reject registrations from an attendee who already registered for the event.
+ * Find an existing registration for an attendee on an event.
  * @param {string} eventId - UUID of the event
  * @param {string} email - Normalized attendee email
- * @throws {ConflictError} If a registration already exists for this email + event
+ * @returns {Promise<Object|null>} The existing registration record, or null
  */
 async function assertNoDuplicate(eventId, email) {
-  const existing = await prisma.registration.findUnique({
+  return prisma.registration.findUnique({
     where: { eventId_attendeeEmail: { eventId, attendeeEmail: email } },
-    select: { id: true },
   });
-
-  if (existing) {
-    throw new ConflictError(msg.REGISTRATION.DUPLICATE);
-  }
 }
 
 /**
  * Create the TicketCode + Registration records (CONFIRMED) for a free
- * public registration inside a transaction. Retries on confirmation code
- * collisions, but surfaces duplicate-email conflicts immediately.
+ * public registration inside a transaction. Event capacity is enforced by
+ * row-locking the event, and ticket type capacity by a guarded conditional
+ * update, so concurrent registrations cannot oversell. Retries on
+ * confirmation code collisions, but surfaces duplicate-email conflicts
+ * immediately.
  *
  * @param {Object} event - Event record
  * @param {Object} data - { name, email, phone, ticketTypeId, metadata }
@@ -153,6 +159,33 @@ async function createFreeRegistration(event, { name, email, phone, ticketTypeId,
   for (let attempt = 0; attempt < CONFIRMATION_CODE_RETRIES; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
+        const eventRows = await tx.$queryRaw`
+          SELECT "capacity" FROM "events" WHERE "id" = ${event.id} FOR UPDATE
+        `;
+        const capacity = eventRows[0]?.capacity ?? null;
+        if (capacity != null) {
+          const registered = await tx.registration.count({
+            where: { eventId: event.id, status: { not: 'CANCELLED' } },
+          });
+          if (registered >= capacity) {
+            throw new BadRequestError(msg.REGISTRATION.CAPACITY_EXCEEDED);
+          }
+        }
+
+        if (ticketTypeId) {
+          const ticketTypeGuard = await tx.$executeRaw`
+            UPDATE "ticket_types"
+            SET "quantity_sold" = "quantity_sold" + 1, "updated_at" = now()
+            WHERE "id" = ${ticketTypeId}
+              AND "active" = true
+              AND ("capacity" IS NULL OR "quantity_sold" < "capacity")
+          `;
+
+          if (ticketTypeGuard === 0) {
+            throw new BadRequestError(msg.REGISTRATION.TICKET_TYPE_FULL);
+          }
+        }
+
         const ticketCode = await tx.ticketCode.create({
           data: {
             eventId: event.id,
@@ -178,13 +211,6 @@ async function createFreeRegistration(event, { name, email, phone, ticketTypeId,
             metadata: metadata && Object.keys(metadata).length > 0 ? metadata : undefined,
           },
         });
-
-        if (ticketTypeId) {
-          await tx.ticketType.update({
-            where: { id: ticketTypeId },
-            data: { quantitySold: { increment: 1 } },
-          });
-        }
 
         return registration;
       });
@@ -212,6 +238,9 @@ async function createFreeRegistration(event, { name, email, phone, ticketTypeId,
 
 /**
  * Issue a QR token for a registration and mark the registration as QR-issued.
+ * If a token already exists (e.g. a previous issuance created the QrToken
+ * before failing to mark qrIssued), it is reused so a retry can complete.
+ *
  * @param {string} registrationId - UUID of the registration
  * @param {Object} event - Event record (endTime drives the QR expiry)
  * @returns {Promise<string>} The raw QR token delivered to the attendee
@@ -220,7 +249,11 @@ async function issueQrToken(registrationId, event) {
   const expiresAt = new Date(
     new Date(event.endTime).getTime() + constants.QR.EXPIRY_HOURS * 60 * 60 * 1000
   );
-  const rawToken = await qrService.generateToken(registrationId, expiresAt);
+
+  const existing = await prisma.qrToken.findUnique({ where: { registrationId } });
+  const rawToken = existing
+    ? existing.tokenHash
+    : await qrService.generateToken(registrationId, expiresAt);
 
   await prisma.registration.update({
     where: { id: registrationId },
@@ -228,6 +261,43 @@ async function issueQrToken(registrationId, event) {
   });
 
   return rawToken;
+}
+
+/**
+ * Issue the QR token, send the confirmation + QR emails, write the audit log,
+ * and shape the response for an already-created CONFIRMED registration.
+ *
+ * @param {Object} event - Event record
+ * @param {Object} registration - CONFIRMED Registration record
+ * @param {string} [ticketTypeName] - Name of the selected ticket type
+ * @returns {Promise<Object>} { registration, qr: { token, image } }
+ */
+async function completeRegistration(event, registration, ticketTypeName) {
+  const rawToken = await issueQrToken(registration.id, event);
+  const qrImage = await qrService.createQrImage(rawToken);
+
+  sendRegistrationEmails({
+    event,
+    registration,
+    rawToken,
+    qrImage,
+    attendeeName: registration.attendeeName,
+    attendeeEmail: registration.attendeeEmail,
+    ticketTypeName,
+  });
+  await writeRegistrationAudit(registration, event);
+
+  return {
+    registration: publicRegistrationResponse({
+      ...registration,
+      qrIssued: true,
+      qrIssuedAt: new Date(),
+    }),
+    qr: {
+      token: rawToken,
+      image: `data:image/png;base64,${qrImage.toString('base64')}`,
+    },
+  };
 }
 
 /**
@@ -364,7 +434,9 @@ export async function getPublicEventBySlug(slug) {
  *
  * Validates the event is open, checks capacity and duplicate email, then
  * creates a CONFIRMED registration with a QR token. Emails (confirmation +
- * QR) are fire-and-forget and never block the response.
+ * QR) are fire-and-forget and never block the response. A retry for an
+ * existing CONFIRMED registration that never got its QR (qrIssued false)
+ * completes QR issuance instead of returning a duplicate conflict.
  *
  * @param {Object} data - { slug, name, email, phone?, ticketTypeId?, metadata? }
  * @returns {Promise<Object>} { registration, qr: { token, image } }
@@ -383,7 +455,14 @@ export async function registerFree({ slug, name, email, phone, ticketTypeId, met
 
   const event = await findOpenEventBySlug(slug);
   const ticketType = await assertCapacity(event, ticketTypeId);
-  await assertNoDuplicate(event.id, attendeeEmail);
+
+  const existing = await assertNoDuplicate(event.id, attendeeEmail);
+  if (existing) {
+    if (existing.status === 'CONFIRMED' && !existing.qrIssued) {
+      return completeRegistration(event, existing, ticketType?.name);
+    }
+    throw new ConflictError(msg.REGISTRATION.DUPLICATE);
+  }
 
   const registration = await createFreeRegistration(event, {
     name: attendeeName,
@@ -393,31 +472,7 @@ export async function registerFree({ slug, name, email, phone, ticketTypeId, met
     metadata,
   });
 
-  const rawToken = await issueQrToken(registration.id, event);
-  const qrImage = await qrService.createQrImage(rawToken);
-
-  sendRegistrationEmails({
-    event,
-    registration,
-    rawToken,
-    qrImage,
-    attendeeName,
-    attendeeEmail,
-    ticketTypeName: ticketType?.name,
-  });
-  await writeRegistrationAudit(registration, event);
-
-  return {
-    registration: publicRegistrationResponse({
-      ...registration,
-      qrIssued: true,
-      qrIssuedAt: new Date(),
-    }),
-    qr: {
-      token: rawToken,
-      image: `data:image/png;base64,${qrImage.toString('base64')}`,
-    },
-  };
+  return completeRegistration(event, registration, ticketType?.name);
 }
 
 /**

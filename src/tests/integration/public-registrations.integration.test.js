@@ -225,6 +225,32 @@ describe('Public Registration API Integration Tests', () => {
       expect(response.status).toBe(400);
     });
 
+    it('should return 400 for a paid ticket type on the free endpoint', async () => {
+      const response = await request(app)
+        .post('/api/v1/registrations/free')
+        .send({
+          slug: eventSlug,
+          name: 'Paid Ticket Attendee',
+          email: 'paid-ticket@example.com',
+          ticketTypeId: paidTicketTypeId,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 400 for a paid event when no ticket type is selected', async () => {
+      const { id, slug } = await createPublishedEvent('Paid Event');
+      await prisma.event.update({ where: { id }, data: { isPaid: true } });
+
+      const response = await request(app)
+        .post('/api/v1/registrations/free')
+        .send({ slug, name: 'Paid Event Attendee', email: 'paid-event@example.com' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.status).toBe('error');
+    });
+
     it('should create a CONFIRMED registration with QR without auth', async () => {
       const response = await request(app)
         .post('/api/v1/registrations/free')
@@ -286,6 +312,46 @@ describe('Public Registration API Integration Tests', () => {
       expect(response.body.status).toBe('error');
     });
 
+    it('should complete QR issuance on retry for a confirmed registration with qrIssued false', async () => {
+      const { id, slug } = await createPublishedEvent('Retry Event');
+      const ticketCode = await prisma.ticketCode.create({
+        data: {
+          eventId: id,
+          code: 'RETRY-TICKET-1',
+          status: 'USED',
+          attendeeEmail: 'retry@example.com',
+          attendeeName: 'Retry Attendee',
+        },
+      });
+      await prisma.registration.create({
+        data: {
+          eventId: id,
+          ticketCodeId: ticketCode.id,
+          attendeeEmail: 'retry@example.com',
+          attendeeName: 'Retry Attendee',
+          source: 'PUBLIC_LINK',
+          status: 'CONFIRMED',
+          paymentStatus: 'SUCCESS',
+          confirmationCode: 'QPC-RETRY1',
+        },
+      });
+
+      const response = await request(app)
+        .post('/api/v1/registrations/free')
+        .send({ slug, name: 'Retry Attendee', email: 'retry@example.com' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.registration.qrIssued).toBe(true);
+      expect(response.body.data.qr.token).toBeDefined();
+
+      const updated = await prisma.registration.findUnique({
+        where: { eventId_attendeeEmail: { eventId: id, attendeeEmail: 'retry@example.com' } },
+        include: { qrToken: true },
+      });
+      expect(updated.qrIssued).toBe(true);
+      expect(updated.qrToken.tokenHash).toBe(hashToken(response.body.data.qr.token));
+    });
+
     it('should reject registration when the event is at full capacity', async () => {
       const { id, slug } = await createPublishedEvent('Capacity Event');
       await prisma.event.update({ where: { id }, data: { capacity: 1 } });
@@ -314,6 +380,36 @@ describe('Public Registration API Integration Tests', () => {
         .send({ slug, name: 'Shopper Two', email: 'shopper2@example.com', ticketTypeId: limitedTicketTypeId });
 
       expect(response.status).toBe(400);
+    });
+
+    it('should allow exactly one of two concurrent registrations when capacity is 1', async () => {
+      const { id, slug } = await createPublishedEvent('Race Condition Event');
+      await prisma.event.update({ where: { id }, data: { capacity: 1 } });
+
+      const [first, second] = await Promise.all([
+        request(app)
+          .post('/api/v1/registrations/free')
+          .send({ slug, name: 'Racer One', email: 'racer1@example.com' }),
+        request(app)
+          .post('/api/v1/registrations/free')
+          .send({ slug, name: 'Racer Two', email: 'racer2@example.com' }),
+      ]);
+
+      const statuses = [first.status, second.status];
+      expect(statuses.filter((s) => s >= 200 && s < 300)).toHaveLength(1);
+      expect(statuses.filter((s) => s === 400)).toHaveLength(1);
+    });
+  });
+
+  describe('public route isolation', () => {
+    it('should not expose unintended endpoints from shared router mounts', async () => {
+      const wrongGet = await request(app).get(`/api/v1/registrations/${eventSlug}`);
+      const wrongPost = await request(app)
+        .post('/api/v1/e/free')
+        .send({ slug: eventSlug, name: 'Wrong Route', email: 'wrong@example.com' });
+
+      expect(wrongGet.status).toBe(404);
+      expect(wrongPost.status).toBe(404);
     });
   });
 });
