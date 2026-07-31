@@ -11,11 +11,6 @@ import {
   publicEventRouter,
   publicRegistrationRouter,
 } from "../modules/registrations/public.routes.js";
-import { requireAuth } from "../modules/auth/auth.middleware.js";
-import {
-  downloadTicketController,
-  exportTicketsController,
-} from "../modules/tickets/tickets.controller.js";
 
 const router = Router();
 
@@ -32,8 +27,5 @@ router.use("/checkins", checkinsRouter);
 // Public registration flow (no auth): GET /e/:slug, POST /registrations/free
 router.use("/e", publicEventRouter);
 router.use("/registrations", publicRegistrationRouter);
-
-router.get("/tickets/:ticketId/download", requireAuth, downloadTicketController);
-router.post("/events/:eventId/tickets/export", requireAuth, exportTicketsController);
 
 export default router;

@@ -17,7 +17,7 @@
     "studio": "prisma studio --schema=./src/database/schema.prisma",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "docs": "swagger-jsdoc -d docs/swagger-definition.json -o docs/swagger.yaml \"./src/routes/*.js\" \"./src/modules/*/*.routes.js\"",
+    "docs": "swagger-jsdoc -d swagger.json -o docs/swagger.yaml \"./src/routes/*.js\" \"./src/modules/*/*.routes.js\"",
     "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('./src/database/schema.prisma'))require('child_process').execSync('prisma generate --schema=./src/database/schema.prisma',{stdio:'inherit'});\""
   },
   "repository": {
