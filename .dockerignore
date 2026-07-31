@@ -8,7 +8,6 @@ coverage
 logs
 *.log
 docs/*
-!docs/swagger.json
 Dockerfile
 .dockerignore
 railway.json
