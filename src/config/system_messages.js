@@ -56,12 +56,6 @@ export default {
       GENERATED: "Report generated successfully",
       EXPORTED: "Data exported successfully",
     },
-    REGISTRATION: {
-      CONFIRMED: "Registration confirmed successfully",
-    },
-    IMPORT: {
-      COMPLETED: "Import completed",
-    },
   },
 
 
