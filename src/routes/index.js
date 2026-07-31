@@ -11,18 +11,9 @@ router.use("/api/v1", v1Router);
 
 const config = getConfig();
 if (config.SWAGGER_ENABLED) {
-  const apiServers = (req) => [
-    {
-      url: `${req.get("x-forwarded-proto") || req.protocol}://${req.get("x-forwarded-host") || req.get("host")}`,
-      description: "Current host",
-    },
-  ];
-
   router.get("/api-docs.json", (req, res) => {
-    res.json({ ...swaggerSpec, servers: apiServers(req) });
+    res.json(swaggerSpec);
   });
-  router.use("/api-docs", swaggerUi.serve, (req, res, next) =>
-    swaggerUi.setup({ ...swaggerSpec, servers: apiServers(req) })(req, res, next)
-  );
+  router.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 export default router;
