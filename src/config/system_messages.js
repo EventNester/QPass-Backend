@@ -11,6 +11,7 @@ export default {
 
     REGISTRATION: {
       CREATED: "Registration completed successfully",
+      CONFIRMED: "Registration confirmed successfully",
       QR_SENT: "QR code sent successfully",
     },
 
@@ -54,9 +55,6 @@ export default {
     REPORT: {
       GENERATED: "Report generated successfully",
       EXPORTED: "Data exported successfully",
-    },
-    REGISTRATION: {
-      CONFIRMED: "Registration confirmed successfully",
     },
   },
 
@@ -118,6 +116,9 @@ export default {
       INVALID_TICKET_TYPE: "Invalid or inactive ticket type",
       PAID_TICKET_TYPE: "Paid ticket types are not allowed on the free registration endpoint",
       PAID_EVENT: "This is a paid event and cannot use the free registration endpoint",
+      EVENT_CLOSED: "Registration is closed for this event",
+      EVENT_FULL: "Event capacity has been reached",
+      ALREADY_REGISTERED: "You have already registered for this event",
     },
     STAFF: {
       ALREADY_ASSIGNED: "Staff member is already assigned to this event",
@@ -149,14 +150,6 @@ export default {
       NO_WORKSHEETS: "No worksheets found in XLSX file",
       INVALID_BUFFER: "Invalid file buffer",
       ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
-    },
-
-    REGISTRATION: {
-      EVENT_CLOSED: "Registration is closed for this event",
-      EVENT_FULL: "Event capacity has been reached",
-      ALREADY_REGISTERED: "You have already registered for this event",
-      TICKET_TYPE_FULL: "Selected ticket type is sold out",
-      INVALID_TICKET_TYPE: "Invalid ticket type",
     },
 
     EMAIL: {
