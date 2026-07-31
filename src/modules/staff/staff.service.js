@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import prisma from '../../database/index.js';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
 import { systemMessages, logger } from '../../config/index.js';
-import { sendNotification } from '../../services/notification.service.js';
+import { sendNotification } from '../../modules/notifications/notification.service.js';
 
 const msg = systemMessages.ERROR;
 

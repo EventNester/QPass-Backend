@@ -2,11 +2,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import ejs from 'ejs';
 import nodemailer from 'nodemailer';
-import { logger } from '../config/index.js';
+import { logger } from '../../config/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const templatesDir = path.resolve(__dirname, '../templates');
+const templatesDir = path.resolve(__dirname, 'templates');
 
 let cachedTransporter = null;
 let etherealAccount = null;
