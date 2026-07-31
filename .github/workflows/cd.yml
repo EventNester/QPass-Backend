@@ -34,10 +34,10 @@ jobs:
           --health-retries 5
 
     env:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/qpass_prod?schema=public
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/qpass_test?schema=public
+      JWT_SECRET: test_secret_key_min_32_bytes_long_here
+      JWT_REFRESH_SECRET: test_refresh_secret_key_min_32_bytes
       REDIS_HOST: localhost
       REDIS_PORT: 6379
 
