@@ -826,3 +826,60 @@ export async function processImportFile({
 
   return updatedBatch;
 }
+
+/**
+ * Generate a template file for importing attendees.
+ * @param {'csv'|'pdf'} format - The requested template format.
+ * @returns {Promise<Buffer|string>} The template data (Buffer for PDF, string for CSV)
+ */
+export async function generateImportTemplate(format) {
+  if (format === 'pdf') {
+    const { default: PDFDocument } = await import('pdfkit');
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const chunks = [];
+        
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        doc.fontSize(20).text('QPass Attendee Import Template', { align: 'center' });
+        doc.moveDown();
+        
+        doc.fontSize(12).text('Please ensure your document contains a table with the following columns:');
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('Name', { continued: true }).font('Helvetica').text(' (Required)');
+        doc.font('Helvetica-Bold').text('Email', { continued: true }).font('Helvetica').text(' (Required if Phone is not provided)');
+        doc.font('Helvetica-Bold').text('Phone', { continued: true }).font('Helvetica').text(' (Required if Email is not provided)');
+        doc.font('Helvetica-Bold').text('TicketType', { continued: true }).font('Helvetica').text(' (Optional)');
+        
+        doc.moveDown();
+        doc.text('Example Table:', { underline: true });
+        doc.moveDown();
+
+        const tableTop = doc.y;
+        
+        doc.font('Helvetica-Bold');
+        doc.text('Name', 50, tableTop);
+        doc.text('Email', 200, tableTop);
+        doc.text('Phone', 350, tableTop);
+        doc.text('TicketType', 450, tableTop);
+        
+        doc.font('Helvetica');
+        doc.text('John Doe', 50, tableTop + 20);
+        doc.text('john@example.com', 200, tableTop + 20);
+        doc.text('08012345678', 350, tableTop + 20);
+        doc.text('VIP', 450, tableTop + 20);
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // Default to CSV
+  return '"Name","Email","Phone","TicketType"\n"John Doe","john@example.com","08012345678","VIP"';
+}
