@@ -1,4 +1,4 @@
-import { processImportFile, getImportBatchById, listImportBatchesByEvent } from './import.service.js';
+import { processImportFile, getImportBatchById, listImportBatchesByEvent, generateImportTemplate } from './import.service.js';
 import { success } from '../../utils/response.js';
 import prisma from '../../database/index.js';
 import { ForbiddenError } from '../../utils/error.js';
@@ -83,3 +83,34 @@ export const listImportBatchesController = async (req, res, next) => {
     next(error);
   }
 };
+
+export const downloadTemplate = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { format } = req.query;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { ownerId: true },
+    });
+
+    if (!event || event.ownerId !== req.user.sub) {
+      throw new ForbiddenError('You do not have access to this event');
+    }
+
+    const fileData = await generateImportTemplate(format);
+
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="qpass-import-template.pdf"');
+      return res.send(fileData);
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="qpass-import-template.csv"');
+    return res.send(fileData);
+  } catch (error) {
+    next(error);
+  }
+};
+
