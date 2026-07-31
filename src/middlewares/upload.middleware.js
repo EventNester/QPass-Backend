@@ -36,14 +36,16 @@ function fileFilter(_req, file, cb) {
 }
 
 // Multer instance scoped to attendee imports. Enforces a single file upload
-// with no accompanying form fields (parts: 1, fields: 0).
+// with no accompanying form fields (parts: 2, fields: 0).
+// NOTE: busboy counts each boundary occurrence against `parts`, and a single
+// part produces two boundary matches (opening + closing), hence `parts: 2`.
 export const uploadAttendees = multer({
   storage,
   limits: {
     fileSize: constants.UPLOAD.MAX_SIZE,
     files: 1,
     fields: 0,
-    parts: 1,
+    parts: 2,
   },
   fileFilter,
 });

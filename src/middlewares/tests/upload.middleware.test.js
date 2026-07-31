@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import multer from "multer";
+import http from "node:http";
+import express from "express";
 
 // vi.hoisted ensures the mock is created before any imported modules execute,
 // which is required when mocking node built-ins used at import time.
@@ -28,7 +30,7 @@ vi.mock("../../config/index.js", () => ({
   },
 }));
 
-import { handleUploadError, cleanupOnError, requireFile } from "../upload.middleware.js";
+import { handleUploadError, cleanupOnError, requireFile, uploadAttendees } from "../upload.middleware.js";
 
 describe("upload.middleware", () => {
   let res;
@@ -127,6 +129,93 @@ describe("upload.middleware", () => {
       requireFile(req, res, next);
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("uploadAttendees (end-to-end)", () => {
+    let server;
+
+    const BOUNDARY = "----QPassTestBoundary7MA4YWxk";
+
+    const buildMultipart = ({ fileContent, extraField }) => {
+      let body = "";
+      if (extraField) {
+        body += `--${BOUNDARY}\r\n`;
+        body += 'Content-Disposition: form-data; name="note"\r\n\r\n';
+        body += `${extraField}\r\n`;
+      }
+      body += `--${BOUNDARY}\r\n`;
+      body += 'Content-Disposition: form-data; name="file"; filename="attendees.csv"\r\n';
+      body += "Content-Type: text/csv\r\n\r\n";
+      body += `${fileContent}\r\n`;
+      body += `--${BOUNDARY}--\r\n`;
+      return body;
+    };
+
+    const postMultipart = (body) =>
+      new Promise((resolve, reject) => {
+        const payload = Buffer.from(body, "utf8");
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port: server.address().port,
+            path: "/upload",
+            method: "POST",
+            headers: {
+              "Content-Type": `multipart/form-data; boundary=${BOUNDARY}`,
+              "Content-Length": payload.length,
+            },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (chunk) => {
+              data += chunk;
+            });
+            res.on("end", () => resolve({ status: res.statusCode, body: data }));
+          }
+        );
+        req.on("error", reject);
+        req.end(payload);
+      });
+
+    beforeAll(async () => {
+      const app = express();
+      app.post(
+        "/upload",
+        uploadAttendees.single("file"),
+        (req, res) =>
+          res
+            .status(200)
+            .json({ name: req.file.originalname, hasPath: Boolean(req.file.path) }),
+        handleUploadError
+      );
+      app.use((err, _req, res, _next) => {
+        res.status(500).json({ name: err.name, code: err.code });
+      });
+      server = await new Promise((resolve) => {
+        const s = app.listen(0, "127.0.0.1", () => resolve(s));
+      });
+    });
+
+    afterAll(async () => {
+      await new Promise((resolve) => server.close(resolve));
+    });
+
+    it("accepts a single file part (regression: parts limit off-by-one)", async () => {
+      const body = buildMultipart({ fileContent: "Name,Email\nAda,ada@example.com" });
+      const { status, body: resBody } = await postMultipart(body);
+      expect(status).toBe(200);
+      expect(resBody).toContain('"name":"attendees.csv"');
+      expect(resBody).toContain('"hasPath":true');
+    });
+
+    it("rejects a form field accompanying the file", async () => {
+      const body = buildMultipart({
+        fileContent: "Name,Email\nAda,ada@example.com",
+        extraField: "unexpected",
+      });
+      const { status } = await postMultipart(body);
+      expect(status).toBe(400);
     });
   });
 });
