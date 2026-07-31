@@ -37,6 +37,9 @@ export default {
       GENERATED: "Report generated successfully",
       EXPORTED: "Data exported successfully",
     },
+    REGISTRATION: {
+      CONFIRMED: "Registration confirmed successfully",
+    },
   },
 
   ERROR: {
@@ -87,6 +90,13 @@ export default {
       FAILED: "Payment verification failed",
       ALREADY_VERIFIED: "Payment has already been verified",
       INVALID_REFERENCE: "Invalid payment reference",
+    },
+    REGISTRATION: {
+      NOT_OPEN: "Event is not open for registration",
+      DUPLICATE: "You have already registered for this event",
+      CAPACITY_EXCEEDED: "Event has reached full capacity",
+      TICKET_TYPE_FULL: "This ticket type has sold out",
+      INVALID_TICKET_TYPE: "Invalid or inactive ticket type",
     },
     STAFF: {
       ALREADY_ASSIGNED: "Staff member is already assigned to this event",
