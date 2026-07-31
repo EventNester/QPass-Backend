@@ -5,7 +5,8 @@ import { systemMessages } from '../../config/index.js';
 import { getPublicEventBySlug, registerFree } from './registration.service.js';
 import { publicEventSlugSchema, freeRegistrationSchema } from './public.schema.js';
 
-const router = Router();
+export const publicEventRouter = Router();
+export const publicRegistrationRouter = Router();
 
 /**
  * Shape an event record for the public event view. Only publicly safe fields
@@ -55,7 +56,7 @@ function publicEventPayload(event) {
  *       404:
  *         description: Event not found or not publicly viewable
  */
-router.get('/:slug', validateParams(publicEventSlugSchema), async (req, res, next) => {
+publicEventRouter.get('/:slug', validateParams(publicEventSlugSchema), async (req, res, next) => {
   try {
     const event = await getPublicEventBySlug(req.params.slug);
     success(res, publicEventPayload(event));
@@ -106,7 +107,7 @@ router.get('/:slug', validateParams(publicEventSlugSchema), async (req, res, nex
  *       422:
  *         description: Validation error
  */
-router.post('/free', validate(freeRegistrationSchema), async (req, res, next) => {
+publicRegistrationRouter.post('/free', validate(freeRegistrationSchema), async (req, res, next) => {
   try {
     const result = await registerFree(req.body);
     created(res, result, systemMessages.SUCCESS.REGISTRATION.CONFIRMED);
@@ -114,5 +115,3 @@ router.post('/free', validate(freeRegistrationSchema), async (req, res, next) =>
     next(error);
   }
 });
-
-export default router;
