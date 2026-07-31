@@ -57,6 +57,8 @@ describe('Notification Service', () => {
           recipient: 'user@example.com',
           status: 'PENDING',
           template: 'registration',
+          subject: 'Welcome',
+          context: { name: 'User' },
         }),
       });
 
@@ -114,13 +116,19 @@ describe('Notification Service', () => {
 
   describe('retryNotification', () => {
     test('should reset status to PENDING and update to SENT on success', async () => {
-      const failedNotif = { ...mockNotification, status: 'FAILED', failureReason: 'Old error' };
+      const failedNotif = {
+        ...mockNotification,
+        status: 'FAILED',
+        failureReason: 'Old error',
+        subject: 'Welcome Back',
+        context: { name: 'Persisted User' },
+      };
       prisma.notification.findUnique.mockResolvedValue(failedNotif);
       prisma.notification.update
         .mockResolvedValueOnce({ ...failedNotif, status: 'PENDING', failureReason: null })
         .mockResolvedValueOnce({ ...failedNotif, status: 'SENT', providerMessageId: 'msg-456' });
 
-      vi.spyOn(emailService, 'sendEmail').mockResolvedValue({
+      const sendEmailSpy = vi.spyOn(emailService, 'sendEmail').mockResolvedValue({
         success: true,
         messageId: 'msg-456',
         previewUrl: 'http://ethereal/retry',
@@ -128,6 +136,14 @@ describe('Notification Service', () => {
 
       const result = await retryNotification(mockNotification.id, { name: 'User' });
 
+      expect(sendEmailSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'user@example.com',
+          subject: 'Welcome Back',
+          template: 'registration',
+          context: { name: 'Persisted User' },
+        })
+      );
       expect(result.success).toBe(true);
       expect(result.notification.status).toBe('SENT');
       expect(prisma.notification.update).toHaveBeenCalledTimes(2);

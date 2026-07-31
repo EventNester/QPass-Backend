@@ -32,6 +32,8 @@ export async function getEtherealAccount() {
   return etherealAccount;
 }
 
+let cachedEtherealTransporter = null;
+
 export async function getTransporter(forceEthereal = false) {
   if (cachedTransporter && !forceEthereal) {
     return cachedTransporter;
@@ -60,10 +62,15 @@ export async function getTransporter(forceEthereal = false) {
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
     });
-    return cachedTransporter;  }
+    return cachedTransporter;
+  }
+
+  if (forceEthereal && cachedEtherealTransporter) {
+    return cachedEtherealTransporter;
+  }
 
   const account = await getEtherealAccount();
-  cachedTransporter = nodemailer.createTransport({
+  const etherealTransporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
     secure: false,
@@ -73,9 +80,13 @@ export async function getTransporter(forceEthereal = false) {
     },
   });
 
-  return cachedTransporter;
+  if (forceEthereal) {
+    cachedEtherealTransporter = etherealTransporter;
+  } else {
+    cachedTransporter = etherealTransporter;
+  }
+  return etherealTransporter;
 }
-
 export function resetTransporterCache() {
   cachedTransporter = null;
   etherealAccount = null;
@@ -138,6 +149,15 @@ async function sendWithRetry(transporter, mailOptions, maxAttempts = 3) {
  * @param {number} [options.maxAttempts=3] - Max send retry attempts
  * @returns {Promise<{success: boolean, messageId: string|null, info: Object|null, previewUrl: string|null, error?: string}>} Send result
  */
+function htmlToPlainText(html) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
@@ -161,7 +181,7 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
       to,
       subject,
       html: renderedHtml,
-      text: text || (renderedHtml ? renderedHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : ''),
+      text: text || (renderedHtml ? htmlToPlainText(renderedHtml) : ''),
     };
 
     const info = await sendWithRetry(transporter, mailOptions, maxAttempts);
