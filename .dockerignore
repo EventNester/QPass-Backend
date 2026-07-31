@@ -1,0 +1,15 @@
+node_modules
+.git
+.github
+.env
+.env.*
+uploads
+coverage
+logs
+*.log
+docs/*
+!docs/swagger.json
+Dockerfile
+.dockerignore
+railway.json
+docker-compose.yml
