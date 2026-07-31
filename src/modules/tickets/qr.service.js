@@ -86,7 +86,7 @@ class QrService {
     });
 
     if (!qrToken) {
-      throw new NotFoundError(msg.TICKET.INVALID);
+      throw new NotFoundError(msg.TICKET.INVALID_QR);
     }
 
     if (new Date(qrToken.expiresAt) < new Date()) {
