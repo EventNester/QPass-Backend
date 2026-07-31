@@ -8,6 +8,24 @@ export default {
       PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
       PASSWORD_RESET_SUCCESS: "Password reset successfully",
     },
+
+    REGISTRATION: {
+      CREATED: "Registration completed successfully",
+      QR_SENT: "QR code sent successfully",
+    },
+
+    EMAIL: {
+      SENT: "Email sent successfully",
+    },
+
+
+    NOTIFICATION: {
+      SENT: "Notification sent successfully",
+    },
+
+    IMPORT: {
+      COMPLETED: "Import completed successfully",
+    },
     EVENT: {
       CREATED: "Event created successfully",
       UPDATED: "Event updated successfully",
@@ -39,6 +57,7 @@ export default {
     },
   },
 
+
   ERROR: {
     AUTH: {
       INVALID_CREDENTIALS: "Invalid email or password",
@@ -69,7 +88,7 @@ export default {
       CODE_REVOKED: "Ticket code has been revoked",
       NOT_FOUND: "Ticket code not found",
       ALREADY_EXISTS: "QR token already exists for this registration",
-      INVALID: "Invalid QR token",
+      INVALID_QR: "Invalid QR token",
       EXPIRED: "QR token has expired",
       REVOKED: "QR token has been revoked",
     },
@@ -95,6 +114,7 @@ export default {
     GENERAL: {
       NOT_FOUND: "Resource not found",
       ALREADY_EXISTS: "Resource already exists",
+      CONFLICT: "Resource conflict",
       ROUTE_NOT_FOUND: "Route not found",
       VALIDATION_ERROR: "Validation error",
       INTERNAL_ERROR: "Internal server error",
@@ -117,6 +137,22 @@ export default {
       NO_WORKSHEETS: "No worksheets found in XLSX file",
       INVALID_BUFFER: "Invalid file buffer",
       ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
+    },
+
+    REGISTRATION: {
+      EVENT_CLOSED: "Registration is closed for this event",
+      EVENT_FULL: "Event capacity has been reached",
+      ALREADY_REGISTERED: "You have already registered for this event",
+      TICKET_TYPE_FULL: "Selected ticket type is sold out",
+      INVALID_TICKET_TYPE: "Invalid ticket type",
+    },
+
+    EMAIL: {
+      FAILED: "Failed to send email",
+    },
+
+    NOTIFICATION: {
+      FAILED: "Failed to send notification",
     },
   },
 
@@ -143,6 +179,9 @@ export default {
       CAPACITY_EXCEEDED: "Event or ticket type capacity exceeded",
       EMPTY_ROW: "Row must contain at least a name and contact info",
     },
+
+    PHONE_REQUIRED: "Phone number is required",
+    TICKET_TYPE_REQUIRED: "Ticket type is required",
   },
 
   INFO: {
