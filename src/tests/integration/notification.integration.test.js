@@ -4,8 +4,8 @@ import {
   sendNotification,
   getNotificationsByRecipient,
   getNotificationById,
-} from '../../services/notification.service.js';
-import { resetTransporterCache } from '../../services/email.service.js';
+} from '../../modules/notifications/notification.service.js';
+import { resetTransporterCache } from '../../modules/notifications/email.service.js';
 
 describe('Notification Service Integration Tests', () => {
   const testRecipient = 'integration-user@example.com';

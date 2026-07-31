@@ -315,6 +315,8 @@ model Notification {
   recipient         String
   channel           String
   template          String
+  subject           String?
+  context           Json?
   status            NotificationStatus @default(PENDING)
   userId            String?            @map("user_id")
   eventId           String?            @map("event_id")
