@@ -14,6 +14,7 @@ vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
 describe('Checkins API Integration Tests', () => {
   let organizerToken;
   let staffToken;
+  let staffUserId;
   let eventId;
   let rawToken;
   let checkinId;
@@ -54,7 +55,7 @@ describe('Checkins API Integration Tests', () => {
       });
 
     staffToken = staffReg.body.data.accessToken;
-    const staffUserId = staffReg.body.data.user.id;
+    staffUserId = staffReg.body.data.user.id;
 
     await prisma.user.update({
       where: { id: staffUserId },
@@ -178,7 +179,7 @@ describe('Checkins API Integration Tests', () => {
       checkinId = response.body.data.checkinId;
     });
 
-    it('should return 200 with DUPLICATE result for second scan of same QR', async () => {
+    it('should return 200 with REVOKED result for second scan of consumed QR', async () => {
       const response = await request(app)
         .post(`/api/v1/checkins/${eventId}/scan`)
         .set('Authorization', `Bearer ${organizerToken}`)
@@ -186,7 +187,7 @@ describe('Checkins API Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('success');
-      expect(response.body.data.result).toBe('DUPLICATE');
+      expect(response.body.data.result).toBe('REVOKED');
     });
 
     it('should return 200 with INVALID result for unknown token', async () => {
@@ -202,7 +203,7 @@ describe('Checkins API Integration Tests', () => {
       expect(response.body.data.result).toBe('INVALID');
     });
 
-    it('should return 200 with INVALID result for wrong event', async () => {
+    it('should return 200 with WRONG_EVENT result for wrong event', async () => {
       const wrongEventRes = await request(app)
         .post('/api/v1/events')
         .set('Authorization', `Bearer ${organizerToken}`)
@@ -252,7 +253,38 @@ describe('Checkins API Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('success');
-      expect(response.body.data.result).toBe('INVALID');
+      expect(response.body.data.result).toBe('WRONG_EVENT');
+    });
+
+    it('should return 403 for staff not assigned to the event', async () => {
+      const unassignedReg = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Unassigned Staff',
+          email: 'unassigned-staff@example.com',
+          password: 'SecurePassword123',
+        });
+
+      const unassignedUserId = unassignedReg.body.data.user.id;
+
+      await prisma.user.update({
+        where: { id: unassignedUserId },
+        data: { role: 'STAFF' },
+      });
+
+      const unassignedLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'unassigned-staff@example.com', password: 'SecurePassword123' });
+
+      const unassignedToken = unassignedLogin.body.data.accessToken;
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${unassignedToken}`)
+        .send({ token: rawToken });
+
+      expect(response.status).toBe(403);
+      expect(response.body.status).toBe('error');
     });
 
     it('should allow staff to scan', async () => {
@@ -285,6 +317,10 @@ describe('Checkins API Integration Tests', () => {
           tokenHash: staffHash,
           expiresAt: new Date(laterDate.getTime() + 86400000),
         },
+      });
+
+      await prisma.eventStaffAssignment.create({
+        data: { eventId, userId: staffUserId, permissionScope: 'SCANNER' },
       });
 
       const response = await request(app)
