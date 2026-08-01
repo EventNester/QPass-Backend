@@ -199,7 +199,7 @@ export async function undoCheckin(eventId, checkInId, staffId) {
   });
   if (!event) throw new NotFoundError(errMsg.EVENT.NOT_FOUND);
 
-  if (event.ownerId !== staffId) {
+  if (event.ownerId !== staffId && checkin.staffId !== staffId) {
     throw new ForbiddenError(errMsg.CHECKIN.UNDO_NOT_AUTHORIZED);
   }
 
