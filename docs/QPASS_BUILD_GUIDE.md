@@ -924,7 +924,7 @@ Key annotations per route:
 | `tests/integration/auth.test.js` | register → login → refresh → logout → password reset |
 | `tests/integration/events.test.js` | create → edit → publish → list → cancel → unauthorized |
 | `tests/integration/registrations.test.js` | registration → capacity limit → duplicate → CSV import |
-| `tests/integration/checkins.test.js` | valid → duplicate → wrong event → expired → unauthorized → undo |
+| `tests/integration/checkins.integration.test.js` | valid → duplicate → wrong event → expired → unauthorized → undo |
 
 **Test setup (`tests/setup.js`):**
 ```js

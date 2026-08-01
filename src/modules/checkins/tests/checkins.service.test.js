@@ -429,6 +429,7 @@ describe("Checkin Service Tests", () => {
     });
 
     test("should throw ForbiddenError if caller is neither owner nor scanning staff", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
       prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: "other_staff_1" });
 
       await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
