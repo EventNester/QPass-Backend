@@ -355,10 +355,10 @@ describe('Checkins API Integration Tests', () => {
     });
   });
 
-  describe('POST /api/v1/checkins/:eventId/checkins/:checkInId/undo', () => {
+  describe('DELETE /api/v1/checkins/:eventId/checkins/:checkInId/undo', () => {
     it('should return 200 and undo the checkin', async () => {
       const response = await request(app)
-        .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
+        .delete(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
         .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(response.status).toBe(200);
@@ -367,7 +367,7 @@ describe('Checkins API Integration Tests', () => {
 
     it('should return 404 for already undone checkin', async () => {
       const response = await request(app)
-        .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
+        .delete(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
         .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(response.status).toBe(404);
