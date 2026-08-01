@@ -1,6 +1,6 @@
 import prisma from "./index.js";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { hashToken } from "../utils/crypto.js";
 
 if (process.env.NODE_ENV === "production") {
   console.error("Refusing to seed in production. Set NODE_ENV to development or test.");
@@ -9,30 +9,56 @@ if (process.env.NODE_ENV === "production") {
 
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "Admin123!";
 const ORGANIZER_PASSWORD = process.env.SEED_ORGANIZER_PASSWORD || "organizer-password-123";
-const STAFF_PASSWORD = "staff-password-123";
+const STAFF_PASSWORD = process.env.SEED_STAFF_PASSWORD || "staff-password-123";
 const BCRYPT_ROUNDS = 12;
+const QR_EXPIRY_OFFSET_MS = 24 * 60 * 60 * 1000;
 
 // Nigerian names for sample data
 const firstNames = ["Chinedu", "Ngozi", "Oluwaseun", "Aisha", "Emeka", "Fatima", "Ade", "Binta", "Chika", "Dayo", "Efe", "Funke", "Garba", "Halima", "Idris", "Jumoke", "Kalu", "Lola", "Musa", "Nneka"];
 const lastNames = ["Okafor", "Adeyemi", "Ibrahim", "Nwosu", "Bello", "Okonkwo", "Abubakar", "Lawal", "Eze", "Balogun", "Oladipo", "Umar", "Mustapha", "Olu", "Nwachukwu", "Sani", "Igwe", "Ojo", "Yusuf", "Adebayo"];
 const titles = ["Software Engineer", "Product Manager", "Designer", "CEO", "Student", "Developer", "Data Scientist", "Marketing Manager"];
 
-const getRandomItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+// Deterministic PRNG (mulberry32) so the seeded data is reproducible across
+// runs and environments. Change SEED_RANDOM_STATE to get a different dataset.
+let randState = Number(process.env.SEED_RANDOM_STATE ?? 42) | 0;
+const random = () => {
+  randState |= 0;
+  randState = (randState + 0x6d2b79f5) | 0;
+  let t = Math.imul(randState ^ (randState >>> 15), 1 | randState);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const getRandomItem = (arr) => arr[Math.floor(random() * arr.length)];
+const getRandomInt = (min, max) => Math.floor(random() * (max - min + 1)) + min;
+
+// Fixed base timestamp so every generated date is deterministic (no Date.now()).
+const SEED_TIMESTAMP = Date.parse("2026-08-01T00:00:00.000Z");
+const seedTime = new Date(SEED_TIMESTAMP);
+
+// Hex strings derived from the seeded PRNG (replaces crypto.randomUUID/randomBytes).
+const randomHex = (length) => {
+  let out = "";
+  for (let i = 0; i < length; i++) out += "0123456789abcdef"[Math.floor(random() * 16)];
+  return out;
+};
 
 const seed = async () => {
   const startTime = Date.now();
   console.log("Seeding database...");
 
-  let usersCreated = 0;
-  let eventsCreated = 0;
-  let registrationsCreated = 0;
+  let usersProcessed = 0;
+  let eventsProcessed = 0;
+  let registrationsProcessed = 0;
+  const qrPlaintextSamples = [];
 
   // 1. Create Users
   const adminPassword = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS);
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@qpass.dev" },
     update: { passwordHash: adminPassword, role: "ADMIN" },
     create: {
+      id: randomHex(32),
       name: "QPass Admin",
       email: "admin@qpass.dev",
       passwordHash: adminPassword,
@@ -40,26 +66,28 @@ const seed = async () => {
       status: "ACTIVE",
     },
   });
-  usersCreated++;
+  usersProcessed++;
 
   const organizerPassword = await bcrypt.hash(ORGANIZER_PASSWORD, BCRYPT_ROUNDS);
   const organizer1 = await prisma.user.upsert({
-    where: { email: "organizer1@qpass.dev" },
+    where: { email: "organizer@qpass.dev" },
     update: { passwordHash: organizerPassword, role: "ORGANIZER" },
     create: {
+      id: randomHex(32),
       name: "Test Organizer 1",
-      email: "organizer1@qpass.dev",
+      email: "organizer@qpass.dev",
       passwordHash: organizerPassword,
       role: "ORGANIZER",
       status: "ACTIVE",
     },
   });
-  usersCreated++;
+  usersProcessed++;
 
   const organizer2 = await prisma.user.upsert({
     where: { email: "organizer2@qpass.dev" },
     update: { passwordHash: organizerPassword, role: "ORGANIZER" },
     create: {
+      id: randomHex(32),
       name: "Test Organizer 2",
       email: "organizer2@qpass.dev",
       passwordHash: organizerPassword,
@@ -67,13 +95,14 @@ const seed = async () => {
       status: "ACTIVE",
     },
   });
-  usersCreated++;
+  usersProcessed++;
 
   const staffPassword = await bcrypt.hash(STAFF_PASSWORD, BCRYPT_ROUNDS);
   const staff1 = await prisma.user.upsert({
     where: { email: "staff1@qpass.dev" },
     update: { passwordHash: staffPassword, role: "STAFF" },
     create: {
+      id: randomHex(32),
       name: "Event Staff 1",
       email: "staff1@qpass.dev",
       passwordHash: staffPassword,
@@ -81,12 +110,13 @@ const seed = async () => {
       status: "ACTIVE",
     },
   });
-  usersCreated++;
-  
+  usersProcessed++;
+
   const staff2 = await prisma.user.upsert({
     where: { email: "staff2@qpass.dev" },
     update: { passwordHash: staffPassword, role: "STAFF" },
     create: {
+      id: randomHex(32),
       name: "Event Staff 2",
       email: "staff2@qpass.dev",
       passwordHash: staffPassword,
@@ -94,13 +124,14 @@ const seed = async () => {
       status: "ACTIVE",
     },
   });
-  usersCreated++;
+  usersProcessed++;
 
   // 2. Create Events
   const draftEvent = await prisma.event.upsert({
     where: { slug: "draft-conference-abc123" },
-    update: { status: "DRAFT" },
+    update: { status: "DRAFT", ownerId: organizer1.id },
     create: {
+      id: randomHex(32),
       title: "Draft Tech Conference",
       description: "A tech conference still in draft mode",
       venue: "Lagos Convention Center",
@@ -114,12 +145,13 @@ const seed = async () => {
       currency: "NGN",
     },
   });
-  eventsCreated++;
+  eventsProcessed++;
 
   const publishedEvent = await prisma.event.upsert({
     where: { slug: "dev-summit-def456" },
-    update: { status: "PUBLISHED" },
+    update: { status: "PUBLISHED", ownerId: organizer1.id },
     create: {
+      id: randomHex(32),
       title: "Developer Summit 2026",
       description: "Annual developer summit",
       venue: "Abuja National Conference Center",
@@ -132,31 +164,34 @@ const seed = async () => {
       isPaid: true,
       capacity: 500,
       currency: "NGN",
-      publishedAt: new Date(),
+      publishedAt: seedTime,
     },
   });
-  eventsCreated++;
+  eventsProcessed++;
 
   const activeEvent = await prisma.event.upsert({
     where: { slug: "active-startup-meetup-789" },
-    update: { status: "ACTIVE" },
+    update: { status: "ACTIVE", ownerId: organizer2.id },
     create: {
+      id: randomHex(32),
       title: "Startup Meetup Lagos",
       description: "Networking event for startup founders",
       venue: "Ikeja Tech Hub",
       slug: "active-startup-meetup-789",
-      startTime: new Date(Date.now() - 1000 * 60 * 60 * 24), // Started yesterday
-      endTime: new Date(Date.now() + 1000 * 60 * 60 * 24), // Ends tomorrow
+      // Fixed dates keep the ACTIVE event deterministic; the far-future endTime
+      // means its QR tokens never expire, so scan/undo testing always works.
+      startTime: seedTime,
+      endTime: new Date("2027-12-31T18:00:00Z"),
       status: "ACTIVE",
       ownerId: organizer2.id,
       registrationMode: "PUBLIC_LINK",
       isPaid: false,
       capacity: 200,
       currency: "NGN",
-      publishedAt: new Date(),
+      publishedAt: seedTime,
     },
   });
-  eventsCreated++;
+  eventsProcessed++;
 
   const events = [draftEvent, publishedEvent, activeEvent];
 
@@ -167,6 +202,7 @@ const seed = async () => {
       where: { eventId_sortOrder: { eventId: event.id, sortOrder: 0 } },
       update: {},
       create: {
+        id: randomHex(32),
         eventId: event.id,
         name: "VIP",
         description: "VIP access with premium perks",
@@ -175,11 +211,12 @@ const seed = async () => {
         sortOrder: 0,
       },
     });
-    
+
     const regularTicket = await prisma.ticketType.upsert({
       where: { eventId_sortOrder: { eventId: event.id, sortOrder: 1 } },
       update: {},
       create: {
+        id: randomHex(32),
         eventId: event.id,
         name: "Regular",
         description: "Standard event access",
@@ -193,6 +230,7 @@ const seed = async () => {
       where: { eventId_sortOrder: { eventId: event.id, sortOrder: 2 } },
       update: {},
       create: {
+        id: randomHex(32),
         eventId: event.id,
         name: "Student",
         description: "Discounted student ticket",
@@ -201,83 +239,127 @@ const seed = async () => {
         sortOrder: 2,
       },
     });
-    
+
     const ticketTypes = [vipTicket, regularTicket, studentTicket];
 
     // Staff Assignments
     await prisma.eventStaffAssignment.upsert({
       where: { eventId_userId: { eventId: event.id, userId: staff1.id } },
       update: {},
-      create: { eventId: event.id, userId: staff1.id, active: true }
+      create: { id: randomHex(32), eventId: event.id, userId: staff1.id, active: true }
     });
     await prisma.eventStaffAssignment.upsert({
       where: { eventId_userId: { eventId: event.id, userId: staff2.id } },
       update: {},
-      create: { eventId: event.id, userId: staff2.id, active: true }
+      create: { id: randomHex(32), eventId: event.id, userId: staff2.id, active: true }
     });
 
-    // Registrations
+    // Registrations (skip DRAFT events — they are not open for registration)
+    if (event.status === "DRAFT") {
+      continue;
+    }
+
     const regCount = await prisma.registration.count({ where: { eventId: event.id } });
     if (regCount === 0) {
-      const numRegistrations = Math.floor(Math.random() * 51) + 50; // 50 to 100
-      
+      const numRegistrations = getRandomInt(50, 100);
+
       const ticketCodesToInsert = [];
       const registrationsToInsert = [];
+      const qrTokensToInsert = [];
       const checkInsToInsert = [];
+      const paymentsToInsert = [];
 
       for (let i = 0; i < numRegistrations; i++) {
         const ticketType = getRandomItem(ticketTypes);
         const firstName = getRandomItem(firstNames);
         const lastName = getRandomItem(lastNames);
         const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${i}@example.com`;
-        
-        const ticketCodeId = crypto.randomUUID();
-        const codeString = `TCK-${event.slug.substring(0,4).toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-        
-        const isCheckedIn = Math.random() < 0.4; // ~40% check-in rate
+
+        const ticketCodeId = randomHex(32);
+        const codeString = `TCK-${event.slug.substring(0, 4).toUpperCase()}-${randomHex(8).toUpperCase()}`;
+
+        const isCheckedIn = random() < 0.4; // ~40% check-in rate
 
         ticketCodesToInsert.push({
           id: ticketCodeId,
           eventId: event.id,
           code: codeString,
           status: isCheckedIn ? "USED" : "UNUSED",
+          usedAt: isCheckedIn ? seedTime : null,
+          createdAt: seedTime,
           attendeeEmail: email,
-          attendeeName: `${firstName} ${lastName}`
+          attendeeName: `${firstName} ${lastName}`,
         });
 
-        const registrationId = crypto.randomUUID();
+        const registrationId = randomHex(32);
         registrationsToInsert.push({
           id: registrationId,
           eventId: event.id,
-          ticketCodeId: ticketCodeId,
+          ticketCodeId,
           attendeeEmail: email,
           attendeeName: `${firstName} ${lastName}`,
           ticketTypeId: ticketType.id,
           status: "CONFIRMED",
           source: "PUBLIC_LINK",
           paymentStatus: event.isPaid ? "SUCCESS" : "PENDING",
-          metadata: { title: getRandomItem(titles) }
+          qrIssued: true,
+          qrIssuedAt: seedTime,
+          createdAt: seedTime,
+          metadata: { title: getRandomItem(titles) },
+        });
+
+        // Every registration needs a QrToken so scan/undo work on seeded data.
+        // Retain a few plaintext tokens so they can be printed for scanning.
+        const qrPlaintext = randomHex(64);
+        if (qrPlaintextSamples.length < 3) {
+          qrPlaintextSamples.push({ code: codeString, attendeeEmail: email, token: qrPlaintext });
+        }
+        qrTokensToInsert.push({
+          id: randomHex(32),
+          registrationId,
+          tokenHash: hashToken(qrPlaintext),
+          issuedAt: seedTime,
+          expiresAt: new Date(event.endTime.getTime() + QR_EXPIRY_OFFSET_MS),
         });
 
         if (isCheckedIn) {
           checkInsToInsert.push({
-            id: crypto.randomUUID(),
+            id: randomHex(32),
             eventId: event.id,
-            registrationId: registrationId,
+            registrationId,
             staffId: getRandomItem([staff1.id, staff2.id]),
-            result: "VALID"
+            scannedAt: seedTime,
+            result: "VALID",
+          });
+        }
+
+        if (event.isPaid) {
+          paymentsToInsert.push({
+            id: randomHex(32),
+            eventId: event.id,
+            userId: event.ownerId,
+            registrationId,
+            paystackReference: `PSK-${randomHex(16).toUpperCase()}`,
+            amount: ticketType.price,
+            currency: event.currency,
+            status: "SUCCESS",
+            createdAt: seedTime,
+            verifiedAt: seedTime,
+            paidAt: seedTime,
           });
         }
       }
 
-      // Batch insert
+      // Batch insert (order matters for foreign keys)
       await prisma.ticketCode.createMany({ data: ticketCodesToInsert, skipDuplicates: true });
       await prisma.registration.createMany({ data: registrationsToInsert, skipDuplicates: true });
+      await prisma.qrToken.createMany({ data: qrTokensToInsert, skipDuplicates: true });
       await prisma.checkIn.createMany({ data: checkInsToInsert, skipDuplicates: true });
+      await prisma.payment.createMany({ data: paymentsToInsert, skipDuplicates: true });
 
-      registrationsCreated += registrationsToInsert.length;
+      registrationsProcessed += registrationsToInsert.length;
     } else {
-      registrationsCreated += regCount; // count them if they already exist
+      registrationsProcessed += regCount; // count them if they already exist
     }
   }
 
@@ -285,13 +367,24 @@ const seed = async () => {
 
   console.log("\nSeed completed successfully!");
   console.log("──────────────────────────────");
-  console.log(`Summary: ${usersCreated} users, ${eventsCreated} events, ${registrationsCreated} registrations processed.`);
+  console.log(`Summary: ${usersProcessed} users, ${eventsProcessed} events, ${registrationsProcessed} registrations processed.`);
   console.log(`Completed in ${duration}ms`);
   console.log("──────────────────────────────");
   console.log("Test credentials:");
-  console.log(`  Admin:      admin@qpass.dev / Admin123!`);
-  console.log(`  Organizer1: organizer1@qpass.dev / ${ORGANIZER_PASSWORD}`);
-  console.log(`  Staff:      staff1@qpass.dev / ${STAFF_PASSWORD}`);
+  console.log(`  Admin:      admin@qpass.dev / ${ADMIN_PASSWORD}`);
+  console.log(`  Organizer1: organizer@qpass.dev / ${ORGANIZER_PASSWORD}`);
+  console.log(`  Organizer2: organizer2@qpass.dev / ${ORGANIZER_PASSWORD}`);
+  console.log(`  Staff1:     staff1@qpass.dev / ${STAFF_PASSWORD}`);
+  console.log(`  Staff2:     staff2@qpass.dev / ${STAFF_PASSWORD}`);
+
+  if (qrPlaintextSamples.length > 0) {
+    console.log("──────────────────────────────");
+    console.log("Sample QR tokens (plaintext) for scan/undo testing:");
+    for (const sample of qrPlaintextSamples) {
+      console.log(`  ${sample.code}  (${sample.attendeeEmail})`);
+      console.log(`    ${sample.token}`);
+    }
+  }
 };
 
 seed()
