@@ -860,19 +860,19 @@ Implement:
 
 ## Step 3.6 - Seed Script
 
-**File:** `src/database/seed.js` (currently empty placeholder)
+**File:** `src/database/seed.js`
 
-Implement:
-```js
-async function main() {
-  // 1. Create admin user
-  // 2. Create organizer user
-  // 3. Create 2 sample events (one DRAFT, one PUBLISHED)
-  // 4. Create ticket types for each event
-  // 5. Create sample registrations + ticket codes
-  // 6. Log summary
-}
-```
+Populates the dev database with reproducible sample data. Run with `npm run seed`.
+
+What it creates:
+1. 5 users: 1 admin, 2 organizers, 2 staff (passwords via `SEED_*_PASSWORD` env vars, defaults in the script)
+2. 3 events: one DRAFT, one PUBLISHED (paid), one ACTIVE
+3. Ticket types (VIP / Regular / Student) and staff assignments per event
+4. Sample registrations with ticket codes, QrTokens, and ~40% check-ins for non-DRAFT events
+5. Payment records for paid-event registrations
+6. Summary + test credentials logged, plus a few plaintext QR tokens for scan/undo testing
+
+Idempotent: user/event/ticket-type/staff upserts by unique keys; registrations only generated when an event has none. Refuses to run in production.
 
 ---
 
