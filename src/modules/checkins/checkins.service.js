@@ -2,7 +2,7 @@ import prisma from "../../database/index.js";
 import { getRedisClient } from "../../config/redis.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from "../../utils/error.js";
-import { constants, systemMessages } from "../../config/index.js";
+import { constants, systemMessages, logger } from "../../config/index.js";
 import { getIO } from "../../realtime/socket.js";
 import { emitCheckinUpdate } from "../../realtime/rooms.js";
 
@@ -56,6 +56,9 @@ export async function scanQr(eventId, data, staffId) {
     } else if (qrToken.registration.eventId !== eventId) {
       attendeeName = qrToken.registration.attendeeName;
       scanResult = { result: constants.CHECKIN_RESULT.WRONG_EVENT, message: errMsg.CHECKIN.EVENT_MISMATCH };
+    } else if (qrToken.revokedAt) {
+      attendeeName = qrToken.registration.attendeeName;
+      scanResult = { result: constants.CHECKIN_RESULT.REVOKED, message: errMsg.CHECKIN.QR_REVOKED };
     } else {
       const existingCheckin = await prisma.checkIn.findUnique({
         where: { eventId_registrationId: { eventId, registrationId: qrToken.registrationId } },
@@ -74,21 +77,25 @@ export async function scanQr(eventId, data, staffId) {
         });
         scanResult = { result: constants.CHECKIN_RESULT.DUPLICATE, message: errMsg.CHECKIN.DUPLICATE };
       } else if (existingCheckin) {
-        const restored = await prisma.checkIn.update({
-          where: { id: existingCheckin.id },
-          data: {
-            deletedAt: null,
-            staffId,
-            result: constants.CHECKIN_RESULT.VALID,
-            scannedAt: new Date(),
-            deviceInfo: data.deviceInfo,
-          },
-          include: { registration: true },
-        });
+        const restored = await prisma.$transaction(async (tx) => {
+          const checkin = await tx.checkIn.update({
+            where: { id: existingCheckin.id },
+            data: {
+              deletedAt: null,
+              staffId,
+              result: constants.CHECKIN_RESULT.VALID,
+              scannedAt: new Date(),
+              deviceInfo: data.deviceInfo,
+            },
+            include: { registration: true },
+          });
 
-        await prisma.qrToken.update({
-          where: { id: qrToken.id },
-          data: { scanCount: { increment: 1 }, revokedAt: new Date() },
+          await tx.qrToken.update({
+            where: { id: qrToken.id },
+            data: { scanCount: { increment: 1 }, revokedAt: new Date() },
+          });
+
+          return checkin;
         });
 
         attendeeName = restored.registration.attendeeName;
@@ -98,24 +105,25 @@ export async function scanQr(eventId, data, staffId) {
           attendeeName: restored.registration.attendeeName,
           checkinId: restored.id,
         };
-      } else if (qrToken.revokedAt) {
-        attendeeName = qrToken.registration.attendeeName;
-        scanResult = { result: constants.CHECKIN_RESULT.REVOKED, message: errMsg.CHECKIN.QR_REVOKED };
       } else {
-        const checkin = await prisma.checkIn.create({
-          data: {
-            eventId,
-            registrationId: qrToken.registrationId,
-            staffId,
-            result: constants.CHECKIN_RESULT.VALID,
-            deviceInfo: data.deviceInfo,
-          },
-          include: { registration: true },
-        });
+        const checkin = await prisma.$transaction(async (tx) => {
+          const created = await tx.checkIn.create({
+            data: {
+              eventId,
+              registrationId: qrToken.registrationId,
+              staffId,
+              result: constants.CHECKIN_RESULT.VALID,
+              deviceInfo: data.deviceInfo,
+            },
+            include: { registration: true },
+          });
 
-        await prisma.qrToken.update({
-          where: { id: qrToken.id },
-          data: { scanCount: { increment: 1 }, revokedAt: new Date() },
+          await tx.qrToken.update({
+            where: { id: qrToken.id },
+            data: { scanCount: { increment: 1 }, revokedAt: new Date() },
+          });
+
+          return created;
         });
 
         attendeeName = checkin.registration.attendeeName;
@@ -128,15 +136,19 @@ export async function scanQr(eventId, data, staffId) {
       }
     }
 
-    const totalCheckedIn = await prisma.checkIn.count({
-      where: { eventId, result: constants.CHECKIN_RESULT.VALID, deletedAt: null },
-    });
+    try {
+      const totalCheckedIn = await prisma.checkIn.count({
+        where: { eventId, result: constants.CHECKIN_RESULT.VALID, deletedAt: null },
+      });
 
-    emitCheckinUpdate(getIO(), eventId, {
-      result: scanResult.result,
-      attendeeName,
-      totalCheckedIn,
-    });
+      emitCheckinUpdate(getIO(), eventId, {
+        result: scanResult.result,
+        attendeeName,
+        totalCheckedIn,
+      });
+    } catch (err) {
+      logger.warn({ err, eventId }, "failed to emit checkin:update");
+    }
 
     return scanResult;
   } finally {
@@ -195,8 +207,17 @@ export async function undoCheckin(eventId, checkInId, staffId) {
     throw new BadRequestError(errMsg.CHECKIN.UNDO_WINDOW_EXPIRED);
   }
 
-  await prisma.$transaction([
-    prisma.auditLog.create({
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.checkIn.updateMany({
+      where: { id: checkInId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundError(errMsg.CHECKIN.NOT_FOUND);
+    }
+
+    await tx.auditLog.create({
       data: {
         actorId: staffId,
         action: "UNDO_CHECKIN",
@@ -209,20 +230,18 @@ export async function undoCheckin(eventId, checkInId, staffId) {
           scannedAt: checkin.scannedAt.toISOString(),
         },
       },
-    }),
-    prisma.checkIn.update({
-      where: { id: checkInId },
-      data: { deletedAt: new Date() },
-    }),
-    prisma.registration.update({
+    });
+
+    await tx.registration.update({
       where: { id: checkin.registrationId },
       data: { status: "CONFIRMED" },
-    }),
-    prisma.qrToken.update({
+    });
+
+    await tx.qrToken.update({
       where: { registrationId: checkin.registrationId },
       data: { revokedAt: null, scanCount: { decrement: 1 } },
-    }),
-  ]);
+    });
+  });
 
   return { success: true };
 }

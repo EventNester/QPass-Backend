@@ -33,6 +33,7 @@ vi.mock("../../../database/index.js", () => ({
       findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       count: vi.fn(),
     },
     auditLog: {
@@ -61,6 +62,17 @@ vi.mock("../../../config/redis.js", () => ({
 vi.mock("../../../utils/crypto.js", () => ({
   hashToken: vi.fn((token) => `hashed_${token}`),
 }));
+
+const mTx = {
+  checkIn: {
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  qrToken: { update: vi.fn() },
+  registration: { update: vi.fn() },
+  auditLog: { create: vi.fn() },
+};
 
 describe("Checkin Service Tests", () => {
   const mockEventId = "event_1";
@@ -106,6 +118,7 @@ describe("Checkin Service Tests", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prisma.$transaction.mockImplementation(async (fn) => fn(mTx));
     prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
     prisma.eventStaffAssignment.findUnique.mockResolvedValue({ active: true });
     prisma.checkIn.count.mockResolvedValue(1);
@@ -116,8 +129,8 @@ describe("Checkin Service Tests", () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue(null);
-      prisma.checkIn.create.mockResolvedValue(mockCheckin);
-      prisma.qrToken.update.mockResolvedValue({ ...mockQrToken, scanCount: 1 });
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
+      mTx.qrToken.update.mockResolvedValue({ ...mockQrToken, scanCount: 1 });
 
       const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
 
@@ -171,7 +184,7 @@ describe("Checkin Service Tests", () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue(null);
-      prisma.checkIn.create.mockResolvedValue(mockCheckin);
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
 
       const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
 
@@ -285,11 +298,11 @@ describe("Checkin Service Tests", () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue(null);
-      prisma.checkIn.create.mockResolvedValue(mockCheckin);
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
 
       const result = await scanQr(mockEventId, { token: "token123", deviceInfo: "mobile" }, mockStaffId);
 
-      expect(prisma.checkIn.create).toHaveBeenCalledWith({
+      expect(mTx.checkIn.create).toHaveBeenCalledWith({
         data: {
           eventId: mockEventId,
           registrationId: mockRegistrationId,
@@ -299,7 +312,7 @@ describe("Checkin Service Tests", () => {
         },
         include: { registration: true },
       });
-      expect(prisma.qrToken.update).toHaveBeenCalledWith({
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
         where: { id: mockQrToken.id },
         data: { scanCount: { increment: 1 }, revokedAt: expect.any(Date) },
       });
@@ -313,11 +326,11 @@ describe("Checkin Service Tests", () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, deletedAt: new Date("2026-07-30T00:00:00Z") });
-      prisma.checkIn.update.mockResolvedValue(mockCheckin);
+      mTx.checkIn.update.mockResolvedValue(mockCheckin);
 
       const result = await scanQr(mockEventId, { token: "token123", deviceInfo: "mobile" }, mockStaffId);
 
-      expect(prisma.checkIn.update).toHaveBeenCalledWith({
+      expect(mTx.checkIn.update).toHaveBeenCalledWith({
         where: { id: mockCheckInId },
         data: expect.objectContaining({
           deletedAt: null,
@@ -326,8 +339,30 @@ describe("Checkin Service Tests", () => {
         }),
         include: { registration: true },
       });
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
+        where: { id: mockQrToken.id },
+        data: { scanCount: { increment: 1 }, revokedAt: expect.any(Date) },
+      });
       expect(result.result).toBe(constants.CHECKIN_RESULT.VALID);
       expect(result.checkinId).toBe(mockCheckInId);
+    });
+
+    test("should return REVOKED and not restore when token revoked with a soft-deleted check-in", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue({
+        ...mockQrToken,
+        revokedAt: new Date("2026-07-30T00:00:00Z"),
+      });
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, deletedAt: new Date("2026-07-30T00:00:00Z") });
+
+      const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.REVOKED);
+      expect(result.message).toBe(errMsg.CHECKIN.QR_REVOKED);
+      expect(prisma.checkIn.findUnique).not.toHaveBeenCalled();
+      expect(mTx.checkIn.update).not.toHaveBeenCalled();
+      expect(mTx.checkIn.create).not.toHaveBeenCalled();
+      expect(mTx.qrToken.update).not.toHaveBeenCalled();
     });
 
     test("should release lock even if an error occurs", async () => {
@@ -405,7 +440,7 @@ describe("Checkin Service Tests", () => {
     test("should allow the event owner to undo", async () => {
       prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
       prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: "other_staff_1" });
-      prisma.$transaction.mockResolvedValue([{}, {}, {}, {}]);
+      mTx.checkIn.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await undoCheckin(mockEventId, mockCheckInId, mockStaffId);
 
@@ -428,38 +463,37 @@ describe("Checkin Service Tests", () => {
 
     test("should undo checkin with soft delete, registration revert, and audit log in transaction", async () => {
       prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
-      prisma.$transaction.mockResolvedValue([{}, {}, {}, {}]);
+      mTx.checkIn.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await undoCheckin(mockEventId, mockCheckInId, mockStaffId);
 
-      expect(prisma.$transaction).toHaveBeenCalledWith([
-        prisma.auditLog.create({
-          data: {
-            actorId: mockStaffId,
-            action: "UNDO_CHECKIN",
-            entity: "CheckIn",
-            entityId: mockCheckInId,
-            beforeSnapshot: {
-              eventId: mockCheckin.eventId,
-              registrationId: mockCheckin.registrationId,
-              result: mockCheckin.result,
-              scannedAt: mockCheckin.scannedAt.toISOString(),
-            },
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mTx.checkIn.updateMany).toHaveBeenCalledWith({
+        where: { id: mockCheckInId, deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(mTx.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          actorId: mockStaffId,
+          action: "UNDO_CHECKIN",
+          entity: "CheckIn",
+          entityId: mockCheckInId,
+          beforeSnapshot: {
+            eventId: mockCheckin.eventId,
+            registrationId: mockCheckin.registrationId,
+            result: mockCheckin.result,
+            scannedAt: mockCheckin.scannedAt.toISOString(),
           },
-        }),
-        prisma.checkIn.update({
-          where: { id: mockCheckInId },
-          data: { deletedAt: expect.any(Date) },
-        }),
-        prisma.registration.update({
-          where: { id: mockRegistrationId },
-          data: { status: "CONFIRMED" },
-        }),
-        prisma.qrToken.update({
-          where: { registrationId: mockCheckin.registrationId },
-          data: { revokedAt: null, scanCount: { decrement: 1 } },
-        }),
-      ]);
+        },
+      });
+      expect(mTx.registration.update).toHaveBeenCalledWith({
+        where: { id: mockRegistrationId },
+        data: { status: "CONFIRMED" },
+      });
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
+        where: { registrationId: mockCheckin.registrationId },
+        data: { revokedAt: null, scanCount: { decrement: 1 } },
+      });
       expect(result).toEqual({ success: true });
     });
   });
