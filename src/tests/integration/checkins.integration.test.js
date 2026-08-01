@@ -356,6 +356,14 @@ describe('Checkins API Integration Tests', () => {
   });
 
   describe('POST /api/v1/checkins/:eventId/checkins/:checkInId/undo', () => {
+    it('should return 403 for staff who is neither the owner nor the scanning staff', async () => {
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
+        .set('Authorization', `Bearer ${staffToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
     it('should return 200 and undo the checkin', async () => {
       const response = await request(app)
         .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
