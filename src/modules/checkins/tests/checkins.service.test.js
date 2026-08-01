@@ -428,8 +428,9 @@ describe("Checkin Service Tests", () => {
         .rejects.toThrow(NotFoundError);
     });
 
-    test("should throw ForbiddenError if caller is not the event owner", async () => {
-      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: mockStaffId });
+    test("should throw ForbiddenError if caller is neither owner nor scanning staff", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: "other_staff_1" });
 
       await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
         .rejects.toThrow(ForbiddenError);
@@ -449,7 +450,6 @@ describe("Checkin Service Tests", () => {
     });
 
     test("should throw BadRequestError if check-in is older than 24 hours", async () => {
-      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
       prisma.checkIn.findUnique.mockResolvedValue({
         ...mockCheckin,
         scannedAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
@@ -463,7 +463,6 @@ describe("Checkin Service Tests", () => {
     });
 
     test("should undo checkin with soft delete, registration revert, and audit log in transaction", async () => {
-      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
       prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
       mTx.checkIn.updateMany.mockResolvedValue({ count: 1 });
 
