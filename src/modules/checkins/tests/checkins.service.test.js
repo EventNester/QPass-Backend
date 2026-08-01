@@ -1,11 +1,17 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { scanQr, getCheckins, undoCheckin } from "../checkins.service.js";
 import prisma from "../../../database/index.js";
-import { ConflictError, NotFoundError } from "../../../utils/error.js";
+import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from "../../../utils/error.js";
 import { constants, systemMessages } from "../../../config/index.js";
 
 const errMsg = systemMessages.ERROR;
 const successMsg = systemMessages.SUCCESS;
+
+const m = vi.hoisted(() => {
+  const mSocketIO = {};
+  const mEmitCheckinUpdate = vi.fn();
+  return { mSocketIO, mEmitCheckinUpdate };
+});
 
 vi.mock("../../../database/index.js", () => ({
   default: {
@@ -15,6 +21,9 @@ vi.mock("../../../database/index.js", () => ({
     eventStaffAssignment: {
       findUnique: vi.fn(),
     },
+    registration: {
+      update: vi.fn(),
+    },
     qrToken: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -23,13 +32,23 @@ vi.mock("../../../database/index.js", () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
-      delete: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
     },
     auditLog: {
       create: vi.fn(),
     },
     $transaction: vi.fn(),
   },
+}));
+
+vi.mock("../../../realtime/socket.js", () => ({
+  getIO: vi.fn(() => m.mSocketIO),
+}));
+
+vi.mock("../../../realtime/rooms.js", () => ({
+  emitCheckinUpdate: m.mEmitCheckinUpdate,
 }));
 
 const mRedisClient = {
@@ -44,11 +63,23 @@ vi.mock("../../../utils/crypto.js", () => ({
   hashToken: vi.fn((token) => `hashed_${token}`),
 }));
 
+const mTx = {
+  checkIn: {
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  qrToken: { update: vi.fn() },
+  registration: { update: vi.fn() },
+  auditLog: { create: vi.fn() },
+};
+
 describe("Checkin Service Tests", () => {
   const mockEventId = "event_1";
   const mockStaffId = "staff_1";
   const mockRegistrationId = "reg_1";
   const mockCheckInId = "checkin_1";
+  const mockOwnerId = "organizer_1";
 
   const mockQrToken = {
     id: "qr_1",
@@ -62,6 +93,7 @@ describe("Checkin Service Tests", () => {
       eventId: mockEventId,
       attendeeName: "John Doe",
       attendeeEmail: "john@example.com",
+      status: "CONFIRMED",
     },
   };
 
@@ -72,6 +104,7 @@ describe("Checkin Service Tests", () => {
     staffId: mockStaffId,
     result: constants.CHECKIN_RESULT.VALID,
     scannedAt: new Date(),
+    deletedAt: null,
     deviceInfo: null,
     registration: {
       attendeeName: "John Doe",
@@ -85,6 +118,10 @@ describe("Checkin Service Tests", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prisma.$transaction.mockImplementation(async (fn) => fn(mTx));
+    prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+    prisma.eventStaffAssignment.findUnique.mockResolvedValue({ active: true });
+    prisma.checkIn.count.mockResolvedValue(1);
   });
 
   describe("scanQr", () => {
@@ -92,8 +129,8 @@ describe("Checkin Service Tests", () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue(null);
-      prisma.checkIn.create.mockResolvedValue(mockCheckin);
-      prisma.qrToken.update.mockResolvedValue({ ...mockQrToken, scanCount: 1 });
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
+      mTx.qrToken.update.mockResolvedValue({ ...mockQrToken, scanCount: 1 });
 
       const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
 
@@ -106,6 +143,11 @@ describe("Checkin Service Tests", () => {
       );
       expect(mRedisClient.del).toHaveBeenCalledWith(`scan:${mockEventId}:hashed_token123`);
       expect(result.result).toBe(constants.CHECKIN_RESULT.VALID);
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.VALID, attendeeName: "John Doe", totalCheckedIn: 1 })
+      );
     });
 
     test("should throw ConflictError if scan already in progress", async () => {
@@ -118,6 +160,37 @@ describe("Checkin Service Tests", () => {
       expect(mRedisClient.del).not.toHaveBeenCalled();
     });
 
+    test("should throw ForbiddenError if staff is not assigned to the event", async () => {
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue(null);
+
+      await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
+        .rejects.toThrow(ForbiddenError);
+      await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
+        .rejects.toThrow(errMsg.CHECKIN.NOT_AUTHORIZED);
+      expect(mRedisClient.set).not.toHaveBeenCalled();
+      expect(m.mEmitCheckinUpdate).not.toHaveBeenCalled();
+    });
+
+    test("should throw ForbiddenError if assignment is inactive", async () => {
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ active: false });
+
+      await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
+        .rejects.toThrow(ForbiddenError);
+    });
+
+    test("should allow the event owner to scan without an assignment", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue(null);
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
+      prisma.checkIn.findUnique.mockResolvedValue(null);
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
+
+      const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.VALID);
+    });
+
     test("should return INVALID if QR token not found", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(null);
@@ -126,9 +199,14 @@ describe("Checkin Service Tests", () => {
 
       expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
       expect(result.message).toBe(errMsg.CHECKIN.INVALID_QR);
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID, totalCheckedIn: 1 })
+      );
     });
 
-    test("should return INVALID if QR token expired", async () => {
+    test("should return EXPIRED if QR token expired", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue({
         ...mockQrToken,
@@ -137,11 +215,29 @@ describe("Checkin Service Tests", () => {
 
       const result = await scanQr(mockEventId, { token: "expired_token" }, mockStaffId);
 
-      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(result.result).toBe(constants.CHECKIN_RESULT.EXPIRED);
       expect(result.message).toBe(errMsg.CHECKIN.QR_EXPIRED);
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.EXPIRED, attendeeName: "John Doe" })
+      );
     });
 
-    test("should return INVALID if eventId does not match", async () => {
+    test("should return INVALID if registration is not confirmed", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue({
+        ...mockQrToken,
+        registration: { ...mockQrToken.registration, status: "PENDING" },
+      });
+
+      const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(result.message).toBe(errMsg.CHECKIN.REGISTRATION_NOT_CONFIRMED);
+    });
+
+    test("should return WRONG_EVENT if eventId does not match", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue({
         ...mockQrToken,
@@ -150,8 +246,27 @@ describe("Checkin Service Tests", () => {
 
       const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
 
-      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(result.result).toBe(constants.CHECKIN_RESULT.WRONG_EVENT);
       expect(result.message).toBe(errMsg.CHECKIN.EVENT_MISMATCH);
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.WRONG_EVENT })
+      );
+    });
+
+    test("should return REVOKED if token revoked and no check-in exists", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue({
+        ...mockQrToken,
+        revokedAt: new Date("2026-07-30T00:00:00Z"),
+      });
+      prisma.checkIn.findUnique.mockResolvedValue(null);
+
+      const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.REVOKED);
+      expect(result.message).toBe(errMsg.CHECKIN.QR_REVOKED);
     });
 
     test("should return DUPLICATE if already checked in", async () => {
@@ -172,17 +287,22 @@ describe("Checkin Service Tests", () => {
           afterSnapshot: { tokenHash: "hashed_token123", attemptTime: expect.any(String) },
         },
       });
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.DUPLICATE, attendeeName: "John Doe" })
+      );
     });
 
     test("should create check-in successfully", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
       prisma.checkIn.findUnique.mockResolvedValue(null);
-      prisma.checkIn.create.mockResolvedValue(mockCheckin);
+      mTx.checkIn.create.mockResolvedValue(mockCheckin);
 
       const result = await scanQr(mockEventId, { token: "token123", deviceInfo: "mobile" }, mockStaffId);
 
-      expect(prisma.checkIn.create).toHaveBeenCalledWith({
+      expect(mTx.checkIn.create).toHaveBeenCalledWith({
         data: {
           eventId: mockEventId,
           registrationId: mockRegistrationId,
@@ -192,7 +312,7 @@ describe("Checkin Service Tests", () => {
         },
         include: { registration: true },
       });
-      expect(prisma.qrToken.update).toHaveBeenCalledWith({
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
         where: { id: mockQrToken.id },
         data: { scanCount: { increment: 1 }, revokedAt: expect.any(Date) },
       });
@@ -200,6 +320,49 @@ describe("Checkin Service Tests", () => {
       expect(result.message).toBe(successMsg.CHECKIN.SUCCESS);
       expect(result.attendeeName).toBe("John Doe");
       expect(result.checkinId).toBe(mockCheckInId);
+    });
+
+    test("should restore a previously undone check-in as VALID", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue(mockQrToken);
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, deletedAt: new Date("2026-07-30T00:00:00Z") });
+      mTx.checkIn.update.mockResolvedValue(mockCheckin);
+
+      const result = await scanQr(mockEventId, { token: "token123", deviceInfo: "mobile" }, mockStaffId);
+
+      expect(mTx.checkIn.update).toHaveBeenCalledWith({
+        where: { id: mockCheckInId },
+        data: expect.objectContaining({
+          deletedAt: null,
+          staffId: mockStaffId,
+          result: constants.CHECKIN_RESULT.VALID,
+        }),
+        include: { registration: true },
+      });
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
+        where: { id: mockQrToken.id },
+        data: { scanCount: { increment: 1 }, revokedAt: expect.any(Date) },
+      });
+      expect(result.result).toBe(constants.CHECKIN_RESULT.VALID);
+      expect(result.checkinId).toBe(mockCheckInId);
+    });
+
+    test("should return REVOKED and not restore when token revoked with a soft-deleted check-in", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue({
+        ...mockQrToken,
+        revokedAt: new Date("2026-07-30T00:00:00Z"),
+      });
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, deletedAt: new Date("2026-07-30T00:00:00Z") });
+
+      const result = await scanQr(mockEventId, { token: "token123" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.REVOKED);
+      expect(result.message).toBe(errMsg.CHECKIN.QR_REVOKED);
+      expect(prisma.checkIn.findUnique).not.toHaveBeenCalled();
+      expect(mTx.checkIn.update).not.toHaveBeenCalled();
+      expect(mTx.checkIn.create).not.toHaveBeenCalled();
+      expect(mTx.qrToken.update).not.toHaveBeenCalled();
     });
 
     test("should release lock even if an error occurs", async () => {
@@ -222,7 +385,7 @@ describe("Checkin Service Tests", () => {
 
       expect(result).toEqual(checkins);
       expect(prisma.checkIn.findMany).toHaveBeenCalledWith({
-        where: { eventId: mockEventId },
+        where: { eventId: mockEventId, deletedAt: null },
         include: {
           registration: { select: { attendeeName: true, attendeeEmail: true } },
           staff: { select: { name: true, email: true } },
@@ -258,33 +421,79 @@ describe("Checkin Service Tests", () => {
         .rejects.toThrow(NotFoundError);
     });
 
-    test("should undo checkin successfully with audit log and deletion in transaction", async () => {
-      prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
-      prisma.$transaction.mockResolvedValue([{}, {}, {}]);
+    test("should throw NotFoundError if checkin was already undone", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, deletedAt: new Date("2026-07-30T00:00:00Z") });
+
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(NotFoundError);
+    });
+
+    test("should throw ForbiddenError if caller is neither owner nor scanning staff", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: "other_staff_1" });
+
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(ForbiddenError);
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(errMsg.CHECKIN.UNDO_NOT_AUTHORIZED);
+    });
+
+    test("should allow the event owner to undo", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockStaffId });
+      prisma.checkIn.findUnique.mockResolvedValue({ ...mockCheckin, staffId: "other_staff_1" });
+      mTx.checkIn.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await undoCheckin(mockEventId, mockCheckInId, mockStaffId);
 
-      expect(prisma.$transaction).toHaveBeenCalledWith([
-        prisma.auditLog.create({
-          data: {
-            actorId: mockStaffId,
-            action: "UNDO_CHECKIN",
-            entity: "CheckIn",
-            entityId: mockCheckInId,
-            beforeSnapshot: {
-              eventId: mockCheckin.eventId,
-              registrationId: mockCheckin.registrationId,
-              result: mockCheckin.result,
-              scannedAt: mockCheckin.scannedAt.toISOString(),
-            },
+      expect(result).toEqual({ success: true });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    test("should throw BadRequestError if check-in is older than 24 hours", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue({
+        ...mockCheckin,
+        scannedAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+      });
+
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(BadRequestError);
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(errMsg.CHECKIN.UNDO_WINDOW_EXPIRED);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    test("should undo checkin with soft delete, registration revert, and audit log in transaction", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
+      mTx.checkIn.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await undoCheckin(mockEventId, mockCheckInId, mockStaffId);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mTx.checkIn.updateMany).toHaveBeenCalledWith({
+        where: { id: mockCheckInId, deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(mTx.auditLog.create).toHaveBeenCalledWith({
+        data: {
+          actorId: mockStaffId,
+          action: "UNDO_CHECKIN",
+          entity: "CheckIn",
+          entityId: mockCheckInId,
+          beforeSnapshot: {
+            eventId: mockCheckin.eventId,
+            registrationId: mockCheckin.registrationId,
+            result: mockCheckin.result,
+            scannedAt: mockCheckin.scannedAt.toISOString(),
           },
-        }),
-        prisma.checkIn.delete({ where: { id: mockCheckInId } }),
-        prisma.qrToken.update({
-          where: { registrationId: mockCheckin.registrationId },
-          data: { revokedAt: null, scanCount: { decrement: 1 } },
-        }),
-      ]);
+        },
+      });
+      expect(mTx.registration.update).toHaveBeenCalledWith({
+        where: { id: mockRegistrationId },
+        data: { status: "CONFIRMED" },
+      });
+      expect(mTx.qrToken.update).toHaveBeenCalledWith({
+        where: { registrationId: mockCheckin.registrationId },
+        data: { revokedAt: null, scanCount: { decrement: 1 } },
+      });
       expect(result).toEqual({ success: true });
     });
   });

@@ -46,6 +46,10 @@ enum CheckInResult {
   VALID
   DUPLICATE
   INVALID
+  EXPIRED
+  WRONG_EVENT
+  REVOKED
+  NOT_AUTHORIZED
 }
 
 enum PaymentStatus {
@@ -256,6 +260,7 @@ model CheckIn {
   result         CheckInResult
   deviceInfo     String?       @map("device_info")
   ipAddress      String?       @map("ip_address")
+  deletedAt      DateTime?     @map("deleted_at")
 
   event        Event        @relation(fields: [eventId], references: [id])
   registration Registration @relation(fields: [registrationId], references: [id])
