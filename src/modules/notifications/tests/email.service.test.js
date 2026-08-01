@@ -129,12 +129,30 @@ describe('Email Service', () => {
       expect(fakeTransporter.sendMail).toHaveBeenCalledTimes(3);
     });
 
-    test('should not crash on template rendering errors and return fallback HTML', async () => {
-      const html = await renderTemplate('non-existent-template', {
-        subject: 'Fallback Test',
+    test('should throw on template rendering errors (non-existent template)', async () => {
+      await expect(
+        renderTemplate('non-existent-template', {
+          subject: 'Fallback Test',
+        })
+      ).rejects.toThrow();
+    });
+
+    test('should strip style and script blocks from generated plain-text body', async () => {
+      const sendMailSpy = vi.fn().mockResolvedValue({ messageId: 'msg-text' });
+      vi.spyOn(nodemailer, 'createTransport').mockReturnValue({ sendMail: sendMailSpy });
+      resetTransporterCache();
+
+      const result = await sendEmail({
+        to: 'text@example.com',
+        subject: 'Text Test',
+        html: '<style>.btn{color:red}</style><script>alert("x")</script><p>Hello <b>World</b></p>',
       });
-      expect(html).toContain('Notification from');
-      expect(html).toContain('Fallback Test');
+
+      expect(result.success).toBe(true);
+      const text = sendMailSpy.mock.calls[0][0].text;
+      expect(text).toBe('Hello World');
+      expect(text).not.toContain('color:red');
+      expect(text).not.toContain('alert');
     });
   });
 

@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { forgotPassword, resetPassword } from '../password.service.js';
 import prisma from '../../../database/index.js';
-import { NotFoundError, UnauthorizedError } from '../../../utils/error.js';
+import { UnauthorizedError } from '../../../utils/error.js';
 
 
 const mRedisClient = {
@@ -14,6 +14,16 @@ vi.mock('../../../config/redis.js', () => ({
   getRedisClient: vi.fn(() => mRedisClient),
 }));
 
+vi.mock('../../../config/index.js', () => ({
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+  systemMessages: {
+    ERROR: {
+      AUTH: { RESET_TOKEN_INVALID: 'Invalid or expired password reset token' },
+      GENERAL: { NOT_FOUND: 'Resource not found' },
+    },
+  },
+}));
+
 vi.mock('../../../database/index.js', () => ({
   default: {
     user: {
@@ -21,6 +31,10 @@ vi.mock('../../../database/index.js', () => ({
       update: vi.fn(),
     },
   },
+}));
+
+vi.mock('./auth.service.js', () => ({
+  hashPassword: vi.fn((pw) => Promise.resolve(`hashed_${pw}`)),
 }));
 
 vi.mock('../../../utils/email.js', () => ({
@@ -40,9 +54,12 @@ describe('Password Service', () => {
   });
 
   describe('forgotPassword', () => {
-    test('should throw NotFoundError if user does not exist', async () => {
+    test('should silently return empty object if user does not exist', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
-      await expect(forgotPassword('unknown@example.com')).rejects.toThrow(NotFoundError);
+
+      const result = await forgotPassword('unknown@example.com');
+
+      expect(result).toEqual({});
     });
 
     test('should generate reset token, store in redis, and send email if user exists', async () => {
@@ -59,6 +76,8 @@ describe('Password Service', () => {
         'EX',
         900
       );
+      const { sendPasswordResetEmail } = await import('../../../utils/email.js');
+      expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockUser.email, result.resetToken);
     });
   });
 

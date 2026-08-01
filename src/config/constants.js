@@ -24,6 +24,10 @@ export default {
     VALID: "VALID",
     DUPLICATE: "DUPLICATE",
     INVALID: "INVALID",
+    EXPIRED: "EXPIRED",
+    WRONG_EVENT: "WRONG_EVENT",
+    REVOKED: "REVOKED",
+    NOT_AUTHORIZED: "NOT_AUTHORIZED",
   },
 
   PAYMENT_STATUS: {
@@ -62,11 +66,22 @@ export default {
   QR: {
     EXPIRY_HOURS: 24,
     SIZE: 300,
+    MAX_SIZE: 1000,
+  },
+
+  UPLOAD: {
+    MAX_SIZE: 5 * 1024 * 1024,
+    ALLOWED_EXTENSIONS: [".csv", ".xlsx", ".pdf", ".docx"],
+    DIR: "uploads",
   },
 
   PAGINATION: {
     DEFAULT_PAGE: 1,
     DEFAULT_LIMIT: 20,
     MAX_LIMIT: 100,
+  },
+
+  IMPORT: {
+    MAX_ROWS: 1000,
   },
 };

@@ -46,6 +46,10 @@ enum CheckInResult {
   VALID
   DUPLICATE
   INVALID
+  EXPIRED
+  WRONG_EVENT
+  REVOKED
+  NOT_AUTHORIZED
 }
 
 enum PaymentStatus {
@@ -176,6 +180,7 @@ model TicketType {
   event         Event          @relation(fields: [eventId], references: [id])
   registrations Registration[]
 
+  @@unique([eventId, sortOrder])
   @@index([eventId])
   @@map("ticket_types")
 }
@@ -219,13 +224,13 @@ model Registration {
 
   event      Event      @relation(fields: [eventId], references: [id])
   ticketCode TicketCode @relation(fields: [ticketCodeId], references: [id])
-  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id])
+  ticketType TicketType? @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
   qrToken       QrToken?
   checkins      CheckIn[]
   payment       Payment?
   notifications Notification[]
 
-  @@unique([eventId, ticketCodeId])
+  @@unique([eventId, attendeeEmail])
   @@index([eventId])
   @@index([attendeeEmail])
   @@map("registrations")
@@ -255,6 +260,7 @@ model CheckIn {
   result         CheckInResult
   deviceInfo     String?       @map("device_info")
   ipAddress      String?       @map("ip_address")
+  deletedAt      DateTime?     @map("deleted_at")
 
   event        Event        @relation(fields: [eventId], references: [id])
   registration Registration @relation(fields: [registrationId], references: [id])
@@ -314,6 +320,8 @@ model Notification {
   recipient         String
   channel           String
   template          String
+  subject           String?
+  context           Json?
   status            NotificationStatus @default(PENDING)
   userId            String?            @map("user_id")
   eventId           String?            @map("event_id")

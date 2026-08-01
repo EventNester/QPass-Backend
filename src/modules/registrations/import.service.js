@@ -1,7 +1,9 @@
 import prisma from '../../database/index.js';
 import { logger } from '../../config/index.js';
-import { BadRequestError, NotFoundError, ConflictError } from '../../utils/error.js';
-import { sendNotification } from '../../services/notification.service.js';
+import crypto from 'crypto';
+import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
+import { parseFile } from '../../utils/parsers/index.js';
+import { sendNotification } from '../../modules/notifications/notification.service.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254; // RFC 5321 standard maximum length for email addresses
@@ -37,6 +39,43 @@ function splitCsvLine(line) {
 }
 
 /**
+ * Split CSV text into logical rows, handling newlines within double-quoted fields.
+ * @param {string} text - Raw CSV text
+ * @returns {string[]} Array of row strings
+ */
+function splitCsvLines(text) {
+  const rows = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        current += '""';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+        current += '"';
+      }
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (current.trim()) {
+        rows.push(current);
+      }
+      current = '';
+      if (char === '\r' && text[i + 1] === '\n') i++;
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) {
+    rows.push(current);
+  }
+
+  return rows;
+}
+/**
  * Parse CSV text or array into structured row objects.
  * Throws BadRequestError (400) if the file is empty or has no data rows.
  * @param {string|Buffer|Array<Object>} fileContent - Raw CSV or parsed array
@@ -61,7 +100,7 @@ export function parseImportFile(fileContent) {
     throw new BadRequestError('Import file is empty. No rows found.');
   }
 
-  const lines = cleanedStr.split(/\r?\n/).filter((line) => line.trim() !== '');
+  const lines = splitCsvLines(cleanedStr);
   if (lines.length <= 1) {
     throw new BadRequestError('Import file is empty. No rows found.');
   }
@@ -94,12 +133,12 @@ export function parseImportFile(fileContent) {
  * @returns {Object} Validation result { valid, row, email, name, phone, ticketTypeId, error }
  */
 export function validateRow(row, rowNumber, seenEmails) {
-  const rawEmail = row.email || row.attendeeEmail || '';
+  const rawEmail = row.email || row.attendeeEmail || row.attendeeemail || '';
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
-  const rawName = row.name || row.attendeeName || '';
+  const rawName = row.name || row.attendeeName || row.attendeename || '';
   const name = typeof rawName === 'string' ? rawName.trim() : '';
-  const phone = row.phone || row.phoneNumber || null;
-  const ticketTypeId = row.ticketTypeId || row.ticketType || null;
+  const phone = row.phone || row.phoneNumber || row.phonenumber || null;
+  const ticketTypeId = row.ticketTypeId || row.ticketType || row.tickettype || row.tickettypeid || null;
 
   if (!email) {
     return {
@@ -165,7 +204,7 @@ export function validateRow(row, rowNumber, seenEmails) {
  */
 function generateTicketCode(eventId) {
   const prefix = eventId ? eventId.slice(0, 4).toUpperCase() : 'EVNT';
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const rand = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `${prefix}-${rand}`;
 }
 
@@ -215,9 +254,11 @@ export async function importRegistrations({
   const errorReport = [];
   let successRows = 0;
   let failedRows = 0;
+  const BATCH_SIZE = 50;
 
+  const validEntries = [];
   for (let i = 0; i < rows.length; i++) {
-    const rowNumber = i + 1;
+    const rowNumber = i + 2;
     const row = rows[i];
     const validation = validateRow(row, rowNumber, seenEmails);
 
@@ -228,77 +269,137 @@ export async function importRegistrations({
         email: validation.email,
         error: validation.error,
       });
-      continue;
+    } else {
+      validEntries.push({ rowNumber, validation });
     }
+  }
 
-    try {
-      const existingRegistration = await prisma.registration.findFirst({
-        where: {
-          eventId,
-          attendeeEmail: validation.email,
-        },
-      });
+  if (validEntries.length > 0) {
+    const emails = validEntries.map((e) => e.validation.email);
+    const existingRegs = await prisma.registration.findMany({
+      where: { eventId, attendeeEmail: { in: emails } },
+      select: { attendeeEmail: true },
+    });
+    const existingEmailSet = new Set(existingRegs.map((r) => r.attendeeEmail));
 
-      if (existingRegistration) {
+    const toCreate = [];
+    for (const entry of validEntries) {
+      if (existingEmailSet.has(entry.validation.email)) {
         failedRows++;
         errorReport.push({
-          row: rowNumber,
-          email: validation.email,
+          row: entry.rowNumber,
+          email: entry.validation.email,
           error: 'Attendee is already registered for this event',
         });
-        continue;
+      } else {
+        toCreate.push(entry);
       }
+    }
 
-      const codeStr = generateTicketCode(eventId);
-      const ticketCode = await prisma.ticketCode.create({
-        data: {
-          eventId,
-          code: codeStr,
-          status: 'USED',
-          attendeeEmail: validation.email,
-          attendeeName: validation.name,
-        },
+    const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
+    if (ticketTypeIds.length > 0) {
+      const validTicketTypes = await prisma.ticketType.findMany({
+        where: { id: { in: ticketTypeIds }, eventId, active: true },
+        select: { id: true, capacity: true, quantitySold: true },
       });
+      const validTtMap = new Map(validTicketTypes.map((tt) => [tt.id, tt]));
 
-      await prisma.registration.create({
-        data: {
-          eventId,
-          ticketCodeId: ticketCode.id,
-          attendeeEmail: validation.email,
-          attendeeName: validation.name,
-          phone: validation.phone || null,
-          ticketTypeId: validation.ticketTypeId || null,
-          source: 'IMPORT',
-          status: 'CONFIRMED',
-        },
-      });
+      const filtered = [];
+      for (const entry of toCreate) {
+        const ttId = entry.validation.ticketTypeId;
+        if (!ttId) {
+          filtered.push(entry);
+          continue;
+        }
+        const tt = validTtMap.get(ttId);
+        if (!tt) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Invalid or inactive ticket type',
+          });
+          continue;
+        }
+        if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Ticket type has reached capacity',
+          });
+          continue;
+        }
+        filtered.push(entry);
+      }
+      toCreate.length = 0;
+      toCreate.push(...filtered);
+    }
 
+    for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+      const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
 
-      successRows++;
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const entry of currentBatch) {
+            const ticketCode = await tx.ticketCode.create({
+              data: {
+                eventId,
+                code: generateTicketCode(eventId),
+                status: 'USED',
+                attendeeEmail: entry.validation.email,
+                attendeeName: entry.validation.name,
+              },
+            });
 
-      if (sendEmails) {
-        await sendNotification({
-          recipient: validation.email,
-          subject: `Registration Confirmed: ${event.title}`,
-          template: 'registration',
-          context: {
-            name: validation.name,
-            eventTitle: event.title,
-            email: validation.email,
-          },
-          userId: uploadedById,
-          eventId,
-        }).catch((err) => {
-          logger.warn({ err: err.message, email: validation.email }, 'Failed to send import registration notification');
+            await tx.registration.create({
+              data: {
+                eventId,
+                ticketCodeId: ticketCode.id,
+                attendeeEmail: entry.validation.email,
+                attendeeName: entry.validation.name,
+                phone: entry.validation.phone || null,
+                ticketTypeId: entry.validation.ticketTypeId || null,
+                source: 'IMPORT',
+                status: 'CONFIRMED',
+              },
+            });
+          }
         });
+
+        successRows += currentBatch.length;
+
+        if (sendEmails) {
+          await Promise.all(
+            currentBatch.map((entry) =>
+              sendNotification({
+                recipient: entry.validation.email,
+                subject: `Registration Confirmed: ${event.title}`,
+                template: 'registration',
+                context: {
+                  name: entry.validation.name,
+                  eventTitle: event.title,
+                  email: entry.validation.email,
+                },
+                userId: uploadedById,
+                eventId,
+              }).catch((err) => {
+                logger.warn({ err: err.message, email: entry.validation.email }, 'Failed to send import registration notification');
+              })
+            )
+          );
+        }
+      } catch (error) {
+        logger.error({ err: error, batchStart: i }, 'Batch processing failed');
+        for (const entry of currentBatch) {
+          failedRows++;
+          errorReport.push({
+            row: entry.rowNumber,
+            email: entry.validation.email,
+            error: 'Database error during batch processing',
+          });
+        }
       }
-    } catch (error) {
-      failedRows++;
-      errorReport.push({
-        row: rowNumber,
-        email: validation.email,
-        error: error.message || 'Database error during registration',
-      });
     }
   }
 
@@ -307,7 +408,6 @@ export async function importRegistrations({
   const updatedBatch = await prisma.importBatch.update({
     where: { id: batch.id },
     data: {
-      totalRows: rows.length,
       successRows,
       failedRows,
       status: finalStatus,
@@ -358,40 +458,55 @@ export async function registerPublic({ eventId, name, email, phone, ticketTypeId
     throw new NotFoundError('Event not found');
   }
 
-  const existingRegistration = await prisma.registration.findFirst({
-    where: {
-      eventId,
-      attendeeEmail: normalizedEmail,
-    },
-  });
-
-  if (existingRegistration) {
-    throw new ConflictError('Attendee with this email is already registered for this event');
+  if (event.status !== 'PUBLISHED') {
+    throw new BadRequestError('Event is not open for registration');
   }
 
-  const codeStr = generateTicketCode(eventId);
-  const ticketCode = await prisma.ticketCode.create({
-    data: {
-      eventId,
-      code: codeStr,
-      status: 'USED',
-      attendeeEmail: normalizedEmail,
-      attendeeName: name.trim(),
-    },
-  });
+  if (ticketTypeId) {
+    const ticketType = await prisma.ticketType.findFirst({
+      where: { id: ticketTypeId, eventId, active: true },
+      select: { id: true, capacity: true, quantitySold: true },
+    });
+    if (!ticketType) {
+      throw new BadRequestError('Invalid or inactive ticket type');
+    }
+    if (ticketType.capacity !== null && ticketType.quantitySold >= ticketType.capacity) {
+      throw new BadRequestError('Ticket type has reached capacity');
+    }
+  }
 
-  const registration = await prisma.registration.create({
-    data: {
-      eventId,
-      ticketCodeId: ticketCode.id,
-      attendeeEmail: normalizedEmail,
-      attendeeName: name.trim(),
-      phone: phone || null,
-      ticketTypeId: ticketTypeId || null,
-      source: 'PUBLIC_LINK',
-      status: 'CONFIRMED',
-    },
-  });
+  let registration;
+  try {
+    registration = await prisma.$transaction(async (tx) => {
+      const ticketCode = await tx.ticketCode.create({
+        data: {
+          eventId,
+          code: generateTicketCode(eventId),
+          status: 'USED',
+          attendeeEmail: normalizedEmail,
+          attendeeName: name.trim(),
+        },
+      });
+
+      return tx.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: ticketCode.id,
+          attendeeEmail: normalizedEmail,
+          attendeeName: name.trim(),
+          phone: phone || null,
+          ticketTypeId: ticketTypeId || null,
+          source: 'PUBLIC_LINK',
+          status: 'CONFIRMED',
+        },
+      });
+    });
+  } catch (error) {
+    if (error.code === 'P2002') {
+      throw new ConflictError('Attendee with this email is already registered for this event');
+    }
+    throw error;
+  }
 
   await sendNotification({
     recipient: normalizedEmail,
@@ -425,4 +540,349 @@ export async function listImportBatchesByEvent(eventId) {
     where: { eventId },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/**
+ * Full import pipeline from file upload to completed batch.
+ *
+ * 1. Parse file rows via the format-specific parser.
+ * 2. Validate each row (email format, required fields, batch-level dupes).
+ * 3. De-duplicate against existing registrations for the event.
+ * 4. Create TicketCode + Registration + QrToken per valid row in batches.
+ * 5. Send a batch summary email with success/failure counts.
+ * 6. Create an audit log entry.
+ *
+ * @param {Object} options
+ * @param {string} options.eventId - Target event ID
+ * @param {string} options.uploadedById - User ID uploading the file
+ * @param {Buffer} options.fileBuffer - Raw file buffer
+ * @param {string} options.filename - Original filename (used for format detection)
+ * @param {string} [options.fileType] - MIME type override
+ * @param {boolean} [options.sendEmails=true] - Whether to send batch summary
+ * @returns {Promise<Object>} The completed ImportBatch record
+ */
+export async function processImportFile({
+  eventId,
+  uploadedById,
+  fileBuffer,
+  filename,
+  fileType,
+  sendEmails = true,
+}) {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, title: true, endTime: true, ownerId: true, deletedAt: true },
+  });
+
+  if (!event || event.deletedAt) {
+    throw new NotFoundError('Event not found');
+  }
+
+  if (event.ownerId !== uploadedById) {
+    throw new ForbiddenError('You do not have access to this event');
+  }
+
+  const parsed = await parseFile(fileBuffer, filename, fileType);
+
+  const { rows, errors: parseErrors } = parsed;
+
+  const batch = await prisma.importBatch.create({
+    data: {
+      eventId,
+      uploadedById,
+      originalFilename: filename,
+      fileType: fileType || 'unknown',
+      totalRows: rows.length + parseErrors.length,
+      status: 'PROCESSING',
+      errorReport: parseErrors.length > 0 ? parseErrors : null,
+    },
+  });
+
+  const seenEmails = new Set();
+  const validationErrors = [];
+  const validEntries = [];
+  const BATCH_SIZE = 50;
+
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNumber = row.sourceRow || (i + 2);
+      const validation = validateRow(row, rowNumber, seenEmails);
+
+      if (!validation.valid) {
+        validationErrors.push({
+          row: rowNumber,
+          email: validation.email,
+          error: validation.error,
+        });
+      } else {
+        validEntries.push({ rowNumber, validation });
+      }
+    }
+  } catch (error) {
+    await prisma.importBatch.update({
+      where: { id: batch.id },
+      data: { status: 'FAILED', completedAt: new Date() },
+    }).catch((err) => logger.error({ err, batchId: batch.id }, 'Failed to mark batch FAILED'));
+    throw error;
+  }
+
+  const existingEmailSet = new Set();
+  if (validEntries.length > 0) {
+    const emails = validEntries.map((e) => e.validation.email);
+    const existingRegs = await prisma.registration.findMany({
+      where: { eventId, attendeeEmail: { in: emails } },
+      select: { attendeeEmail: true },
+    });
+    for (const r of existingRegs) {
+      existingEmailSet.add(r.attendeeEmail);
+    }
+  }
+
+  const toCreate = [];
+  for (const entry of validEntries) {
+    if (existingEmailSet.has(entry.validation.email)) {
+      validationErrors.push({
+        row: entry.rowNumber,
+        email: entry.validation.email,
+        error: 'Attendee is already registered for this event',
+      });
+    } else {
+      toCreate.push(entry);
+    }
+  }
+
+  const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
+  const claimsByTicketType = new Map();
+  if (ticketTypeIds.length > 0) {
+    const eventTicketTypes = await prisma.ticketType.findMany({
+      where: { eventId, active: true },
+      select: { id: true, name: true, capacity: true, quantitySold: true },
+    });
+    const validTtById = new Map(eventTicketTypes.map((tt) => [tt.id.toLowerCase(), tt]));
+    const validTtByName = new Map(eventTicketTypes.map((tt) => [(tt.name || '').toLowerCase(), tt]));
+
+    const filtered = [];
+    for (const entry of toCreate) {
+      const rawValue = entry.validation.ticketTypeId;
+      if (!rawValue) {
+        filtered.push(entry);
+        continue;
+      }
+      const key = rawValue.trim().toLowerCase();
+      const tt = validTtById.get(key) || validTtByName.get(key);
+      if (!tt) {
+        validationErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Invalid or inactive ticket type',
+        });
+        continue;
+      }
+      entry.validation.ticketTypeId = tt.id;
+      const claimed = claimsByTicketType.get(tt.id) || 0;
+      if (tt.capacity !== null && (tt.quantitySold + claimed) >= tt.capacity) {
+        validationErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Ticket type has reached capacity',
+        });
+        continue;
+      }
+      claimsByTicketType.set(tt.id, claimed + 1);
+      filtered.push(entry);
+    }
+    toCreate.length = 0;
+    toCreate.push(...filtered);
+  }
+
+  let successRows = 0;
+  let failedRows = parseErrors.length + validationErrors.length;
+
+  const allErrors = [...parseErrors, ...validationErrors];
+  for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
+    const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const entry of currentBatch) {
+          const ttId = entry.validation.ticketTypeId;
+          if (ttId && claimsByTicketType.has(ttId)) {
+            const tt = await tx.ticketType.findUnique({
+              where: { id: ttId },
+              select: { id: true, capacity: true, quantitySold: true },
+            });
+            if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
+              throw new Error('Ticket type has reached capacity');
+            }
+            await tx.ticketType.update({
+              where: { id: ttId },
+              data: { quantitySold: { increment: 1 } },
+            });
+          }
+
+          const ticketCode = await tx.ticketCode.create({
+            data: {
+              eventId,
+              code: generateTicketCode(eventId),
+              status: 'USED',
+              attendeeEmail: entry.validation.email,
+              attendeeName: entry.validation.name,
+            },
+          });
+
+          const registration = await tx.registration.create({
+            data: {
+              eventId,
+              ticketCodeId: ticketCode.id,
+              attendeeEmail: entry.validation.email,
+              attendeeName: entry.validation.name,
+              phone: entry.validation.phone || null,
+              ticketTypeId: entry.validation.ticketTypeId || null,
+              source: 'IMPORT',
+              status: 'CONFIRMED',
+              qrIssued: true,
+              qrIssuedAt: new Date(),
+            },
+          });
+
+          const rawToken = crypto.randomBytes(32).toString('hex');
+          await tx.qrToken.create({
+            data: {
+              registrationId: registration.id,
+              tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+              expiresAt: event.endTime,
+            },
+          });
+        }
+      });
+
+      successRows += currentBatch.length;
+    } catch (error) {
+      logger.error({ err: error, batchStart: i }, 'Import batch transaction failed');
+      for (const entry of currentBatch) {
+        failedRows++;
+        allErrors.push({
+          row: entry.rowNumber,
+          email: entry.validation.email,
+          error: 'Database error during batch processing',
+        });
+      }
+    }
+  }
+
+  const finalStatus = successRows === 0 ? 'FAILED' : 'COMPLETED';
+
+  const updatedBatch = await prisma.importBatch.update({
+    where: { id: batch.id },
+    data: {
+      successRows,
+      failedRows,
+      status: finalStatus,
+      errorReport: allErrors.length > 0 ? allErrors : null,
+      completedAt: new Date(),
+    },
+  });
+
+  if (sendEmails) {
+    const user = await prisma.user.findUnique({
+      where: { id: uploadedById },
+      select: { email: true },
+    });
+    sendNotification({
+      recipient: user ? user.email : uploadedById,
+      subject: `Import Complete: ${successRows} imported, ${failedRows} errors`,
+      template: 'import-summary',
+      context: {
+        eventTitle: event.title,
+        totalRows: rows.length + parseErrors.length,
+        successRows,
+        failedRows,
+        errors: allErrors,
+      },
+      userId: uploadedById,
+      eventId,
+    }).catch((err) => {
+      logger.warn({ err: err.message, batchId: batch.id }, 'Failed to send import summary notification');
+    });
+  }
+
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorId: uploadedById,
+        action: 'IMPORT',
+        entity: 'ImportBatch',
+        entityId: updatedBatch.id,
+        afterSnapshot: {
+          eventId,
+          totalRows: rows.length + parseErrors.length,
+          successRows,
+          failedRows,
+          filename,
+        },
+      },
+    });
+  } catch (error) {
+    logger.warn({ err: error.message }, 'Failed to create audit log for import');
+  }
+
+  return updatedBatch;
+}
+
+/**
+ * Generate a template file for importing attendees.
+ * @param {'csv'|'pdf'} format - The requested template format.
+ * @returns {Promise<Buffer|string>} The template data (Buffer for PDF, string for CSV)
+ */
+export async function generateImportTemplate(format) {
+  if (format === 'pdf') {
+    const { default: PDFDocument } = await import('pdfkit');
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const chunks = [];
+        
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+
+        doc.fontSize(20).text('QPass Attendee Import Template', { align: 'center' });
+        doc.moveDown();
+        
+        doc.fontSize(12).text('Please ensure your document contains a table with the following columns:');
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('Name', { continued: true }).font('Helvetica').text(' (Required)');
+        doc.font('Helvetica-Bold').text('Email', { continued: true }).font('Helvetica').text(' (Required)');
+        doc.font('Helvetica-Bold').text('Phone', { continued: true }).font('Helvetica').text(' (Optional)');
+        doc.font('Helvetica-Bold').text('TicketType', { continued: true }).font('Helvetica').text(' (Optional)');
+        
+        doc.moveDown();
+        doc.text('Example Table:', { underline: true });
+        doc.moveDown();
+
+        const tableTop = doc.y;
+        
+        doc.font('Helvetica-Bold');
+        doc.text('Name', 50, tableTop);
+        doc.text('Email', 200, tableTop);
+        doc.text('Phone', 350, tableTop);
+        doc.text('TicketType', 450, tableTop);
+        
+        doc.font('Helvetica');
+        doc.text('John Doe', 50, tableTop + 20);
+        doc.text('john@example.com', 200, tableTop + 20);
+        doc.text('08012345678', 350, tableTop + 20);
+        doc.text('VIP', 450, tableTop + 20);
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // Default to CSV
+  return '"Name","Email","Phone","TicketType"\n"John Doe","john@example.com","08012345678","VIP"';
 }

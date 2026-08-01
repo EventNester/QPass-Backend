@@ -389,15 +389,13 @@ Get public event details and available ticket types. No authentication required.
 
 #### `POST /api/v1/public/events/:slug/register`
 
-Register for an event. Free events are confirmed instantly. Paid events return a Paystack payment URL.
+Register for an event. Free events are confirmed instantly.
 
 **Auth:** No
 
 **Body:** `{ "name": "Jane Doe", "email": "jane@example.com", "phone": "+2348012345678", "ticketTypeId": "..." }`
 
-**Response `200` (free):** `{ "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED" } }`
-
-**Response `200` (paid):** `{ "registration": { "id", "status": "PENDING" }, "paymentUrl": "https://checkout.paystack.com/..." }`
+**Response `200`:** `{ "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED" } }`
 
 ---
 
@@ -497,7 +495,7 @@ Remove a staff member from an event.
 
 Scan a QR code to check in an attendee. Uses distributed locking to prevent race conditions.
 
-**Auth:** STAFF (assigned to event)
+**Auth:** ORGANIZER / STAFF — must be the event owner or have an active staff assignment. Emits `checkin:update` on `event:{eventId}:dashboard` after every scan attempt.
 
 **Body:** `{ "token": "qr-token-string", "deviceInfo": "iPhone 15 - CheckIn App v1.0" }`
 
@@ -505,17 +503,21 @@ Scan a QR code to check in an attendee. Uses distributed locking to prevent race
 |--------|---------|
 | `VALID` | Check-in successful |
 | `DUPLICATE` | Attendee already checked in |
-| `INVALID` | Token expired, wrong event, or not found |
+| `INVALID` | Token not found, or registration not confirmed |
+| `EXPIRED` | QR token has expired |
+| `WRONG_EVENT` | QR belongs to a different event |
+| `REVOKED` | QR token has been revoked |
 
-**Response `200` (valid):** `{ "result": "VALID", "message": "Check-in successful", "attendeeName": "Jane Doe", "checkinId": "..." }`
+**Response `200` (valid):** `{ "result": "VALID", "message": "Check-in recorded successfully", "attendeeName": "Jane Doe", "checkinId": "..." }`
 
+**Response `403`:** Caller is not the event owner, has no active staff assignment, or the event does not exist (`NOT_AUTHORIZED`)
 **Response `409`:** Scan already in progress (Redis lock held)
 
 ---
 
 #### `GET /api/v1/checkins/:eventId/checkins`
 
-List all check-ins for an event with attendee and staff details.
+List all check-ins for an event with attendee and staff details. Undone (soft-deleted) check-ins are excluded.
 
 **Auth:** ORGANIZER / STAFF
 
@@ -529,35 +531,17 @@ List all check-ins for an event with attendee and staff details.
 
 #### `POST /api/v1/checkins/:eventId/checkins/:checkInId/undo`
 
-Undo a check-in. Creates an audit log entry with a before-snapshot.
+Undo a check-in. Soft-deletes the `CheckIn` row (`deletedAt`), reverts the registration status to `CONFIRMED`, re-enables the QR token, and writes an audit log entry with a before-snapshot.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** Event owner or the staff member who performed the check-in
+
+**Constraints:** Cannot undo a check-in older than 24 hours.
 
 **Response `200`:** `{ "data": { "success": true } }`
 
----
+**Response `400`:** Check-in older than 24 hours
 
-### Payments
-
----
-
-#### `POST /api/v1/payments/webhook`
-
-Paystack webhook callback. Handles `charge.success` events to confirm payments and issue tickets. Idempotent — duplicate webhooks are safely ignored.
-
-**Auth:** Paystack HMAC-SHA512 signature verification
-
-**Response `200`:** `{ "status": "success" }`
-
----
-
-#### `POST /api/v1/payments/verify/:reference`
-
-Manually verify a payment with Paystack. Use as a fallback when webhooks fail.
-
-**Auth:** No
-
-**Response `200`:** `{ "payment": { "id", "paystackReference", "amount", "currency", "status" } }`
+**Response `403`:** Caller is neither the event owner nor the scanning staff
 
 ---
 
@@ -613,6 +597,4 @@ Export registration data as CSV or PDF.
 | `TicketCodeStatus` | `UNUSED`, `USED`, `REVOKED` |
 | `RegistrationStatus` | `PENDING`, `CONFIRMED`, `CANCELLED` |
 | `CheckInResult` | `VALID`, `DUPLICATE`, `INVALID` |
-| `PaymentStatus` | `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` |
-| `InvoiceStatus` | `PENDING`, `PAID`, `OVERDUE`, `CANCELLED` |
 | `NotificationStatus` | `PENDING`, `SENT`, `FAILED`, `READ` |

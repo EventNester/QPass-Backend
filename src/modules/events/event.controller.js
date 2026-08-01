@@ -4,6 +4,8 @@ import {
   listEvents,
   updateEvent,
   deleteEvent,
+  publishEvent,
+  cancelEvent,
 } from "./event.service.js";
 
 import {
@@ -26,13 +28,25 @@ const parseOrNext = (schema, body, next) => {
   }
 };
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const parseEventIdOrNext = (id, next) => {
+  if (!UUID_REGEX.test(id)) {
+    next(new ValidationError("Invalid event ID format"));
+    return null;
+  }
+
+  return id;
+};
+
 // Create event
 export const createEventController = async (req, res, next) => {
   try {
     const validatedData = parseOrNext(createEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await createEvent(validatedData, req.user.id);
+    const event = await createEvent(validatedData, req.user.sub);
 
     return created(res, event, systemMessages.SUCCESS.EVENT.CREATED);
   } catch (error) {
@@ -74,7 +88,7 @@ export const updateEventController = async (req, res, next) => {
     const validatedData = parseOrNext(updateEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await updateEvent(id, validatedData, req.user.id);
+    const event = await updateEvent(id, validatedData, req.user.sub);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.UPDATED);
   } catch (error) {
@@ -87,9 +101,46 @@ export const deleteEventController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const event = await deleteEvent(id, req.user.id);
+    const event = await deleteEvent(id, req.user.sub);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Publish event
+export const publishEventController = async (req, res, next) => {
+  try {
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
+
+    const event = await publishEvent(eventId, req.user.sub);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.PUBLISHED
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// Cancel event
+export const cancelEventController = async (req, res, next) => {
+  try {
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
+
+    const event = await cancelEvent(eventId, req.user.sub);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.CANCELLED
+    );
   } catch (error) {
     next(error);
   }

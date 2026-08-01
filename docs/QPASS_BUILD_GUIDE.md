@@ -97,9 +97,7 @@ lastLoginAt     DateTime?      @map("last_login_at")
 ```prisma
 slug                    String           @unique
 registrationMode        RegistrationMode @default(PUBLIC_LINK)
-isPaid                  Boolean          @default(false)
 capacity                Int?
-currency                String           @default("NGN")
 registrationOpensAt     DateTime?        @map("registration_opens_at")
 registrationClosesAt    DateTime?        @map("registration_closes_at")
 publishedAt             DateTime?        @map("published_at")
@@ -112,20 +110,10 @@ Add `@@index([slug])` to Event.
 ```prisma
 phone            String?
 ticketTypeId     String?            @map("ticket_type_id")
-paymentStatus    PaymentStatus      @default(PENDING)
 source           RegistrationSource @default(PUBLIC_LINK)
 confirmationCode String?            @unique @map("confirmation_code")
 metadata         Json?
 ticketType       TicketType?        @relation(fields: [ticketTypeId], references: [id])
-```
-
-**Payment - add fields:**
-```prisma
-registrationId String?  @unique @map("registration_id")
-gateway        String   @default("PAYSTACK")
-metadata       Json?
-verifiedAt     DateTime? @map("verified_at")
-registration   Registration? @relation(fields: [registrationId], references: [id])
 ```
 
 **Notification - add fields:**
@@ -290,7 +278,7 @@ POST /password/reset  → validate(schema) → controller.resetPassword
 **File:** `src/modules/events/events.schema.js`
 
 Schemas:
-- `createEvent` - body: title (string, min 1), description?, venue?, startTime (datetime), endTime (datetime, after startTime), registrationMode (enum), isPaid?, capacity? (int, positive), currency?
+- `createEvent` - body: title (string, min 1), description?, venue?, startTime (datetime), endTime (datetime, after startTime), registrationMode (enum), capacity? (int, positive)
 - `updateEvent` - body: all fields optional
 - `listEvents` - query: page?, limit?, status? (enum)
 - `eventParams` - params: eventId (uuid)
@@ -419,10 +407,10 @@ router.use("/checkins", authenticateUser, checkinRoutes);
 // Public registration routes (Phase 2)
 // router.use("/public", publicRoutes);
 
-// Payments (Phase 3)
+// Payments (Phase 2 — deferred)
 // router.use("/payments", paymentRoutes);
 
-// Reports (Phase 4)
+// Reports (Phase 3)
 // router.use("/events", authenticateUser, reportRoutes);
 
 export default router;
@@ -525,8 +513,8 @@ Implement:
 
 Implement:
 - `getPublicEvent(slug)` - find event by slug (must be PUBLISHED), include ticketTypes (active only), return event details
-- `registerForEvent(slug, data)` - find event, validate ticketType exists, check capacity, create Registration + TicketCode + QrToken (if free), return `{ registration, ticket, paymentUrl? }`
-- `handlePaidRegistration(event, ticketType, data)` - create Registration (PENDING) + Payment (PENDING), call Paystack initialize, return paymentUrl
+- `registerForEvent(slug, data)` - find event, validate ticketType exists, check capacity, create Registration + TicketCode + QrToken, return `{ registration, ticket }`
+<!-- handlePaidRegistration deferred to Phase 2 (payment module) -->
 
 ### 2.3b - Public Routes
 
@@ -688,7 +676,6 @@ export default transporter;
 **Templates:** Create HTML files in `src/modules/notifications/templates/`:
 - `registration-confirmed.html`
 - `qr-generated.html`
-- `payment-success.html` (Phase 3)
 - `staff-invitation.html`
 - `password-reset.html`
 
@@ -728,8 +715,7 @@ DELETE /:eventId/staff/:staffId  → authenticateUser → controller.remove
 ## Phase 2 Exit Checklist
 
 - [ ] Public event view (`GET /public/events/:slug`) returns event + ticket types
-- [ ] Free registration → Registration CONFIRMED + TicketCode + QrToken + email sent
-- [ ] Paid registration → Registration PENDING + Payment PENDING + Paystack URL returned
+- [ ] Public registration → Registration CONFIRMED + TicketCode + QrToken + email sent
 - [ ] CSV/XLSX import works with row validation and error reporting
 - [ ] PDF import extracts tables, DOCX import extracts tables
 - [ ] ImportBatch tracking with success/fail counts
@@ -743,79 +729,13 @@ DELETE /:eventId/staff/:staffId  → authenticateUser → controller.remove
 
 ---
 
-# Phase 3: Payments & Check-in (Days 8–10)
+# Phase 3: Check-in, Reporting & Release (Days 8–14)
 
-**Goal:** Paystack integration, webhook processing, enhanced check-in with real-time.
+**Goal:** Enhanced check-in, real-time updates via Socket.IO, dashboard stats, exports, seed script, tests, deployment.
 
-## Step 3.1 - Paystack Integration
+> **Note:** Payment processing (Paystack integration, paid registration, webhooks) is deferred to Phase 2. MVP handles free events only — all registrations are confirmed immediately.
 
-### 3.1a - Paystack Client
-
-**File:** `src/integrations/paystack/client.js`
-
-Implement:
-- `initializeTransaction({ email, amount, callback_url, metadata })` - `POST https://api.paystack.co/transaction/initialize` with `Authorization: Bearer ${PAYSTACK_SECRET_KEY}`
-- `verifyTransaction(reference)` - `GET https://api.paystack.co/transaction/verify/${reference}`
-
-Use `axios`. Amount in naira.
-
-### 3.1b - Paystack Webhook Verifier
-
-**File:** `src/integrations/paystack/webhook.js`
-
-```js
-import crypto from "crypto";
-
-export function verifyWebhookSignature(rawBody, signature, secret) {
-  const hash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
-  return hash === signature;
-}
-```
-
----
-
-## Step 3.2 - Payment Module
-
-### 3.2a - Payment Service
-
-**File:** `src/modules/payments/payment.service.js`
-
-Implement:
-- `initializePayment(registrationId, userId)` - find registration + ticketType, create Payment (PENDING), call Paystack initialize, return `{ authorization_url, reference }`
-- `verifyPayment(reference)` - call Paystack verify, if success: update Payment (SUCCESS, paidAt, verifiedAt), update Registration (CONFIRMED, paymentStatus: SUCCESS), create TicketCode + QrToken, send QR email, audit log, emit Socket.IO
-- `getPaymentStatus(paymentId, userId)` - return payment details
-
-### 3.2b - Webhook Handler
-
-**File:** `src/modules/payments/webhook.handler.js`
-
-Implement:
-- `handleWebhook(rawBody, signature)` - verify signature, parse event, if `charge.success`: extract reference → call verifyPayment logic (idempotent: check payment status first)
-
-**Critical:** Webhook must use `express.raw()` for the body, NOT `express.json()`. Add raw body capture in `app.js` or on the webhook route specifically:
-```js
-// In the webhook route, use raw body:
-router.post("/webhook", express.raw({ type: "application/json" }), webhookHandler);
-```
-
-### 3.2c - Payment Routes
-
-**File:** `src/modules/payments/payment.routes.js`
-
-```
-POST /payments/webhook              → express.raw() → controller.webhook
-POST /payments/verify/:reference    → controller.verify
-```
-
-### 3.2d - Payment Controller
-
-**File:** `src/modules/payments/payment.controller.js`
-
-Handlers: webhook, verify.
-
----
-
-## Step 3.3 - Enhanced Check-in
+## Step 3.1 - Enhanced Check-in
 
 **File:** `src/modules/checkins/checkins.service.js` - modify existing
 
@@ -849,7 +769,7 @@ router.post("/:eventId/scan", authenticateUser, requireRole(STAFF, ORGANIZER), v
 
 ---
 
-## Step 3.4 - Socket.IO Room Management
+## Step 3.2 - Socket.IO Room Management
 
 **File:** `src/realtime/socket.js` - enhance
 
@@ -878,25 +798,7 @@ io.on("connection", (socket) => {
 
 ---
 
-## Phase 3 Exit Checklist
-
-- [ ] Paystack initialize returns `authorization_url`
-- [ ] Webhook processes `charge.success` idempotently
-- [ ] Manual verify endpoint works as fallback
-- [ ] Payment → Registration → TicketCode → QR → email chain works
-- [ ] Staff authorization check blocks non-assigned staff (403)
-- [ ] All scan results work: VALID, DUPLICATE, INVALID, EXPIRED, WRONG_EVENT, REVOKED, NOT_AUTHORIZED
-- [ ] Socket.IO emits `checkin:update` after each scan
-- [ ] Dashboard receives real-time updates
-- [ ] Webhook raw body handled correctly (not parsed by express.json)
-
----
-
-# Phase 4: Reporting & Release (Days 11–14)
-
-**Goal:** Dashboard stats, exports, seed script, tests, deployment.
-
-## Step 4.1 - Dashboard Stats
+## Step 3.3 - Dashboard Stats
 
 **File:** `src/modules/reports/dashboard.service.js`
 
@@ -925,7 +827,7 @@ GET /:eventId/dashboard → authenticateUser → controller.getDashboard
 
 ---
 
-## Step 4.2 - CSV/PDF Export
+## Step 3.4 - CSV/PDF Export
 
 **File:** `src/modules/reports/export.service.js`
 
@@ -946,7 +848,7 @@ GET /:eventId/exports/registrations  → authenticateUser → controller.exportR
 
 ---
 
-## Step 4.3 - Audit Log Queries
+## Step 3.5 - Audit Log Queries
 
 **File:** `src/modules/admin/audit.service.js`
 
@@ -956,7 +858,7 @@ Implement:
 
 ---
 
-## Step 4.4 - Seed Script
+## Step 3.6 - Seed Script
 
 **File:** `src/database/seed.js` (currently empty placeholder)
 
@@ -974,7 +876,7 @@ async function main() {
 
 ---
 
-## Step 4.5 - Swagger Annotations
+## Step 3.7 - Swagger Annotations
 
 Add JSDoc-style Swagger annotations to all route files. Reference `docs/swagger-definition.json` for the base definition.
 
@@ -1004,7 +906,7 @@ Key annotations per route:
 
 ---
 
-## Step 4.6 - Tests
+## Step 3.8 - Tests
 
 ### Unit Tests
 
@@ -1013,7 +915,6 @@ Key annotations per route:
 | `tests/unit/auth.service.test.js` | register (success, duplicate email), login (success, wrong password), refresh (valid, blacklisted), logout |
 | `tests/unit/qr.service.test.js` | generateQRToken (uniqueness), verifyQRToken (valid, expired, wrong event, revoked) |
 | `tests/unit/import.service.test.js` | CSV parsing, XLSX parsing, PDF parsing, DOCX parsing, row validation, duplicate detection |
-| `tests/unit/paystack.service.test.js` | webhook signature verification, idempotent processing, amount mismatch detection |
 | `tests/unit/ticket-pdf.service.test.js` | PDF generation, QR embedding |
 
 ### Integration Tests
@@ -1022,9 +923,8 @@ Key annotations per route:
 |------|-----------|
 | `tests/integration/auth.test.js` | register → login → refresh → logout → password reset |
 | `tests/integration/events.test.js` | create → edit → publish → list → cancel → unauthorized |
-| `tests/integration/registrations.test.js` | free reg → paid reg → capacity limit → duplicate → CSV import |
-| `tests/integration/checkins.test.js` | valid → duplicate → wrong event → expired → unauthorized → undo |
-| `tests/integration/payments.test.js` | initialize → webhook → idempotent → invalid signature |
+| `tests/integration/registrations.test.js` | registration → capacity limit → duplicate → CSV import |
+| `tests/integration/checkins.integration.test.js` | valid → duplicate → wrong event → expired → unauthorized → undo |
 
 **Test setup (`tests/setup.js`):**
 ```js
@@ -1038,7 +938,6 @@ export async function resetDatabase() {
   await prisma.registration.deleteMany();
   await prisma.ticketCode.deleteMany();
   await prisma.ticketType.deleteMany();
-  await prisma.payment.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.eventStaffAssignment.deleteMany();
   await prisma.event.deleteMany();
@@ -1050,7 +949,7 @@ export { prisma };
 
 ---
 
-## Step 4.7 - Deployment Config
+## Step 3.9 - Deployment Config
 
 ### Render.com Settings
 
@@ -1066,14 +965,13 @@ export { prisma };
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
 DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
-PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, PAYSTACK_WEBHOOK_SECRET,
 SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM,
 SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 ```
 
 ---
 
-## Step 4.8 - Security Pass
+## Step 3.10 - Security Pass
 
 Final checklist before release:
 
@@ -1085,8 +983,6 @@ Final checklist before release:
 - [ ] Refresh token checked against Redis blacklist before rotation
 - [ ] Access token NOT checked against blacklist
 - [ ] Auth routes have `authLimiter`
-- [ ] Webhook uses raw body for HMAC verification
-- [ ] Payment amount verified from TicketType, not client
 - [ ] Error messages generic in production (no stack traces)
 - [ ] No hardcoded messages - all from `system_messages.js`
 - [ ] `npm run lint` passes
@@ -1095,16 +991,20 @@ Final checklist before release:
 
 ---
 
-## Phase 4 Exit Checklist
+## Phase 3 Exit Checklist
 
+- [ ] Staff authorization check blocks non-assigned staff (403)
+- [ ] All scan results work: VALID, DUPLICATE, INVALID, EXPIRED, WRONG_EVENT, REVOKED, NOT_AUTHORIZED
+- [ ] Socket.IO emits `checkin:update` after each scan
+- [ ] Dashboard receives real-time updates
 - [ ] Dashboard returns correct stats (registrations, check-ins, no-shows, capacity, ticket breakdown)
 - [ ] Attendance CSV/PDF export downloads and opens correctly
 - [ ] Registration CSV/PDF export downloads and opens correctly
 - [ ] Audit log queries work with filters
 - [ ] Seed script creates admin, organizer, sample events, registrations
 - [ ] Swagger docs show all endpoints
-- [ ] Unit tests pass for: auth, QR, import, Paystack, PDF
-- [ ] Integration tests pass for: auth, events, registrations, check-ins, payments
+- [ ] Unit tests pass for: auth, QR, import, PDF
+- [ ] Integration tests pass for: auth, events, registrations, check-ins
 - [ ] `npm run lint` clean
 - [ ] Deployed to Render, health check returns 200
 - [ ] Security pass complete
