@@ -123,7 +123,7 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
 /**
  * @openapi
  * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
- *   post:
+ *   delete:
  *     summary: Undo a check-in
  *     description: |
  *       Allowed for the event owner or the staff member who performed the check-in,
@@ -158,7 +158,7 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden — requires STAFF or ORGANIZER role and event ownership or scanning staff membership
+ *         description: Forbidden — requires ORGANIZER role and event ownership
  *         content:
  *           application/json:
  *             schema:
@@ -166,6 +166,6 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *       404:
  *         description: Check-in not found
  */
-router.post("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.undoCheckin);
+router.delete("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("ORGANIZER"), checkinController.undoCheckin);
 
 export default router;
