@@ -19,8 +19,12 @@ const router = Router();
  *   post:
  *     summary: Scan a QR code to check in an attendee
  *     description: |
- *       Validates the QR token, takes a Redis distributed lock to prevent duplicate
- *       in-flight scans, then creates a CheckIn row (enforced unique by eventId+registrationId).
+ *       Requires the caller to be the event owner or an active assigned staff member.
+ *       Validates the QR token (not found → INVALID, expired → EXPIRED, registration not
+ *       confirmed → INVALID, wrong event → WRONG_EVENT, revoked → REVOKED, already checked
+ *       in → DUPLICATE), takes a Redis distributed lock to prevent duplicate in-flight
+ *       scans, then creates a CheckIn row (enforced unique by eventId+registrationId).
+ *       Emits `checkin:update` on the dashboard room after every scan attempt.
  *     tags: [Checkins]
  *     security:
  *       - bearerAuth: []
@@ -54,13 +58,13 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden — requires STAFF or ORGANIZER role
+ *         description: Forbidden — requires STAFF or ORGANIZER role and event ownership/assignment
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Scan already in progress or duplicate check-in
+ *         description: Scan already in progress (Redis lock held)
  *         content:
  *           application/json:
  *             schema:
@@ -120,6 +124,11 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  * /api/v1/checkins/{eventId}/checkins/{checkInId}/undo:
  *   post:
  *     summary: Undo a check-in
+ *     description: |
+ *       Allowed for the event owner or the staff member who performed the check-in,
+ *       within 24 hours of the scan. Soft-deletes the CheckIn row (sets deletedAt),
+ *       reverts the registration status to CONFIRMED, re-enables the QR token, and
+ *       writes an audit log entry with a before-snapshot.
  *     tags: [Checkins]
  *     security:
  *       - bearerAuth: []
@@ -135,6 +144,12 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *     responses:
  *       200:
  *         description: Check-in undone
+ *       400:
+ *         description: Check-in is older than 24 hours
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Unauthorized — missing or invalid Bearer token
  *         content:
@@ -142,7 +157,7 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden — requires STAFF or ORGANIZER role
+ *         description: Forbidden — requires STAFF or ORGANIZER role and event ownership or scanning staff membership
  *         content:
  *           application/json:
  *             schema:

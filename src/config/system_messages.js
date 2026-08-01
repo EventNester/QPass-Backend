@@ -102,6 +102,9 @@ export default {
       SCAN_IN_PROGRESS: "Scan already in progress",
       EVENT_MISMATCH: "QR code is not valid for this event",
       NOT_FOUND: "Check-in not found",
+      REGISTRATION_NOT_CONFIRMED: "Registration is not confirmed",
+      UNDO_NOT_AUTHORIZED: "You are not authorized to undo this check-in",
+      UNDO_WINDOW_EXPIRED: "Check-in can only be undone within 24 hours",
     },
     PAYMENT: {
       FAILED: "Payment verification failed",
