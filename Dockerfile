@@ -12,9 +12,10 @@ RUN npm ci --omit=dev
 
 # Copy source code
 COPY src ./src
+COPY swagger.json ./swagger.json
 
 # Generate Prisma client
-RUN npx prisma generate
+RUN npx prisma generate --schema=./src/database/schema.prisma
 
 # Production stage
 FROM node:22-alpine AS production
@@ -28,6 +29,7 @@ RUN adduser -S qpass -u 1001
 # Copy built application
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/swagger.json ./swagger.json
 COPY --from=builder /app/package.json ./
 
 # Set ownership

@@ -8,10 +8,31 @@ export default {
       PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
       PASSWORD_RESET_SUCCESS: "Password reset successfully",
     },
+
+    REGISTRATION: {
+      CREATED: "Registration completed successfully",
+      CONFIRMED: "Registration confirmed successfully",
+      QR_SENT: "QR code sent successfully",
+    },
+
+    EMAIL: {
+      SENT: "Email sent successfully",
+    },
+
+
+    NOTIFICATION: {
+      SENT: "Notification sent successfully",
+    },
+
+    IMPORT: {
+      COMPLETED: "Import completed successfully",
+    },
     EVENT: {
       CREATED: "Event created successfully",
       UPDATED: "Event updated successfully",
       DELETED: "Event deleted successfully",
+      PUBLISHED: "Event published successfully",
+      CANCELLED: "Event cancelled successfully",
     },
     TICKET: {
       CODES_UPLOADED: "Ticket codes uploaded successfully",
@@ -26,11 +47,17 @@ export default {
       INITIALIZED: "Payment initialized successfully",
       VERIFIED: "Payment verified successfully",
     },
+    STAFF: {
+      ASSIGNED: "Staff assigned successfully",
+      LISTED: "Staff list retrieved successfully",
+      REMOVED: "Staff removed successfully",
+    },
     REPORT: {
       GENERATED: "Report generated successfully",
       EXPORTED: "Data exported successfully",
     },
   },
+
 
   ERROR: {
     AUTH: {
@@ -52,6 +79,9 @@ export default {
       ALREADY_EXISTS: "Event with this title already exists",
       UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
+      NOT_DRAFT: "Event is not in draft status",
+      CANNOT_CANCEL_DRAFT: "Cannot cancel a draft event",
+      ALREADY_CANCELLED: "Event is already cancelled",
     },
     TICKET: {
       INVALID_CODE: "Invalid ticket code",
@@ -59,7 +89,7 @@ export default {
       CODE_REVOKED: "Ticket code has been revoked",
       NOT_FOUND: "Ticket code not found",
       ALREADY_EXISTS: "QR token already exists for this registration",
-      INVALID: "Invalid QR token",
+      INVALID_QR: "Invalid QR token",
       EXPIRED: "QR token has expired",
       REVOKED: "QR token has been revoked",
     },
@@ -72,15 +102,35 @@ export default {
       SCAN_IN_PROGRESS: "Scan already in progress",
       EVENT_MISMATCH: "QR code is not valid for this event",
       NOT_FOUND: "Check-in not found",
+      REGISTRATION_NOT_CONFIRMED: "Registration is not confirmed",
+      UNDO_NOT_AUTHORIZED: "You are not authorized to undo this check-in",
+      UNDO_WINDOW_EXPIRED: "Check-in can only be undone within 24 hours",
     },
     PAYMENT: {
       FAILED: "Payment verification failed",
       ALREADY_VERIFIED: "Payment has already been verified",
       INVALID_REFERENCE: "Invalid payment reference",
     },
+    REGISTRATION: {
+      NOT_OPEN: "Event is not open for registration",
+      DUPLICATE: "You have already registered for this event",
+      CAPACITY_EXCEEDED: "Event has reached full capacity",
+      TICKET_TYPE_FULL: "This ticket type has sold out",
+      INVALID_TICKET_TYPE: "Invalid or inactive ticket type",
+      PAID_TICKET_TYPE: "Paid ticket types are not allowed on the free registration endpoint",
+      PAID_EVENT: "This is a paid event and cannot use the free registration endpoint",
+      EVENT_CLOSED: "Registration is closed for this event",
+      EVENT_FULL: "Event capacity has been reached",
+      ALREADY_REGISTERED: "You have already registered for this event",
+    },
+    STAFF: {
+      ALREADY_ASSIGNED: "Staff member is already assigned to this event",
+      NOT_FOUND: "Staff assignment not found",
+    },
     GENERAL: {
       NOT_FOUND: "Resource not found",
       ALREADY_EXISTS: "Resource already exists",
+      CONFLICT: "Resource conflict",
       ROUTE_NOT_FOUND: "Route not found",
       VALIDATION_ERROR: "Validation error",
       INTERNAL_ERROR: "Internal server error",
@@ -88,6 +138,31 @@ export default {
       TOO_MANY_REQUESTS: "Too many requests, please try again later",
       DB_CONNECTION_FAILED: "Database connection failed",
       SERVER_START_FAILED: "Failed to start server",
+    },
+    UPLOAD: {
+      MISSING_FILE: "No file uploaded",
+      INVALID_TYPE: "Invalid file type. Allowed formats: CSV, XLSX, PDF, DOCX",
+      TOO_LARGE: "File exceeds the 5MB size limit",
+      GENERIC: "File upload failed",
+    },
+    IMPORT: {
+      CSV_PARSE_FAILED: "Failed to parse CSV file",
+      XLSX_PARSE_FAILED: "Failed to parse XLSX file",
+      PDF_PARSE_FAILED: "Failed to parse PDF file",
+      DOCX_PARSE_FAILED: "Failed to parse DOCX file",
+      NO_WORKSHEETS: "No worksheets found in XLSX file",
+      INVALID_BUFFER: "Invalid file buffer",
+      ROW_LIMIT_EXCEEDED: "File exceeds the maximum allowed number of rows",
+      NOT_EVENT_OWNER: "You do not have access to this event",
+      BATCH_NOT_FOUND: "Import batch not found for this event",
+    },
+
+    EMAIL: {
+      FAILED: "Failed to send email",
+    },
+
+    NOTIFICATION: {
+      FAILED: "Failed to send notification",
     },
   },
 
@@ -101,6 +176,22 @@ export default {
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
+    IMPORT: {
+      MISSING_NAME: "Name is required",
+      CONTACT_REQUIRED: "At least one of email or phone is required",
+      INVALID_EMAIL_FORMAT: "Invalid email format",
+      INVALID_PHONE: "Invalid phone number format",
+      DUPLICATE_EMAIL: "Duplicate email within the same batch",
+      DUPLICATE_PHONE: "Duplicate phone within the same batch",
+      DUPLICATE_EMAIL_EVENT: "Email already registered for this event",
+      DUPLICATE_PHONE_EVENT: "Phone already registered for this event",
+      UNKNOWN_TICKET_TYPE: "Unknown ticket type",
+      CAPACITY_EXCEEDED: "Event or ticket type capacity exceeded",
+      EMPTY_ROW: "Row must contain at least a name and contact info",
+    },
+
+    PHONE_REQUIRED: "Phone number is required",
+    TICKET_TYPE_REQUIRED: "Ticket type is required",
   },
 
   INFO: {
