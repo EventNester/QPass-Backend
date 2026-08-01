@@ -508,10 +508,9 @@ Scan a QR code to check in an attendee. Uses distributed locking to prevent race
 | `WRONG_EVENT` | QR belongs to a different event |
 | `REVOKED` | QR token has been revoked |
 
-**Response `200` (valid):** `{ "result": "VALID", "message": "Check-in successful", "attendeeName": "Jane Doe", "checkinId": "..." }`
+**Response `200` (valid):** `{ "result": "VALID", "message": "Check-in recorded successfully", "attendeeName": "Jane Doe", "checkinId": "..." }`
 
-**Response `403`:** Staff member not assigned to the event (`NOT_AUTHORIZED`)
-
+**Response `403`:** Caller is not the event owner, has no active staff assignment, or the event does not exist (`NOT_AUTHORIZED`)
 **Response `409`:** Scan already in progress (Redis lock held)
 
 ---

@@ -24,8 +24,9 @@ const router = Router();
  *       confirmed → INVALID, wrong event → WRONG_EVENT, revoked → REVOKED, already checked
  *       in → DUPLICATE), takes a Redis distributed lock to prevent duplicate in-flight
  *       scans, then creates a CheckIn row (enforced unique by eventId+registrationId).
- *       Emits `checkin:update` on the dashboard room after every scan attempt.
- *     tags: [Checkins]
+ *       If the registration has a soft-deleted CheckIn row from an earlier undo, that
+ *       row is restored and the result is VALID.
+ *       Emits `checkin:update` on the dashboard room after every scan attempt. *     tags: [Checkins]
  *     security:
  *       - bearerAuth: []
  *     parameters:
