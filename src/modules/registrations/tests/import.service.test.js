@@ -543,7 +543,7 @@ describe('Import & Registration Service Edge Cases', () => {
       );
     });
     it('should not fail when notification fails (fire-and-forget)', async () => {
-      notificationService.sendNotification.mockRejectedValueOnce(new Error('SMTP error'));
+      notificationService.sendNotification.mockRejectedValueOnce(new Error('Brevo API unavailable'));
       await expect(
         processImportFile({ eventId, uploadedById, fileBuffer, filename })
       ).resolves.toBeDefined();
