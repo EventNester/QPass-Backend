@@ -640,38 +640,45 @@ POST /:eventId/tickets/export       → authenticateUser → controller.exportTi
 **File:** `src/modules/notifications/email.service.js`
 
 Implement:
-- `sendEmail(to, template, data)` - create Notification (PENDING), render HTML template, send via Nodemailer, update Notification (SENT/FAILED)
+- `sendEmail(to, template, data)` - create Notification (PENDING), render HTML template, send via Brevo REST API, update Notification (SENT/FAILED)
 - `sendRegistrationConfirmation(registration, event)` - template: registration-confirmed
 - `sendQRCode(registration, event, rawToken)` - template: qr-generated
 - `sendStaffInvitation(staffEmail, event, inviteToken)` - template: staff-invitation
 - `sendPasswordReset(email, resetToken)` - template: password-reset
 
-**File:** `src/integrations/email/smtp.js`
+**File:** `src/integrations/email/brevo.js`
+
+Uses the Brevo REST API (no SMTP) so email works on Railway/Vercel where SMTP ports are blocked:
 
 ```js
-import nodemailer from "nodemailer";
-import { getConfig } from "../config/index.js";
+import axios from "axios";
+import { getConfig } from "../../config/index.js";
 
 const config = getConfig();
-const transporter = nodemailer.createTransport({
-  host: config.SMTP_HOST,
-  port: config.SMTP_PORT,
-  secure: config.SMTP_SECURE,
-  auth: { user: config.SMTP_USER, pass: config.SMTP_PASS },
-});
-export default transporter;
+export async function sendTransactionalEmail({ to, subject, html, text }) {
+  const { data } = await axios.post(
+    "https://api.brevo.com/v3/smtp/email",
+    {
+      sender: { name: config.BREVO_SENDER_NAME, email: config.BREVO_SENDER_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    },
+    { headers: { "api-key": config.BREVO_API_KEY, "Content-Type": "application/json" } }
+  );
+  return { messageId: data.messageId };
+}
 ```
 
-> **Note:** Add SMTP env vars to `src/config/env.js`:
+> **Note:** Add Brevo env vars to `src/config/env.js`:
 > ```js
-> SMTP_HOST: z.string().default("smtp.gmail.com"),
-> SMTP_PORT: z.coerce.number().default(587),
-> SMTP_SECURE: z.enum(["true","false"]).default("false").transform(v => v === "true"),
-> SMTP_USER: z.string().default(""),
-> SMTP_PASS: z.string().default(""),
-> SMTP_FROM: z.string().default("QPass <noreply@qpass.com>"),
+> BREVO_API_KEY: z.string().default(""),
+> BREVO_SENDER_EMAIL: z.string().default("noreply@qpass.com"),
+> BREVO_SENDER_NAME: z.string().default("QPass"),
 > FRONTEND_BASE_URL: z.string().default("http://localhost:3001"),
 > ```
+> When `BREVO_API_KEY` is empty, sends are skipped with a warning instead of failing.
 
 **Templates:** Create HTML files in `src/modules/notifications/templates/`:
 - `registration-confirmed.html`
@@ -965,7 +972,7 @@ export { prisma };
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
 DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
-SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM,
+BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME,
 SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 ```
 

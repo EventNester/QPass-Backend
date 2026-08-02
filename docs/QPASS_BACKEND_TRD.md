@@ -16,7 +16,7 @@ QPass is an event registration, ticketing, and attendance intelligence platform 
 
 > **Core flow:** Organizer creates event → attendees import or self-register → unique QR credential issued → staff scan QR on event day → duplicate blocked → organizers see/export attendance data.
 
-**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration, QR code generation/scanning with duplicate detection, SMTP email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
+**MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration, QR code generation/scanning with duplicate detection, Brevo REST email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
 
 **Deferred (Phase 2):** Payment processing (Paystack integration, paid registration, webhooks), full KYC, OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
 
@@ -66,7 +66,7 @@ Become Africa's most trusted attendance verification & ticket management platfor
 | Public registration | Slug-based link. Instant confirmation + QR. |
 | QR code generation | One per registration. SHA-256 hashed server-side. Raw token delivered to attendee. Expires event end + 24h. |
 | Payment processing (Phase 2) | Paystack integration, paid registration, webhooks. Deferred from MVP. |
-| SMTP email | 4 templates: registration, QR, staff invite, password reset. Non-blocking. |
+| Email (Brevo REST) | 4 templates: registration, QR, staff invite, password reset. Non-blocking. |
 | QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by organizer only. |
 | Staff management | Assign/remove staff. Email invitation for new staff users. |
 | Dashboard stats | Registrations, check-ins, no-shows, capacity utilization, ticket breakdown. Real-time via Socket.IO. |
@@ -91,7 +91,7 @@ Clients (Organizer Dashboard / Attendee Portal / Staff Scanner)
         → Router (/health, /api/v1/*, /api-docs)
             → Middleware (validate Zod → requireAuth → requireRole)
                     → Module Layer (auth, events, tickets, registrations, checkins, staff, notifications, reports, admin, pdf)
-                    → Prisma/PostgreSQL | Redis | Integrations (SMTP, Sentry) | Socket.IO
+                    → Prisma/PostgreSQL | Redis | Integrations (Brevo, Sentry) | Socket.IO
 ```
 
 ### 4.2 Module Convention
@@ -120,7 +120,7 @@ Every module under `src/modules/<module>/` follows:
 | PDF/QR | pdfkit 0.19 + qrcode 1.5 | Ticket PDF, QR images |
 | File Parsing | csv-parse, xlsx, pdf-parse, mammoth | Import (CSV/XLSX/PDF/DOCX) |
 | HTTP Client | axios 1.x | External API calls |
-| Email | Nodemailer (SMTP) | Transactional email |
+| Email | Brevo REST API (axios) | Transactional email |
 | Logging | pino + pino-http | Structured JSON logging |
 | Security | helmet 8 + express-rate-limit 7 | Headers, rate limiting |
 | Testing | Vitest 4 + Supertest 7 | Unit + integration tests |
@@ -161,7 +161,7 @@ src/
 │   ├── admin/                          # controller, service, audit.service
 │   └── pdf/                            # ticket-pdf.service (pdfkit)
 ├── integrations/
-│   ├── email/                          # smtp.js, templates.js
+│   ├── email/                          # brevo.js, templates.js
 │   └── sentry/                         # client.js
 ├── realtime/                           # socket.js, rooms.js
 ├── routes/                             # index.js, v1.js, health.js
@@ -369,12 +369,13 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 
 ---
 
-## 9. Email Service (SMTP via Nodemailer)
+## 9. Email Service (Brevo REST API)
+
+Uses the Brevo transactional email REST API (axios) instead of SMTP so email works on Railway/Vercel and other hosts where SMTP ports are blocked.
 
 ```env
-SMTP_HOST=smtp.gmail.com  |  SMTP_PORT=587  |  SMTP_SECURE=false
-SMTP_USER=your-email@gmail.com  |  SMTP_PASS=your-app-password
-SMTP_FROM=QPass <noreply@qpass.com>
+BREVO_API_KEY=your_brevo_api_key
+BREVO_SENDER_EMAIL=noreply@qpass.com  |  BREVO_SENDER_NAME=QPass
 ```
 
 | Template | Trigger | Subject |
@@ -384,7 +385,7 @@ SMTP_FROM=QPass <noreply@qpass.com>
 | `staff-invitation.html` | Staff assigned | You're Invited as Staff — {eventTitle} |
 | `password-reset.html` | Reset requested | Reset Your QPass Password |
 
-**Flow:** Create Notification (PENDING) → render template → SMTP send → update SENT/FAILED with `providerMessageId`/`failureReason`. **Non-blocking:** email failures never block core actions.
+**Flow:** Create Notification (PENDING) → render template → Brevo REST send → update SENT/FAILED with `providerMessageId`/`failureReason`. **Non-blocking:** email failures never block core actions. Transient failures (rate limit, 5xx, network/timeout) retry up to 3 times; bad credentials and invalid recipients fail fast without retry. If `BREVO_API_KEY` is missing, sends are skipped with a warning.
 
 ---
 
@@ -462,7 +463,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 | Public registration | Slug lookup, confirm registration, issue QR |
 | QR service | Token generation, SHA-256 hashing, image creation |
 | Ticket routes | View, list, PDF download (pdfkit) |
-| Email service | Nodemailer SMTP, 5 templates, Notification record tracking |
+| Email service | Brevo REST API, 5 templates, Notification record tracking |
 | Upload middleware | Multer (CSV/XLSX/PDF/DOCX, 5MB) |
 | Staff management | Assign/remove, invite email for new users |
 
@@ -531,7 +532,7 @@ Build: `npm install && npx prisma migrate deploy && npx prisma generate`. Start:
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
 DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
-SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM,
+BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME,
 SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 ```
 
@@ -558,7 +559,7 @@ SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
 | 9 | CSV/PDF export | Attendance/registration CSV/PDF opens correctly |
 | 10 | PDF ticket download | PDF with QR, event details, ticket type |
 | 11 | Audit trail | All key actions logged with actor, entity, timestamp |
-| 12 | Email delivery | All emails via SMTP. Notification records track SENT/FAILED. |
+| 12 | Email delivery | All emails via Brevo REST API. Notification records track SENT/FAILED. |
 | 13 | Password reset | Request → email → link → new password → login works |
 | 14 | Health check | `GET /health` → 200 with DB + Redis status |
 

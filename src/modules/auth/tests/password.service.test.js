@@ -102,7 +102,7 @@ describe('Password Service', () => {
       mRedisClient.set.mockResolvedValue('OK');
       mRedisClient.del.mockResolvedValue(1);
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
-      sendPasswordResetEmail.mockRejectedValue(new Error('SMTP down'));
+      sendPasswordResetEmail.mockRejectedValue(new Error('Brevo API unavailable'));
 
       const result = await forgotPassword(mockUser.email);
 

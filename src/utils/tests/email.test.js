@@ -1,15 +1,12 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
-const m = vi.hoisted(() => {
-  const mTransporter = { sendMail: vi.fn() };
-  return {
-    mTransporter,
-    mLogger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
-    mSendNotification: vi.fn(),
-    getConfig: vi.fn(() => ({ NODE_ENV: "production" })),
-    createTransport: vi.fn(() => mTransporter),
-  };
-});
+const m = vi.hoisted(() => ({
+  mLogger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+  mSendNotification: vi.fn(),
+  getConfig: vi.fn(() => ({ NODE_ENV: "production", BREVO_API_KEY: "key" })),
+  mSendTransactionalEmail: vi.fn(),
+  mIsBrevoConfigured: vi.fn(() => true),
+}));
 
 vi.mock("../../config/index.js", () => ({
   getConfig: m.getConfig,
@@ -20,17 +17,10 @@ vi.mock("../../modules/notifications/notification.service.js", () => ({
   sendNotification: m.mSendNotification,
 }));
 
-vi.mock("nodemailer", () => ({
-  default: { createTransport: m.createTransport },
+vi.mock("../../integrations/email/brevo.js", () => ({
+  sendTransactionalEmail: m.mSendTransactionalEmail,
+  isBrevoConfigured: m.mIsBrevoConfigured,
 }));
-
-const SMTP_CONFIG = {
-  NODE_ENV: "production",
-  SMTP_HOST: "smtp.test.com",
-  SMTP_PORT: "587",
-  SMTP_USER: "user",
-  SMTP_PASS: "pass",
-};
 
 describe("utils/email sendEmail", () => {
   let emailUtils;
@@ -38,7 +28,9 @@ describe("utils/email sendEmail", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ NODE_ENV: "production" });
+    m.getConfig.mockReturnValue({ NODE_ENV: "production", BREVO_API_KEY: "key" });
+    m.mIsBrevoConfigured.mockReturnValue(true);
+    m.mSendTransactionalEmail.mockResolvedValue({ messageId: "msg-1" });
     emailUtils = await import("../email.js");
   });
 
@@ -46,43 +38,30 @@ describe("utils/email sendEmail", () => {
     vi.unstubAllEnvs();
   });
 
-  test("returns true and warns when SMTP is not configured outside test env", async () => {
+  test("returns true and warns when Brevo is not configured outside test env", async () => {
+    m.mIsBrevoConfigured.mockReturnValue(false);
+
     const result = await emailUtils.sendEmail({ to: "a@b.com", subject: "Hi", html: "<p>hi</p>" });
 
     expect(result).toBe(true);
     expect(m.mLogger.warn).toHaveBeenCalledWith({ to: "a@b.com", subject: "Hi" }, expect.any(String));
     expect(m.mLogger.info).not.toHaveBeenCalled();
-    expect(m.mTransporter.sendMail).not.toHaveBeenCalled();
+    expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
   });
 
   test("returns true and logs simulated send in test env", async () => {
-    m.getConfig.mockReturnValue({ NODE_ENV: "test" });
+    m.getConfig.mockReturnValue({ NODE_ENV: "test", BREVO_API_KEY: "" });
+    m.mIsBrevoConfigured.mockReturnValue(false);
 
     const result = await emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" });
 
     expect(result).toBe(true);
     expect(m.mLogger.info).toHaveBeenCalled();
     expect(m.mLogger.warn).not.toHaveBeenCalled();
-    expect(m.mTransporter.sendMail).not.toHaveBeenCalled();
+    expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
   });
 
-  test("simulates send when transporter exists but env is test", async () => {
-    m.getConfig.mockReturnValue(SMTP_CONFIG);
-    await emailUtils.sendEmail({ to: "a@b.com", subject: "First" });
-    m.mTransporter.sendMail.mockClear();
-
-    m.getConfig.mockReturnValue({ NODE_ENV: "test" });
-    const result = await emailUtils.sendEmail({ to: "a@b.com", subject: "Second" });
-
-    expect(result).toBe(true);
-    expect(m.mLogger.info).toHaveBeenCalled();
-    expect(m.mTransporter.sendMail).not.toHaveBeenCalled();
-  });
-
-  test("sends email via transporter when SMTP is configured", async () => {
-    m.getConfig.mockReturnValue({ ...SMTP_CONFIG, BREVO_SENDER_EMAIL: "sender@qpass.com" });
-    m.mTransporter.sendMail.mockResolvedValue();
-
+  test("sends email through the Brevo REST API when configured", async () => {
     const result = await emailUtils.sendEmail({
       to: "a@b.com",
       subject: "Hi",
@@ -91,48 +70,21 @@ describe("utils/email sendEmail", () => {
     });
 
     expect(result).toBe(true);
-    expect(m.createTransport).toHaveBeenCalledWith({
-      host: "smtp.test.com",
-      port: 587,
-      auth: { user: "user", pass: "pass" },
-    });
-    expect(m.mTransporter.sendMail).toHaveBeenCalledWith({
-      from: "sender@qpass.com",
+    expect(m.mSendTransactionalEmail).toHaveBeenCalledWith({
       to: "a@b.com",
       subject: "Hi",
       html: "<p>hi</p>",
       text: "hi",
     });
-  });
-
-  test("uses default from address when sender is not configured", async () => {
-    m.getConfig.mockReturnValue(SMTP_CONFIG);
-    m.mTransporter.sendMail.mockResolvedValue();
-
-    await emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" });
-
-    expect(m.mTransporter.sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({ from: "noreply@qpass.com" })
-    );
+    expect(m.mLogger.info).not.toHaveBeenCalled();
   });
 
   test("rethrows send failures and logs the error", async () => {
-    m.getConfig.mockReturnValue(SMTP_CONFIG);
-    m.mTransporter.sendMail.mockRejectedValue(new Error("smtp down"));
+    m.mSendTransactionalEmail.mockRejectedValue(new Error("Invalid Brevo API credentials"));
 
     await expect(emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" }))
-      .rejects.toThrow("smtp down");
+      .rejects.toThrow("Invalid Brevo API credentials");
     expect(m.mLogger.error).toHaveBeenCalled();
-  });
-
-  test("reuses the transporter instance across sends", async () => {
-    m.getConfig.mockReturnValue(SMTP_CONFIG);
-    m.mTransporter.sendMail.mockResolvedValue();
-
-    await emailUtils.sendEmail({ to: "a@b.com", subject: "1" });
-    await emailUtils.sendEmail({ to: "a@b.com", subject: "2" });
-
-    expect(m.createTransport).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -142,7 +94,7 @@ describe("utils/email sendPasswordResetEmail", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ NODE_ENV: "production" });
+    m.getConfig.mockReturnValue({ NODE_ENV: "production", BREVO_API_KEY: "key" });
     emailUtils = await import("../email.js");
   });
 
