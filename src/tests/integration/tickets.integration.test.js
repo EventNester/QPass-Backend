@@ -26,18 +26,9 @@ describe('Tickets API Integration Tests', () => {
         name: 'Ticket Organizer',
         email: 'ticket-org@example.com',
         password: 'SecurePassword123',
+        role: 'ORGANIZER',
       });
     organizerToken = orgReg.body.data.accessToken;
-
-    await prisma.user.update({
-      where: { id: orgReg.body.data.user.id },
-      data: { role: 'ORGANIZER' },
-    });
-
-    const orgLogin = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'ticket-org@example.com', password: 'SecurePassword123' });
-    organizerToken = orgLogin.body.data.accessToken;
 
     const otherReg = await request(app)
       .post('/api/v1/auth/register')

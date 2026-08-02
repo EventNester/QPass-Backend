@@ -230,7 +230,7 @@ Each exported as `{ body, query, params }` shape for the validate middleware.
 **File:** `src/modules/auth/auth.service.js`
 
 Implement:
-- `register(data)` - check email uniqueness (throw ConflictError), bcrypt hash (12 rounds), create User (role=ATTENDEE), generate JWT access + refresh tokens, return `{ user, accessToken, refreshToken }`
+- `register(data)` - check email uniqueness (throw ConflictError), bcrypt hash (12 rounds), create User (default role ATTENDEE; optional `role` of ATTENDEE/ORGANIZER/STAFF; ADMIN not allowed), generate JWT access + refresh tokens, return `{ user, accessToken, refreshToken }`
 - `login(data)` - find by email (throw UnauthorizedError if not found), bcrypt compare (throw UnauthorizedError if mismatch), update lastLoginAt, generate tokens, return `{ user, accessToken, refreshToken }`
 - `refresh(refreshToken)` - verify JWT with refresh secret, check Redis blacklist (throw if blacklisted), blacklist old token, issue new pair, return `{ accessToken, refreshToken }`
 - `logout(refreshToken)` - verify JWT, add to Redis blacklist with 7d TTL
@@ -992,7 +992,7 @@ Final checklist before release:
 - [ ] All protected endpoints have `authenticateUser`
 - [ ] All role-restricted endpoints have `requireRole`
 - [ ] Event endpoints verify ownership
-- [ ] `role` field stripped from registration input
+- [ ] Registration `role` restricted to ATTENDEE/ORGANIZER/STAFF (ADMIN not self-assignable)
 - [ ] Refresh token checked against Redis blacklist before rotation
 - [ ] Access token NOT checked against blacklist
 - [ ] Auth routes have `authLimiter`

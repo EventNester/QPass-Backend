@@ -146,14 +146,18 @@ export async function scanQr(eventId, data, staffId) {
         attendeeName,
         totalCheckedIn,
       });
+    } catch (err) {
+      logger.warn({ err, eventId }, "failed to emit checkin:update");
+    }
 
+    try {
       emitScanResult(getIO(), eventId, {
         result: scanResult.result,
         message: scanResult.message,
         ...(attendeeName ? { attendee: { name: attendeeName } } : {}),
       });
     } catch (err) {
-      logger.warn({ err, eventId }, "failed to emit checkin:update");
+      logger.warn({ err, eventId }, "failed to emit scan:result");
     }
 
     return scanResult;
