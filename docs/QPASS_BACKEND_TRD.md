@@ -3,11 +3,10 @@
 | Field | Value |
 |-------|-------|
 | **Product** | QPass QR Code-Based Event Attendance & Ticketing System |
-| **Stack** | Node.js 22, Express 5, Prisma ORM, PostgreSQL, Redis, Socket.IO, Zod, Vitest, Nodemailer |
+| **Stack** | Node.js 22, Express 5, Prisma ORM, PostgreSQL, Redis, Socket.IO, Zod, Vitest, Brevo REST API |
 | **Timebox** | 2-week MVP |
 | **Date** | July 2026 |
 | **Authors** | Crosstrack Group 13 |
-
 ---
 
 ## 1. Executive Summary
