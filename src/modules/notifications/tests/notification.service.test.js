@@ -49,7 +49,7 @@ describe('Notification Service', () => {
 
       const sendEmailSpy = vi
         .spyOn(emailService, 'sendEmail')
-        .mockResolvedValue({ success: true, messageId: 'msg-123', previewUrl: 'http://ethereal/1' });
+        .mockResolvedValue({ success: true, messageId: 'msg-123', previewUrl: null });
 
       const result = await sendNotification({
         recipient: 'user@example.com',
@@ -87,7 +87,7 @@ describe('Notification Service', () => {
 
       expect(result.success).toBe(true);
       expect(result.notification.status).toBe('SENT');
-      expect(result.previewUrl).toBe('http://ethereal/1');
+      expect(result.previewUrl).toBe(null);
     });
 
     test('should update notification to FAILED if sendEmail fails', async () => {
@@ -95,10 +95,10 @@ describe('Notification Service', () => {
       prisma.notification.update.mockResolvedValue({
         ...mockNotification,
         status: 'FAILED',
-        failureReason: 'SMTP connection timed out',
+        failureReason: 'Brevo API request timed out',
       });
 
-      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('SMTP connection timed out'));
+      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('Brevo API request timed out'));
 
       const result = await sendNotification({
         recipient: 'user@example.com',
@@ -111,13 +111,13 @@ describe('Notification Service', () => {
         where: { id: mockNotification.id },
         data: expect.objectContaining({
           status: 'FAILED',
-          failureReason: 'SMTP connection timed out',
+          failureReason: 'Brevo API request timed out',
         }),
       });
 
       expect(result.success).toBe(false);
       expect(result.notification.status).toBe('FAILED');
-      expect(result.error).toBe('SMTP connection timed out');
+      expect(result.error).toBe('Brevo API request timed out');
     });
 
     test('should mark FAILED when sendEmail resolves with success false', async () => {
@@ -191,7 +191,7 @@ describe('Notification Service', () => {
       const sendEmailSpy = vi.spyOn(emailService, 'sendEmail').mockResolvedValue({
         success: true,
         messageId: 'msg-456',
-        previewUrl: 'http://ethereal/retry',
+        previewUrl: null,
       });
 
       const result = await retryNotification(mockNotification.id, { name: 'User' });
@@ -262,17 +262,17 @@ describe('Notification Service', () => {
       prisma.notification.findUnique.mockResolvedValue(mockNotification);
       prisma.notification.update
         .mockResolvedValueOnce({ ...mockNotification, status: 'PENDING' })
-        .mockResolvedValueOnce({ ...mockNotification, status: 'FAILED', failureReason: 'SMTP down' });
+        .mockResolvedValueOnce({ ...mockNotification, status: 'FAILED', failureReason: 'Brevo API unavailable' });
 
-      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('SMTP down'));
+      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('Brevo API unavailable'));
 
       const result = await retryNotification(mockNotification.id);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('SMTP down');
+      expect(result.error).toBe('Brevo API unavailable');
       expect(prisma.notification.update).toHaveBeenNthCalledWith(2, {
         where: { id: mockNotification.id },
-        data: expect.objectContaining({ status: 'FAILED', failureReason: 'SMTP down' }),
+        data: expect.objectContaining({ status: 'FAILED', failureReason: 'Brevo API unavailable' }),
       });
     });
   });
