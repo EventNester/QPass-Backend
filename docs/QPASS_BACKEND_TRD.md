@@ -463,8 +463,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 | Public registration | Slug lookup, confirm registration, issue QR |
 | QR service | Token generation, SHA-256 hashing, image creation |
 | Ticket routes | View, list, PDF download (pdfkit) |
-| Email service | Brevo REST API, 5 templates, Notification record tracking |
-| Upload middleware | Multer (CSV/XLSX/PDF/DOCX, 5MB) |
+| Email service | Brevo REST API, 4 templates, Notification record tracking || Upload middleware | Multer (CSV/XLSX/PDF/DOCX, 5MB) |
 | Staff management | Assign/remove, invite email for new users |
 
 **Exit:** Import works for all 4 formats. Public registration works. QR emailed. Tickets downloadable as PDF. Staff assignable.

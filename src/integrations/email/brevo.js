@@ -82,6 +82,13 @@ function normalizeBrevoError(error) {
   );
 }
 
+function maskEmail(address) {
+  return String(address).replace(
+    /^(.)(.*)(@.*)$/,
+    (_, first, rest, domain) => `${first}${"*".repeat(rest.length)}${domain}`
+  );
+}
+
 /**
  * Send a transactional email through the Brevo REST API.
  *
@@ -134,7 +141,7 @@ export async function sendTransactionalEmail({ to, subject, html, text }) {
   } catch (error) {
     const brevoError = normalizeBrevoError(error);
     logger.error(
-      { err: brevoError.message, status: brevoError.status, to, subject },
+      { err: brevoError.message, status: brevoError.status, to: maskEmail(to), subject },
       "Brevo REST API request failed"
     );
     throw brevoError;

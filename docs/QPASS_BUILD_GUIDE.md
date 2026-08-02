@@ -652,10 +652,14 @@ Uses the Brevo REST API (no SMTP) so email works on Railway/Vercel where SMTP po
 
 ```js
 import axios from "axios";
-import { getConfig } from "../../config/index.js";
+import { getConfig, logger } from "../../config/index.js";
 
 const config = getConfig();
 export async function sendTransactionalEmail({ to, subject, html, text }) {
+  if (!config.BREVO_API_KEY) {
+    logger.warn({ to, subject }, "BREVO_API_KEY is not set - email skipped");
+    return { messageId: null, skipped: true };
+  }
   const { data } = await axios.post(
     "https://api.brevo.com/v3/smtp/email",
     {
@@ -670,6 +674,8 @@ export async function sendTransactionalEmail({ to, subject, html, text }) {
   return { messageId: data.messageId };
 }
 ```
+
+> **Skipped sends:** When `BREVO_API_KEY` is empty, `sendTransactionalEmail` logs a warning and returns `{ messageId: null, skipped: true }` instead of calling the API, so `sendEmail` can treat the send as skipped rather than failed. When a key is configured, it posts the request and resolves with `{ messageId }` from Brevo's response.
 
 > **Note:** Add Brevo env vars to `src/config/env.js`:
 > ```js
