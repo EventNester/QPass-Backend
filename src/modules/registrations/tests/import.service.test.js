@@ -6,6 +6,8 @@ import {
   registerPublic,
   processImportFile,
   generateImportTemplate,
+  getImportBatchById,
+  listImportBatchesByEvent,
 } from '../import.service.js';
 import prisma from '../../../database/index.js';
 import { BadRequestError, ConflictError, NotFoundError, ForbiddenError } from '../../../utils/error.js';
@@ -31,6 +33,7 @@ vi.mock('../../../database/index.js', () => {
     ticketType: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     user: {
@@ -249,6 +252,94 @@ describe('Import & Registration Service Edge Cases', () => {
       expect(res.status).toBe('FAILED');
       expect(res.successRows).toBe(0);
       expect(res.failedRows).toBe(2);
+    });
+
+    it('should skip rows whose email already exists for the event', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1' });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([{ attendeeEmail: 'existing@example.com' }]);
+
+      const csv = `name,email\nNew User,new@example.com\nExisting User,existing@example.com`;
+      const res = await importRegistrations({ eventId, uploadedById, fileContent: csv });
+
+      expect(res.successRows).toBe(1);
+      expect(res.failedRows).toBe(1);
+      expect(res.errorReport[0]).toEqual({
+        row: 3,
+        email: 'existing@example.com',
+        error: 'Attendee is already registered for this event',
+      });
+    });
+
+    it('should reject rows with invalid or full ticket types', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1' });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([]);
+      prisma.ticketType.findMany.mockResolvedValue([
+        { id: 'tt-valid', capacity: 2, quantitySold: 2 },
+      ]);
+
+      const csv = `name,email,ticketTypeId\nBad Type,bad@example.com,tt-bad\nFull Type,full@example.com,tt-valid`;
+      const res = await importRegistrations({ eventId, uploadedById, fileContent: csv });
+
+      expect(res.successRows).toBe(0);
+      expect(res.failedRows).toBe(2);
+      expect(res.errorReport.map((e) => e.error)).toEqual([
+        'Invalid or inactive ticket type',
+        'Ticket type has reached capacity',
+      ]);
+    });
+
+    it('should send registration notifications when sendEmails is true', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1' });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([]);
+
+      const csv = `name,email\nAlice,alice@example.com\nBob,bob@example.com`;
+      await importRegistrations({ eventId, uploadedById, fileContent: csv, sendEmails: true });
+
+      expect(notificationService.sendNotification).toHaveBeenCalledTimes(2);
+      expect(notificationService.sendNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipient: 'alice@example.com',
+          template: 'registration',
+          eventId,
+        })
+      );
+    });
+
+    it('should not send notifications when sendEmails is false', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1' });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([]);
+
+      const csv = `name,email\nAlice,alice@example.com`;
+      await importRegistrations({ eventId, uploadedById, fileContent: csv });
+
+      expect(notificationService.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('should mark a batch as failed when the transaction throws', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.importBatch.create.mockResolvedValue({ id: 'batch-1' });
+      prisma.importBatch.update.mockImplementation(async ({ data }) => ({ id: 'batch-1', ...data }));
+      prisma.registration.findMany.mockResolvedValue([]);
+      prisma.$transaction.mockRejectedValueOnce(new Error('DB timeout'));
+
+      const csv = `name,email\nAlice,alice@example.com\nBob,bob@example.com`;
+      const res = await importRegistrations({ eventId, uploadedById, fileContent: csv });
+
+      expect(res.successRows).toBe(0);
+      expect(res.failedRows).toBe(2);
+      expect(res.status).toBe('FAILED');
+      expect(res.errorReport.map((e) => e.error)).toEqual([
+        'Database error during batch processing',
+        'Database error during batch processing',
+      ]);
     });
   });
 
@@ -570,6 +661,79 @@ describe('Import & Registration Service Edge Cases', () => {
         }),
       });
       expect(notificationService.sendNotification).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundError when the event does not exist', async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(
+        registerPublic({ eventId, name: 'Valid Name', email: 'valid@example.com' })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw BadRequestError when the event is not PUBLISHED', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'DRAFT' });
+
+      await expect(
+        registerPublic({ eventId, name: 'Valid Name', email: 'valid@example.com' })
+      ).rejects.toThrow('Event is not open for registration');
+    });
+
+    it('should throw BadRequestError for an invalid ticket type', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.ticketType.findFirst.mockResolvedValue(null);
+
+      await expect(
+        registerPublic({ eventId, name: 'Valid Name', email: 'valid@example.com', ticketTypeId: 'tt-bad' })
+      ).rejects.toThrow('Invalid or inactive ticket type');
+    });
+
+    it('should throw BadRequestError when the ticket type has reached capacity', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.ticketType.findFirst.mockResolvedValue({ id: 'tt-1', capacity: 1, quantitySold: 1 });
+
+      await expect(
+        registerPublic({ eventId, name: 'Valid Name', email: 'valid@example.com', ticketTypeId: 'tt-1' })
+      ).rejects.toThrow('Ticket type has reached capacity');
+    });
+
+    it('should rethrow non-P2002 transaction errors', async () => {
+      prisma.event.findFirst.mockResolvedValue({ id: eventId, title: 'Tech Conf', status: 'PUBLISHED' });
+      prisma.ticketCode.create.mockRejectedValue(new Error('DB timeout'));
+
+      await expect(
+        registerPublic({ eventId, name: 'Valid Name', email: 'valid@example.com' })
+      ).rejects.toThrow('DB timeout');
+    });
+  });
+
+  describe('getImportBatchById', () => {
+    it('should return the batch when found', async () => {
+      const batch = { id: 'batch-1', eventId: 'event-1', status: 'COMPLETED' };
+      prisma.importBatch.findUnique.mockResolvedValue(batch);
+
+      const result = await getImportBatchById('batch-1');
+      expect(result).toEqual(batch);
+      expect(prisma.importBatch.findUnique).toHaveBeenCalledWith({ where: { id: 'batch-1' } });
+    });
+
+    it('should throw NotFoundError when the batch does not exist', async () => {
+      prisma.importBatch.findUnique.mockResolvedValue(null);
+
+      await expect(getImportBatchById('missing')).rejects.toThrow('Import batch not found');
+    });
+  });
+
+  describe('listImportBatchesByEvent', () => {
+    it('should list batches for an event ordered by createdAt desc', async () => {
+      prisma.importBatch.findMany.mockResolvedValue([{ id: 'batch-1' }]);
+
+      const result = await listImportBatchesByEvent('event-1');
+      expect(result).toEqual([{ id: 'batch-1' }]);
+      expect(prisma.importBatch.findMany).toHaveBeenCalledWith({
+        where: { eventId: 'event-1' },
+        orderBy: { createdAt: 'desc' },
+      });
     });
   });
 
