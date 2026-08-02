@@ -202,10 +202,8 @@ export function validate(schema) {
     }
     req.validated = result.data;
     next();
-();
   };
-}
-```
+}```
 
 ---
 
