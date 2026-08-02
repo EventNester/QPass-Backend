@@ -1,11 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import prisma from '../../database/index.js';
 import {
   sendNotification,
   getNotificationsByRecipient,
   getNotificationById,
 } from '../../modules/notifications/notification.service.js';
-import { resetTransporterCache } from '../../modules/notifications/email.service.js';
+
+vi.mock('../../integrations/email/brevo.js', () => ({
+  sendTransactionalEmail: vi.fn(() => Promise.resolve({ messageId: 'integration-msg' })),
+  isBrevoConfigured: vi.fn(() => true),
+  BrevoApiError: class BrevoApiError extends Error {
+    constructor(message, status = 0, retryable = false) {
+      super(message);
+      this.name = 'BrevoApiError';
+      this.status = status;
+      this.retryable = retryable;
+    }
+  },
+}));
 
 describe('Notification Service Integration Tests', () => {
   const testRecipient = 'integration-user@example.com';
@@ -14,14 +26,12 @@ describe('Notification Service Integration Tests', () => {
     await prisma.notification.deleteMany({
       where: { recipient: testRecipient },
     });
-    resetTransporterCache();
   });
 
   afterAll(async () => {
     await prisma.notification.deleteMany({
       where: { recipient: testRecipient },
     });
-    resetTransporterCache();
     await prisma.$disconnect();
   });
 

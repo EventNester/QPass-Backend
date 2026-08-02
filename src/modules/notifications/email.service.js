@@ -1,15 +1,16 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import ejs from 'ejs';
-import nodemailer from 'nodemailer';
 import { logger } from '../../config/index.js';
+import {
+  sendTransactionalEmail,
+  isBrevoConfigured,
+  BrevoApiError,
+} from '../../integrations/email/brevo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const templatesDir = path.resolve(__dirname, 'templates');
-
-let cachedTransporter = null;
-let etherealAccount = null;
 
 const TEMPLATE_MAP = {
   registration: 'registration.ejs',
@@ -23,87 +24,11 @@ const TEMPLATE_MAP = {
   'import-summary': 'import-summary.ejs',
 };
 
-export async function getEtherealAccount() {
-  if (etherealAccount) {
-    return etherealAccount;
-  }
-  etherealAccount = await nodemailer.createTestAccount();
-  logger.info({ user: etherealAccount.user }, 'Created Nodemailer Ethereal test account');
-  return etherealAccount;
-}
-
-let cachedEtherealTransporter = null;
-
-export async function getTransporter(forceEthereal = false) {
-  if (cachedTransporter && !forceEthereal) {
-    return cachedTransporter;
-  }
-
-  const useEthereal = forceEthereal || process.env.USE_ETHEREAL === 'true';
-
-  if (process.env.NODE_ENV === 'test' && !useEthereal && process.env.TEST_REAL_SMTP !== 'true') {
-    cachedTransporter = nodemailer.createTransport({ jsonTransport: true });
-    return cachedTransporter;
-  }
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, BREVO_API_KEY, BREVO_SENDER_EMAIL } = process.env;
-
-  if (!useEthereal && ((SMTP_HOST && SMTP_USER && SMTP_PASS) || BREVO_API_KEY)) {
-    const host = SMTP_HOST || 'smtp-relay.brevo.com';
-    const port = Number(SMTP_PORT) || 587;
-    const user = SMTP_USER || BREVO_SENDER_EMAIL;
-    const pass = SMTP_PASS || BREVO_API_KEY;
-
-    cachedTransporter = nodemailer.createTransport({
-      host,
-      port,
-      auth: { user, pass },
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-    });
-    return cachedTransporter;
-  }
-
-  if (forceEthereal && cachedEtherealTransporter) {
-    return cachedEtherealTransporter;
-  }
-
-  const account = await getEtherealAccount();
-  const etherealTransporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: {
-      user: account.user,
-      pass: account.pass,
-    },
-  });
-
-  if (forceEthereal) {
-    cachedEtherealTransporter = etherealTransporter;
-  } else {
-    cachedTransporter = etherealTransporter;
-  }
-  return etherealTransporter;
-}
-export function resetTransporterCache() {
-  cachedTransporter = null;
-  cachedEtherealTransporter = null;
-  etherealAccount = null;
-}
-
-export async function verifySmtpConnection() {
-  try {
-    const transporter = await getTransporter();
-    if (transporter.verify) {
-      await transporter.verify();
-    }
-    return { success: true };
-  } catch (error) {
-    logger.warn({ err: error.message }, 'SMTP connection verification failed (non-blocking)');
-    return { success: false, error: error.message };
-  }
+/**
+ * @returns {boolean} True when the Brevo REST API is configured
+ */
+export function isEmailConfigured() {
+  return isBrevoConfigured();
 }
 
 export async function renderTemplate(templateName, variables = {}) {
@@ -119,18 +44,28 @@ export async function renderTemplate(templateName, variables = {}) {
   return html;
 }
 
-async function sendWithRetry(transporter, mailOptions, maxAttempts = 3) {
+// Only transient failures (rate limit, 5xx, network/timeout) warrant a retry.
+// Invalid recipients and bad credentials would fail again identically.
+function isRetryableError(error) {
+  if (error instanceof BrevoApiError) {
+    return error.retryable;
+  }
+  return true;
+}
+
+async function sendWithRetry(payload, maxAttempts = 3) {
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const info = await transporter.sendMail(mailOptions);
+      const info = await sendTransactionalEmail(payload);
       return info;
     } catch (error) {
       lastError = error;
       logger.warn({ attempt, maxAttempts, err: error.message }, `Email send attempt ${attempt} failed`);
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+      if (!isRetryableError(error) || attempt >= maxAttempts) {
+        break;
       }
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
     }
   }
   throw lastError;
@@ -159,15 +94,21 @@ function htmlToPlainText(html) {
     .trim();
 }
 
+/**
+ * Mask a recipient email for safe logging (e.g. `john.doe@example.com` → `j*******@example.com`).
+ * @param {string} to - Recipient email address
+ * @returns {string} Masked recipient
+ */
+export function maskRecipient(to) {
+  return to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
+}
+
 export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
   }
 
-  const fromEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@qpass.com';
-  const fromName = process.env.BREVO_SENDER_NAME || 'QPass';
-  const from = `${fromName} <${fromEmail}>`;
-  const maskedTo = to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
+  const maskedTo = maskRecipient(to);
 
   try {
     let renderedHtml = html;
@@ -175,25 +116,15 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
       renderedHtml = await renderTemplate(template, { ...context, subject });
     }
 
-    const transporter = await getTransporter();
+    const plainText = text || (renderedHtml ? htmlToPlainText(renderedHtml) : undefined);
 
-    const mailOptions = {
-      from,
-      to,
-      subject,
-      html: renderedHtml,
-      text: text || (renderedHtml ? htmlToPlainText(renderedHtml) : ''),
-    };
-
-    const info = await sendWithRetry(transporter, mailOptions, maxAttempts);
-    const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+    const info = await sendWithRetry({ to, subject, html: renderedHtml, text: plainText }, maxAttempts);
 
     logger.info(
       {
         to: maskedTo,
         subject,
         messageId: info.messageId,
-        previewUrl,
       },
       'Email sent successfully'
     );
@@ -202,13 +133,13 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
       success: true,
       messageId: info.messageId,
       info,
-      previewUrl,
+      previewUrl: null,
     };
   } catch (error) {
-    logger.error({ err: error, to: maskedTo, subject }, 'SMTP connection or send failure (non-blocking)');
+    logger.error({ err: error, to: maskedTo, subject }, 'Email send failed (non-blocking)');
     return {
       success: false,
-      error: error.message || 'SMTP connection failure',
+      error: error.message || 'Email send failure',
       messageId: null,
       info: null,
       previewUrl: null,
