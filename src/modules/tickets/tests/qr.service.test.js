@@ -56,6 +56,14 @@ describe("QrService", () => {
       await qrService.generateToken("reg-1", new Date()).catch(() => {});
       expect(prisma.qrToken.create).toHaveBeenCalledTimes(1);
     });
+
+    it("should rethrow non-P2002 errors", async () => {
+      prisma.qrToken.create.mockRejectedValue(new Error("DB timeout"));
+
+      await expect(
+        qrService.generateToken("reg-1", new Date())
+      ).rejects.toThrow("DB timeout");
+    });
   });
 
   describe("validateToken", () => {
@@ -125,6 +133,23 @@ describe("QrService", () => {
         width: 400,
         margin: 4,
         errorCorrectionLevel: "M",
+      });
+    });
+
+    it("should clamp width to the maximum allowed size", async () => {
+      await qrService.createQrImage("abc123", { width: 5000 });
+      expect(QRCode.toBuffer).toHaveBeenCalledWith(
+        "abc123",
+        expect.objectContaining({ width: 1000 })
+      );
+    });
+
+    it("should pass through a custom error correction level", async () => {
+      await qrService.createQrImage("abc123", { errorCorrectionLevel: "H" });
+      expect(QRCode.toBuffer).toHaveBeenCalledWith("abc123", {
+        width: 300,
+        margin: 2,
+        errorCorrectionLevel: "H",
       });
     });
   });

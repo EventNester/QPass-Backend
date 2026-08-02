@@ -44,6 +44,7 @@ vi.mock('../../../database/index.js', () => ({
     user: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     }
   }
 }));
@@ -131,6 +132,21 @@ describe('Auth Service Tests', () => {
         expect(err.message).toBe(systemMessages.ERROR.AUTH.TOKEN_REFRESH_INVALID);
       }
     });
+
+    test('should throw UnauthorizedError when the user is missing or deleted', async () => {
+      const { refreshToken: token } = generateTokens(mockUser);
+      mRedisClient.get.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(refreshToken(token)).rejects.toThrow(
+        systemMessages.ERROR.AUTH.UNAUTHORIZED
+      );
+
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, deletedAt: new Date() });
+      await expect(refreshToken(token)).rejects.toThrow(
+        systemMessages.ERROR.AUTH.UNAUTHORIZED
+      );
+    });
   });
 
   describe('Password Hashing', () => {
@@ -169,6 +185,31 @@ describe('Auth Service Tests', () => {
         expect(err).toBeInstanceOf(ConflictError);
         expect(err.message).toBe(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
       }
+    });
+
+    test('should reactivate a soft-deleted account instead of creating a new one', async () => {
+      const deletedUser = { ...mockUser, deletedAt: new Date() };
+      prisma.user.findUnique.mockResolvedValue(deletedUser);
+      prisma.user.update.mockResolvedValue({ ...mockUser, deletedAt: null });
+
+      const result = await registerUser({
+        name: 'Lucas Nash',
+        email: 'lucas@example.com',
+        passwordHash: 'hashed_password',
+        role: 'ORGANIZER',
+      });
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: {
+          deletedAt: null,
+          name: 'Lucas Nash',
+          passwordHash: 'hashed_password',
+          role: 'ORGANIZER',
+        },
+      });
+      expect(result).toEqual({ ...mockUser, deletedAt: null });
     });
   });
 
@@ -214,6 +255,11 @@ describe('Auth Service Tests', () => {
       
       await blacklistRefreshToken(token);
       expect(mRedisClient.set).toHaveBeenCalled();
+    });
+
+    test('blacklistRefreshToken should ignore invalid or expired tokens', async () => {
+      await blacklistRefreshToken('garbage_token');
+      expect(mRedisClient.set).not.toHaveBeenCalled();
     });
 
     test('isTokenBlacklisted should return true if found', async () => {
