@@ -10,7 +10,8 @@ const successMsg = systemMessages.SUCCESS;
 const m = vi.hoisted(() => {
   const mSocketIO = {};
   const mEmitCheckinUpdate = vi.fn();
-  return { mSocketIO, mEmitCheckinUpdate };
+  const mEmitScanResult = vi.fn();
+  return { mSocketIO, mEmitCheckinUpdate, mEmitScanResult };
 });
 
 vi.mock("../../../database/index.js", () => ({
@@ -49,6 +50,7 @@ vi.mock("../../../realtime/socket.js", () => ({
 
 vi.mock("../../../realtime/rooms.js", () => ({
   emitCheckinUpdate: m.mEmitCheckinUpdate,
+  emitScanResult: m.mEmitScanResult,
 }));
 
 const mRedisClient = {
@@ -152,6 +154,15 @@ describe("Checkin Service Tests", () => {
         mockEventId,
         expect.objectContaining({ result: constants.CHECKIN_RESULT.VALID, attendeeName: "John Doe", totalCheckedIn: 1 })
       );
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({
+          result: constants.CHECKIN_RESULT.VALID,
+          message: successMsg.CHECKIN.SUCCESS,
+          attendee: { name: "John Doe" },
+        })
+      );
     });
 
     test("should throw ConflictError if scan already in progress", async () => {
@@ -217,6 +228,11 @@ describe("Checkin Service Tests", () => {
         m.mSocketIO,
         mockEventId,
         expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID, totalCheckedIn: 1 })
+      );
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID, message: errMsg.CHECKIN.INVALID_QR })
       );
     });
 

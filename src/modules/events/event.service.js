@@ -56,8 +56,8 @@ export const createEvent = async (eventData, ownerId) => {
   }
 };
 
-// Get one event
-export const getEvent = async (eventId) => {
+// Get one event (owner or admin only)
+export const getEvent = async (eventId, userId, userRole) => {
   const event = await prisma.event.findFirst({
     where: {
       id: eventId,
@@ -69,22 +69,30 @@ export const getEvent = async (eventId) => {
     throw new NotFoundError(msg.EVENT.NOT_FOUND);
   }
 
+  if (event.ownerId !== userId && userRole !== constants.ROLES.ADMIN) {
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+  }
+
   return event;
 };
 
-// List all events with pagination
-export const listEvents = async (
-  page = constants.PAGINATION.DEFAULT_PAGE,
-  limit = constants.PAGINATION.DEFAULT_LIMIT
-) => {
+// List events with pagination and optional status filter.
+// Organizers see only their own events; admins see all non-deleted events.
+export const listEvents = async (userId, userRole, query = {}) => {
+  const page = query.page ?? constants.PAGINATION.DEFAULT_PAGE;
+  const limit = query.limit ?? constants.PAGINATION.DEFAULT_LIMIT;
   const take = Math.min(limit, constants.PAGINATION.MAX_LIMIT);
   const skip = (page - 1) * take;
 
+  const where = {
+    deletedAt: null,
+    ...(query.status ? { status: query.status } : {}),
+    ...(userRole !== constants.ROLES.ADMIN ? { ownerId: userId } : {}),
+  };
+
   const [events, total] = await Promise.all([
     prisma.event.findMany({
-      where: {
-        deletedAt: null,
-      },
+      where,
       orderBy: {
         startTime: "asc",
       },
@@ -92,9 +100,7 @@ export const listEvents = async (
       take,
     }),
     prisma.event.count({
-      where: {
-        deletedAt: null,
-      },
+      where,
     }),
   ]);
 
@@ -135,7 +141,7 @@ export const updateEvent = async (eventId, eventData, ownerId) => {
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
-  return getEvent(eventId);
+  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
 };
 
 // Soft-delete an event (atomic ownership check)
@@ -218,7 +224,7 @@ export const publishEvent = async (eventId, ownerId) => {
     );
   }
 
-  return getEvent(eventId);
+  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
 };
 
 // Cancel an event (atomic ownership check)
@@ -273,5 +279,5 @@ export const cancelEvent = async (eventId, ownerId) => {
     throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
   }
 
-  return getEvent(eventId);
+  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
 };

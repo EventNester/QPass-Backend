@@ -30,6 +30,16 @@ describe('Event Tickets (Registrations) API Integration Tests', () => {
       });
     organizerToken = orgReg.body.data.accessToken;
 
+    await prisma.user.update({
+      where: { id: orgReg.body.data.user.id },
+      data: { role: 'ORGANIZER' },
+    });
+
+    const orgLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'org@example.com', password: 'Password123' });
+    organizerToken = orgLogin.body.data.accessToken;
+
     // Setup Other User
     const otherReg = await request(app)
       .post('/api/v1/auth/register')
