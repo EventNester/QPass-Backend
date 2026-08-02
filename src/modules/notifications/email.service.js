@@ -89,6 +89,7 @@ export async function getTransporter(forceEthereal = false) {
 }
 export function resetTransporterCache() {
   cachedTransporter = null;
+  cachedEtherealTransporter = null;
   etherealAccount = null;
 }
 

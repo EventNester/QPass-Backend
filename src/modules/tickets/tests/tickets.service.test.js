@@ -6,6 +6,15 @@ vi.mock("../../../database/index.js", () => ({
     event: {
       findUnique: vi.fn(),
     },
+    eventStaffAssignment: {
+      findUnique: vi.fn(),
+    },
+    user: {
+      findUnique: vi.fn(),
+    },
+    registration: {
+      findMany: vi.fn(),
+    },
     ticketType: {
       aggregate: vi.fn(),
       create: vi.fn(),
@@ -18,7 +27,26 @@ vi.mock("../../../database/index.js", () => ({
   },
 }));
 
+vi.mock("../../registrations/registration.service.js", () => ({
+  getRegistrationById: vi.fn(),
+  listRegistrationsByEvent: vi.fn(),
+}));
+
+vi.mock("../qr.service.js", () => ({
+  qrService: { createQrImage: vi.fn() },
+}));
+
+vi.mock("../ticket-pdf.service.js", () => ({
+  generateTicketListPdf: vi.fn(),
+}));
+
 import prisma from "../../../database/index.js";
+import {
+  getRegistrationById,
+  listRegistrationsByEvent,
+} from "../../registrations/registration.service.js";
+import { qrService } from "../qr.service.js";
+import { generateTicketListPdf } from "../ticket-pdf.service.js";
 
 describe("TicketType Service (unit)", () => {
   const mockUserId = "user_1";
@@ -48,6 +76,12 @@ describe("TicketType Service (unit)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.event.findUnique.mockResolvedValue(mockEvent);
+    prisma.eventStaffAssignment.findUnique.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.registration.findMany.mockResolvedValue([]);
+    getRegistrationById.mockResolvedValue(null);
+    listRegistrationsByEvent.mockResolvedValue({ registrations: [], pagination: {} });
+    qrService.createQrImage.mockResolvedValue(Buffer.from("qr"));
   });
 
   function loadModule() {
@@ -237,6 +271,190 @@ describe("TicketType Service (unit)", () => {
       await expect(
         deleteTicketType(mockEventId, mockTicketTypeId, mockUserId)
       ).rejects.toThrow(ForbiddenError);
+    });
+  });
+
+  describe("getTicketDetails", () => {
+    const registration = {
+      id: "reg_1",
+      eventId: mockEventId,
+      attendeeEmail: "ada@example.com",
+      attendeeName: "Ada Lovelace",
+      ticketCode: { code: "TC-1" },
+    };
+
+    it("returns the ticket with a QR data URL for the event owner", async () => {
+      getRegistrationById.mockResolvedValue(registration);
+      qrService.createQrImage.mockResolvedValue(Buffer.from("qr-bytes"));
+
+      const { getTicketDetails } = await loadModule();
+      const result = await getTicketDetails("reg_1", mockUserId);
+
+      expect(result).toEqual({
+        ...registration,
+        qrDataUrl: "data:image/png;base64,cXItYnl0ZXM=",
+      });
+      expect(getRegistrationById).toHaveBeenCalledWith("reg_1");
+      expect(prisma.event.findUnique).toHaveBeenCalledWith({
+        where: { id: mockEventId },
+        select: { ownerId: true },
+      });
+      expect(qrService.createQrImage).toHaveBeenCalledWith("TC-1");
+    });
+
+    it("returns null qrDataUrl when the registration has no ticket code", async () => {
+      getRegistrationById.mockResolvedValue({ ...registration, ticketCode: null });
+
+      const { getTicketDetails } = await loadModule();
+      const result = await getTicketDetails("reg_1", mockUserId);
+
+      expect(result.qrDataUrl).toBeNull();
+      expect(qrService.createQrImage).not.toHaveBeenCalled();
+    });
+
+    it("allows the attendee by matching their email", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
+      prisma.user.findUnique.mockResolvedValue({ id: "attendee", email: "ada@example.com" });
+      getRegistrationById.mockResolvedValue(registration);
+
+      const { getTicketDetails } = await loadModule();
+      const result = await getTicketDetails("reg_1", "attendee");
+
+      expect(result.id).toBe("reg_1");
+    });
+
+    it("allows assigned staff", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ eventId: mockEventId, userId: "staff" });
+      getRegistrationById.mockResolvedValue(registration);
+
+      const { getTicketDetails } = await loadModule();
+      const result = await getTicketDetails("reg_1", "staff");
+
+      expect(result.id).toBe("reg_1");
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("throws ForbiddenError for a stranger with no matching user", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
+      getRegistrationById.mockResolvedValue(registration);
+
+      const { getTicketDetails } = await loadModule();
+      await expect(getTicketDetails("reg_1", "stranger")).rejects.toThrow(ForbiddenError);
+    });
+
+    it("throws ForbiddenError when the user email does not match the attendee", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
+      prisma.user.findUnique.mockResolvedValue({ id: "other", email: "someone@example.com" });
+      getRegistrationById.mockResolvedValue(registration);
+
+      const { getTicketDetails } = await loadModule();
+      await expect(getTicketDetails("reg_1", "other")).rejects.toThrow(ForbiddenError);
+    });
+
+    it("propagates NotFoundError when the registration is missing", async () => {
+      getRegistrationById.mockRejectedValue(new Error("Registration not found"));
+
+      const { getTicketDetails } = await loadModule();
+      await expect(getTicketDetails("reg_1", mockUserId)).rejects.toThrow("Registration not found");
+    });
+  });
+
+  describe("listEventTickets", () => {
+    it("returns registrations from the registration service", async () => {
+      listRegistrationsByEvent.mockResolvedValue({ registrations: [{ id: "r1" }], pagination: {} });
+
+      const { listEventTickets } = await loadModule();
+      const result = await listEventTickets(mockEventId, mockUserId, { page: 2, limit: 10 });
+
+      expect(result.registrations).toEqual([{ id: "r1" }]);
+      expect(listRegistrationsByEvent).toHaveBeenCalledWith(mockEventId, 2, 10, {
+        page: 2,
+        limit: 10,
+      });
+    });
+
+    it("passes empty filters when none are provided", async () => {
+      const { listEventTickets } = await loadModule();
+      await listEventTickets(mockEventId, mockUserId);
+
+      expect(listRegistrationsByEvent).toHaveBeenCalledWith(mockEventId, undefined, undefined, {});
+    });
+
+    it("throws ForbiddenError if user is not the event owner", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...mockEvent, ownerId: "other_user" });
+
+      const { listEventTickets } = await loadModule();
+      await expect(listEventTickets(mockEventId, mockUserId)).rejects.toThrow(ForbiddenError);
+    });
+  });
+
+  describe("exportEventTickets", () => {
+    const registrations = [
+      {
+        attendeeName: 'Ada "Quoted"',
+        attendeeEmail: "ada@example.com",
+        ticketType: { name: "VIP" },
+        status: "CONFIRMED",
+        paymentStatus: "SUCCESS",
+        ticketCode: { code: "TC-1" },
+      },
+      {
+        attendeeName: "=SUM(A1)",
+        attendeeEmail: "",
+        ticketType: null,
+        status: "",
+        paymentStatus: "",
+        ticketCode: null,
+      },
+    ];
+
+    it("generates a CSV payload with escaped cells", async () => {
+      prisma.registration.findMany.mockResolvedValue(registrations);
+
+      const { exportEventTickets } = await loadModule();
+      const result = await exportEventTickets(mockEventId, mockUserId, "csv");
+
+      expect(result.contentType).toBe("text/csv");
+      expect(result.extension).toBe("csv");
+      expect(result.data).toContain('"Name","Email","Ticket Type","Status","Payment","Ticket Code"');
+      expect(result.data).toContain('"Ada ""Quoted"""');
+      expect(result.data).toContain('"\'=SUM(A1)"');
+      expect(prisma.registration.findMany).toHaveBeenCalledWith({
+        where: { eventId: mockEventId },
+        orderBy: { createdAt: "desc" },
+        include: { ticketCode: true, ticketType: true },
+      });
+    });
+
+    it("generates a PDF payload using generateTicketListPdf", async () => {
+      prisma.registration.findMany.mockResolvedValue(registrations);
+      prisma.event.findUnique.mockResolvedValue(mockEvent);
+      generateTicketListPdf.mockResolvedValue(Buffer.from("pdf-bytes"));
+
+      const { exportEventTickets } = await loadModule();
+      const result = await exportEventTickets(mockEventId, mockUserId, "pdf");
+
+      expect(result.contentType).toBe("application/pdf");
+      expect(result.extension).toBe("pdf");
+      expect(result.data).toEqual(Buffer.from("pdf-bytes"));
+      expect(generateTicketListPdf).toHaveBeenCalledWith(registrations, mockEvent);
+    });
+
+    it("throws BadRequestError for an unsupported format", async () => {
+      const { exportEventTickets } = await loadModule();
+      await expect(
+        exportEventTickets(mockEventId, mockUserId, "xml")
+      ).rejects.toThrow("Unsupported export format");
+    });
+
+    it("throws ForbiddenError if user is not the event owner", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...mockEvent, ownerId: "other_user" });
+
+      const { exportEventTickets } = await loadModule();
+      await expect(exportEventTickets(mockEventId, mockUserId, "csv")).rejects.toThrow(
+        ForbiddenError
+      );
     });
   });
 });

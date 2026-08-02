@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { forgotPassword, resetPassword } from '../password.service.js';
 import prisma from '../../../database/index.js';
 import { UnauthorizedError } from '../../../utils/error.js';
@@ -53,6 +53,10 @@ describe('Password Service', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   describe('forgotPassword', () => {
     test('should silently return empty object if user does not exist', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
@@ -78,6 +82,34 @@ describe('Password Service', () => {
       );
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
       expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockUser.email, result.resetToken);
+    });
+
+    test('should not return the reset token in production', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      mRedisClient.set.mockResolvedValue('OK');
+
+      const result = await forgotPassword(mockUser.email);
+
+      expect(result).toEqual({});
+      expect(mRedisClient.set).toHaveBeenCalled();
+      const { sendPasswordResetEmail } = await import('../../../utils/email.js');
+      expect(sendPasswordResetEmail).toHaveBeenCalled();
+    });
+
+    test('should delete the redis token when the reset email fails', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      mRedisClient.set.mockResolvedValue('OK');
+      mRedisClient.del.mockResolvedValue(1);
+      const { sendPasswordResetEmail } = await import('../../../utils/email.js');
+      sendPasswordResetEmail.mockRejectedValue(new Error('SMTP down'));
+
+      const result = await forgotPassword(mockUser.email);
+
+      expect(result.resetToken).toBeDefined();
+      await vi.waitFor(() => {
+        expect(mRedisClient.del).toHaveBeenCalledWith(`pwd_reset:${result.resetToken}`);
+      });
     });
   });
 

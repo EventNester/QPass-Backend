@@ -1,8 +1,8 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { scanQr, getCheckins, undoCheckin } from "../checkins.service.js";
 import prisma from "../../../database/index.js";
 import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from "../../../utils/error.js";
-import { constants, systemMessages } from "../../../config/index.js";
+import { constants, systemMessages, logger } from "../../../config/index.js";
 
 const errMsg = systemMessages.ERROR;
 const successMsg = systemMessages.SUCCESS;
@@ -124,6 +124,10 @@ describe("Checkin Service Tests", () => {
     prisma.checkIn.count.mockResolvedValue(1);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("scanQr", () => {
     test("should acquire Redis lock and release in finally", async () => {
       mRedisClient.set.mockResolvedValue("OK");
@@ -158,6 +162,16 @@ describe("Checkin Service Tests", () => {
       await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
         .rejects.toThrow(errMsg.CHECKIN.SCAN_IN_PROGRESS);
       expect(mRedisClient.del).not.toHaveBeenCalled();
+    });
+
+    test("should throw ForbiddenError if event not found", async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
+        .rejects.toThrow(ForbiddenError);
+      await expect(scanQr(mockEventId, { token: "token123" }, mockStaffId))
+        .rejects.toThrow(errMsg.CHECKIN.NOT_AUTHORIZED);
+      expect(mRedisClient.set).not.toHaveBeenCalled();
     });
 
     test("should throw ForbiddenError if staff is not assigned to the event", async () => {
@@ -373,6 +387,21 @@ describe("Checkin Service Tests", () => {
         .rejects.toThrow("DB error");
       expect(mRedisClient.del).toHaveBeenCalled();
     });
+
+    test("should still return scan result and log a warning when emit fails", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue(null);
+      m.mEmitCheckinUpdate.mockImplementationOnce(() => {
+        throw new Error("socket error");
+      });
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      const result = await scanQr(mockEventId, { token: "bad_token" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(mRedisClient.del).toHaveBeenCalled();
+    });
   });
 
   describe("getCheckins", () => {
@@ -401,6 +430,39 @@ describe("Checkin Service Tests", () => {
       const result = await getCheckins(mockEventId, mockStaffId);
 
       expect(result).toEqual([]);
+    });
+
+    test("should throw NotFoundError if event not found", async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(getCheckins(mockEventId, mockStaffId))
+        .rejects.toThrow(NotFoundError);
+      await expect(getCheckins(mockEventId, mockStaffId))
+        .rejects.toThrow(errMsg.EVENT.NOT_FOUND);
+    });
+
+    test("should allow staff with an active assignment to view checkins", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ active: true });
+      prisma.checkIn.findMany.mockResolvedValue([mockCheckin]);
+
+      const result = await getCheckins(mockEventId, mockStaffId);
+
+      expect(result).toEqual([mockCheckin]);
+      expect(prisma.eventStaffAssignment.findUnique).toHaveBeenCalledWith({
+        where: { eventId_userId: { eventId: mockEventId, userId: mockStaffId } },
+        select: { active: true },
+      });
+    });
+
+    test("should throw NotFoundError if staff lacks an active assignment", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue(null);
+
+      await expect(getCheckins(mockEventId, mockStaffId))
+        .rejects.toThrow(NotFoundError);
+      await expect(getCheckins(mockEventId, mockStaffId))
+        .rejects.toThrow(errMsg.EVENT.NOT_FOUND);
     });
   });
 
@@ -436,6 +498,16 @@ describe("Checkin Service Tests", () => {
         .rejects.toThrow(ForbiddenError);
       await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
         .rejects.toThrow(errMsg.CHECKIN.UNDO_NOT_AUTHORIZED);
+    });
+
+    test("should throw NotFoundError if event not found", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(NotFoundError);
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(errMsg.EVENT.NOT_FOUND);
     });
 
     test("should allow the event owner to undo", async () => {
@@ -496,6 +568,16 @@ describe("Checkin Service Tests", () => {
         data: { revokedAt: null, scanCount: { decrement: 1 } },
       });
       expect(result).toEqual({ success: true });
+    });
+
+    test("should throw NotFoundError if updateMany affects no rows", async () => {
+      prisma.checkIn.findUnique.mockResolvedValue(mockCheckin);
+      mTx.checkIn.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(NotFoundError);
+      await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
+        .rejects.toThrow(errMsg.CHECKIN.NOT_FOUND);
     });
   });
 });

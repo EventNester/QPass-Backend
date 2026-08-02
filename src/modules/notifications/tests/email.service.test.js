@@ -1,5 +1,12 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderTemplate, sendEmail, getEtherealAccount, getTransporter, resetTransporterCache } from '../email.service.js';
+import {
+  renderTemplate,
+  sendEmail,
+  getEtherealAccount,
+  getTransporter,
+  verifySmtpConnection,
+  resetTransporterCache,
+} from '../email.service.js';
 import nodemailer from 'nodemailer';
 
 describe('Email Service', () => {
@@ -72,9 +79,31 @@ describe('Email Service', () => {
       expect(html).toContain('https://qpass.com/reset?token=xyz');
       expect(html).toContain('15 minutes');
     });
+
+    test('should render a template passed as an explicit .ejs filename', async () => {
+      const html = await renderTemplate('registration.ejs', {
+        name: 'Direct File',
+        email: 'direct@example.com',
+        loginUrl: 'https://qpass.com/login',
+      });
+      expect(html).toContain('Direct File');
+      expect(html).toContain('direct@example.com');
+    });
   });
 
   describe('sendEmail with retry logic', () => {
+    test('should throw when the recipient is missing', async () => {
+      await expect(
+        sendEmail({ subject: 'No To', html: '<p>x</p>' })
+      ).rejects.toThrow('Recipient (to) and content (template, html, or text) are required');
+    });
+
+    test('should throw when no content is provided', async () => {
+      await expect(
+        sendEmail({ to: 'a@b.com', subject: 'No content' })
+      ).rejects.toThrow('Recipient (to) and content (template, html, or text) are required');
+    });
+
     test('should send email successfully on first attempt', async () => {
       const result = await sendEmail({
         to: 'test@example.com',
@@ -178,6 +207,61 @@ describe('Email Service', () => {
 
       expect(createTestAccountSpy).toHaveBeenCalled();
       expect(etherealTransporter).toBeDefined();
+    });
+  });
+
+  describe('getTransporter caching', () => {
+    test('should reuse the cached json transporter for non-ethereal requests', async () => {
+      const createTransportSpy = vi.spyOn(nodemailer, 'createTransport');
+
+      const first = await getTransporter();
+      const second = await getTransporter();
+
+      expect(first).toBe(second);
+      expect(createTransportSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('should reuse the cached Ethereal transporter across forceEthereal calls', async () => {
+      vi.spyOn(nodemailer, 'createTestAccount').mockResolvedValue({
+        user: 'u@ethereal.email',
+        pass: 'secret',
+      });
+      const createTransportSpy = vi
+        .spyOn(nodemailer, 'createTransport')
+        .mockReturnValue({ ethereal: true });
+
+      const first = await getTransporter(true);
+      const second = await getTransporter(true);
+
+      expect(second).toBe(first);
+      expect(createTransportSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('verifySmtpConnection', () => {
+    test('should return success when the transporter verifies', async () => {
+      vi.spyOn(nodemailer, 'createTransport').mockReturnValue({
+        verify: vi.fn().mockResolvedValue(true),
+      });
+
+      const result = await verifySmtpConnection();
+      expect(result).toEqual({ success: true });
+    });
+
+    test('should return failure when transporter verify rejects', async () => {
+      vi.spyOn(nodemailer, 'createTransport').mockReturnValue({
+        verify: vi.fn().mockRejectedValue(new Error('auth failed')),
+      });
+
+      const result = await verifySmtpConnection();
+      expect(result).toEqual({ success: false, error: 'auth failed' });
+    });
+
+    test('should return success when the transporter has no verify method', async () => {
+      vi.spyOn(nodemailer, 'createTransport').mockReturnValue({});
+
+      const result = await verifySmtpConnection();
+      expect(result).toEqual({ success: true });
     });
   });
 });
