@@ -1,15 +1,17 @@
 import { getConfig, logger } from '../config/index.js';
 import { sendTransactionalEmail, isBrevoConfigured } from '../integrations/email/brevo.js';
+import { maskRecipient } from '../modules/notifications/email.service.js';
 import { sendNotification } from '../modules/notifications/notification.service.js';
 
 export async function sendEmail({ to, subject, html, text }) {
   const config = getConfig();
+  const maskedTo = maskRecipient(to);
 
   if (config.NODE_ENV === 'test' || !isBrevoConfigured()) {
     if (config.NODE_ENV !== 'test') {
-      logger.warn({ to, subject }, 'Brevo API not configured — email not sent');
+      logger.warn({ to: maskedTo, subject }, 'Brevo API not configured — email not sent');
     } else {
-      logger.info({ to, subject }, 'Email sent (simulated)');
+      logger.info({ to: maskedTo, subject }, 'Email sent (simulated)');
     }
     return true;
   }
@@ -18,7 +20,7 @@ export async function sendEmail({ to, subject, html, text }) {
     await sendTransactionalEmail({ to, subject, html, text });
     return true;
   } catch (error) {
-    logger.error({ err: error, to, subject }, 'Failed to send email');
+    logger.error({ err: error, to: maskedTo, subject }, 'Failed to send email');
     throw error;
   }
 }

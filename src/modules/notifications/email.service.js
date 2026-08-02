@@ -94,12 +94,21 @@ function htmlToPlainText(html) {
     .trim();
 }
 
+/**
+ * Mask a recipient email for safe logging (e.g. `john.doe@example.com` → `j*******@example.com`).
+ * @param {string} to - Recipient email address
+ * @returns {string} Masked recipient
+ */
+export function maskRecipient(to) {
+  return to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
+}
+
 export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
   }
 
-  const maskedTo = to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
+  const maskedTo = maskRecipient(to);
 
   try {
     let renderedHtml = html;

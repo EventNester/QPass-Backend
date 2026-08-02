@@ -20,6 +20,14 @@ vi.mock("../../modules/notifications/notification.service.js", () => ({
 vi.mock("../../integrations/email/brevo.js", () => ({
   sendTransactionalEmail: m.mSendTransactionalEmail,
   isBrevoConfigured: m.mIsBrevoConfigured,
+  BrevoApiError: class BrevoApiError extends Error {
+    constructor(message, status = 0, retryable = false) {
+      super(message);
+      this.name = "BrevoApiError";
+      this.status = status;
+      this.retryable = retryable;
+    }
+  },
 }));
 
 describe("utils/email sendEmail", () => {
@@ -38,25 +46,31 @@ describe("utils/email sendEmail", () => {
     vi.unstubAllEnvs();
   });
 
-  test("returns true and warns when Brevo is not configured outside test env", async () => {
+  test("returns true and warns with a masked recipient when Brevo is not configured outside test env", async () => {
     m.mIsBrevoConfigured.mockReturnValue(false);
 
-    const result = await emailUtils.sendEmail({ to: "a@b.com", subject: "Hi", html: "<p>hi</p>" });
+    const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi", html: "<p>hi</p>" });
 
     expect(result).toBe(true);
-    expect(m.mLogger.warn).toHaveBeenCalledWith({ to: "a@b.com", subject: "Hi" }, expect.any(String));
+    expect(m.mLogger.warn).toHaveBeenCalledWith(
+      { to: "r********@example.com", subject: "Hi" },
+      expect.any(String)
+    );
     expect(m.mLogger.info).not.toHaveBeenCalled();
     expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
   });
 
-  test("returns true and logs simulated send in test env", async () => {
+  test("returns true and logs simulated send in test env with a masked recipient", async () => {
     m.getConfig.mockReturnValue({ NODE_ENV: "test", BREVO_API_KEY: "" });
     m.mIsBrevoConfigured.mockReturnValue(false);
 
-    const result = await emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" });
+    const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi" });
 
     expect(result).toBe(true);
-    expect(m.mLogger.info).toHaveBeenCalled();
+    expect(m.mLogger.info).toHaveBeenCalledWith(
+      { to: "r********@example.com", subject: "Hi" },
+      "Email sent (simulated)"
+    );
     expect(m.mLogger.warn).not.toHaveBeenCalled();
     expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
   });
