@@ -30,21 +30,10 @@ describe('Checkins API Integration Tests', () => {
         name: 'Checkin Organizer',
         email: 'checkin-org@example.com',
         password: 'SecurePassword123',
+        role: 'ORGANIZER',
       });
 
     organizerToken = orgReg.body.data.accessToken;
-    const organizerId = orgReg.body.data.user.id;
-
-    await prisma.user.update({
-      where: { id: organizerId },
-      data: { role: 'ORGANIZER' },
-    });
-
-    const loginRes = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'checkin-org@example.com', password: 'SecurePassword123' });
-
-    organizerToken = loginRes.body.data.accessToken;
 
     const staffReg = await request(app)
       .post('/api/v1/auth/register')
@@ -52,21 +41,11 @@ describe('Checkins API Integration Tests', () => {
         name: 'Checkin Staff',
         email: 'checkin-staff@example.com',
         password: 'SecurePassword123',
+        role: 'STAFF',
       });
 
     staffToken = staffReg.body.data.accessToken;
     staffUserId = staffReg.body.data.user.id;
-
-    await prisma.user.update({
-      where: { id: staffUserId },
-      data: { role: 'STAFF' },
-    });
-
-    const staffLoginRes = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'checkin-staff@example.com', password: 'SecurePassword123' });
-
-    staffToken = staffLoginRes.body.data.accessToken;
 
     const eventRes = await request(app)
       .post('/api/v1/events')
@@ -263,20 +242,10 @@ describe('Checkins API Integration Tests', () => {
           name: 'Unassigned Staff',
           email: 'unassigned-staff@example.com',
           password: 'SecurePassword123',
+          role: 'STAFF',
         });
 
-      const unassignedUserId = unassignedReg.body.data.user.id;
-
-      await prisma.user.update({
-        where: { id: unassignedUserId },
-        data: { role: 'STAFF' },
-      });
-
-      const unassignedLogin = await request(app)
-        .post('/api/v1/auth/login')
-        .send({ email: 'unassigned-staff@example.com', password: 'SecurePassword123' });
-
-      const unassignedToken = unassignedLogin.body.data.accessToken;
+      const unassignedToken = unassignedReg.body.data.accessToken;
 
       const response = await request(app)
         .post(`/api/v1/checkins/${eventId}/scan`)

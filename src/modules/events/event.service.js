@@ -115,13 +115,20 @@ export const listEvents = async (userId, userRole, query = {}) => {
   };
 };
 
-// Update an event (atomic ownership check)
-export const updateEvent = async (eventId, eventData, ownerId) => {
+// Update an event (atomic ownership check; ADMIN may update any event)
+export const updateEvent = async (
+  eventId,
+  eventData,
+  ownerId,
+  userRole = constants.ROLES.ORGANIZER
+) => {
+  const isAdmin = userRole === constants.ROLES.ADMIN;
+
   const updatedEvent = await prisma.event.updateMany({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
     },
     data: eventData,
   });
@@ -141,16 +148,22 @@ export const updateEvent = async (eventId, eventData, ownerId) => {
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
-  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
+  return getEvent(eventId, ownerId, userRole);
 };
 
-// Soft-delete an event (atomic ownership check)
-export const deleteEvent = async (eventId, ownerId) => {
+// Soft-delete an event (atomic ownership check; ADMIN may delete any event)
+export const deleteEvent = async (
+  eventId,
+  ownerId,
+  userRole = constants.ROLES.ORGANIZER
+) => {
+  const isAdmin = userRole === constants.ROLES.ADMIN;
+
   const deletedEvent = await prisma.event.updateMany({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
     },
     data: {
       deletedAt: new Date(),
@@ -177,13 +190,19 @@ export const deleteEvent = async (eventId, ownerId) => {
   };
 };
 
-// Publish an event (atomic ownership + draft-status check)
-export const publishEvent = async (eventId, ownerId) => {
+// Publish an event (atomic ownership + draft-status check; ADMIN may publish any event)
+export const publishEvent = async (
+  eventId,
+  ownerId,
+  userRole = constants.ROLES.ORGANIZER
+) => {
+  const isAdmin = userRole === constants.ROLES.ADMIN;
+
   const event = await prisma.event.findFirst({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
     },
   });
 
@@ -208,9 +227,9 @@ export const publishEvent = async (eventId, ownerId) => {
   const published = await prisma.event.updateMany({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
       status: constants.EVENT_STATUS.DRAFT,
+      ...(isAdmin ? {} : { ownerId }),
     },
     data: {
       status: constants.EVENT_STATUS.PUBLISHED,
@@ -224,16 +243,22 @@ export const publishEvent = async (eventId, ownerId) => {
     );
   }
 
-  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
+  return getEvent(eventId, ownerId, userRole);
 };
 
-// Cancel an event (atomic ownership check)
-export const cancelEvent = async (eventId, ownerId) => {
+// Cancel an event (atomic ownership check; ADMIN may cancel any event)
+export const cancelEvent = async (
+  eventId,
+  ownerId,
+  userRole = constants.ROLES.ORGANIZER
+) => {
+  const isAdmin = userRole === constants.ROLES.ADMIN;
+
   const event = await prisma.event.findFirst({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
     },
   });
 
@@ -260,7 +285,6 @@ export const cancelEvent = async (eventId, ownerId) => {
   const cancelled = await prisma.event.updateMany({
     where: {
       id: eventId,
-      ownerId,
       deletedAt: null,
       status: {
         in: [
@@ -269,6 +293,7 @@ export const cancelEvent = async (eventId, ownerId) => {
           constants.EVENT_STATUS.COMPLETED,
         ],
       },
+      ...(isAdmin ? {} : { ownerId }),
     },
     data: {
       status: constants.EVENT_STATUS.CANCELLED,
@@ -279,5 +304,5 @@ export const cancelEvent = async (eventId, ownerId) => {
     throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
   }
 
-  return getEvent(eventId, ownerId, constants.ROLES.ORGANIZER);
+  return getEvent(eventId, ownerId, userRole);
 };

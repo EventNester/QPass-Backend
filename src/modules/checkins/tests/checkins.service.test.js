@@ -404,7 +404,7 @@ describe("Checkin Service Tests", () => {
       expect(mRedisClient.del).toHaveBeenCalled();
     });
 
-    test("should still return scan result and log a warning when emit fails", async () => {
+    test("should still emit scan:result when the checkin:update emit fails", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(null);
       m.mEmitCheckinUpdate.mockImplementationOnce(() => {
@@ -416,6 +416,27 @@ describe("Checkin Service Tests", () => {
 
       expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
       expect(warnSpy).toHaveBeenCalled();
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID })
+      );
+      expect(mRedisClient.del).toHaveBeenCalled();
+    });
+
+    test("should still return scan result and log a warning when emitScanResult fails", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue(null);
+      m.mEmitScanResult.mockImplementationOnce(() => {
+        throw new Error("socket error");
+      });
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      const result = await scanQr(mockEventId, { token: "bad_token" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalled();
       expect(mRedisClient.del).toHaveBeenCalled();
     });
   });

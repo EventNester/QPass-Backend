@@ -30,7 +30,7 @@ const router = Router();
  *     summary: Publish a draft event
  *     description: |
  *       Transitions an event from DRAFT to PUBLISHED and generates a unique public slug.
- *       Only the event owner can publish, and only while the event is in DRAFT status.
+ *       Only the event owner or an ADMIN can publish, and only while the event is in DRAFT status.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -56,7 +56,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden — caller is not the event owner
+ *         description: Forbidden — caller is neither the event owner nor an ADMIN
  *         content:
  *           application/json:
  *             schema:
@@ -90,7 +90,7 @@ router.post(
  *     summary: Cancel a published event
  *     description: |
  *       Transitions an event to CANCELLED status. Draft events cannot be cancelled
- *       (use delete instead). Only the event owner can cancel.
+ *       (use delete instead). Only the event owner or an ADMIN can cancel.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -288,7 +288,7 @@ router.get(
  * /api/v1/events/{id}:
  *   patch:
  *     summary: Update an event
- *     description: Updates an existing event. Requires authentication. Only the organiser can update.
+ *     description: Updates an existing event. Only the event owner or an ADMIN can update.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -318,7 +318,7 @@ router.get(
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden — caller is not the event owner
+ *         description: Forbidden — caller is neither the event owner nor an ADMIN
  *       404:
  *         description: Event not found
  *       422:
@@ -337,7 +337,7 @@ router.patch(
  * /api/v1/events/{id}:
  *   delete:
  *     summary: Delete an event
- *     description: Deletes an event. Requires authentication. Only the organiser can delete.
+ *     description: Deletes an event. Only the event owner or an ADMIN can delete.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -355,7 +355,7 @@ router.patch(
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden — caller is not the event owner
+ *         description: Forbidden — caller is neither the event owner nor an ADMIN
  *       404:
  *         description: Event not found
  *       422:
