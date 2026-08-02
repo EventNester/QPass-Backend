@@ -138,16 +138,11 @@ describe('Auth Service Tests', () => {
       mRedisClient.get.mockResolvedValue(null);
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(refreshToken(token)).rejects.toThrow(
-        systemMessages.ERROR.AUTH.UNAUTHORIZED
-      );
+      await expect(refreshToken(token)).rejects.toBeInstanceOf(UnauthorizedError);
 
       prisma.user.findUnique.mockResolvedValue({ ...mockUser, deletedAt: new Date() });
-      await expect(refreshToken(token)).rejects.toThrow(
-        systemMessages.ERROR.AUTH.UNAUTHORIZED
-      );
-    });
-  });
+      await expect(refreshToken(token)).rejects.toBeInstanceOf(UnauthorizedError);
+    });  });
 
   describe('Password Hashing', () => {
     test('hashPassword should return hashed password', async () => {
