@@ -6,6 +6,7 @@ import {
   deleteTicketTypeController 
 } from "./tickets.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
+import { requireRole } from "../../middlewares/rbac.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import { createTicketTypeSchema, updateTicketTypeSchema } from "./tickets.schema.js";
 
@@ -54,7 +55,7 @@ const router = Router({ mergeParams: true });
  *       404:
  *         description: Event not found
  */
-router.post("/", requireAuth, validate(createTicketTypeSchema), createTicketTypeController);
+router.post("/", requireAuth, requireRole("ORGANIZER", "ADMIN"), validate(createTicketTypeSchema), createTicketTypeController);
 
 /**
  * @openapi
@@ -81,7 +82,7 @@ router.post("/", requireAuth, validate(createTicketTypeSchema), createTicketType
  *       404:
  *         description: Event not found
  */
-router.get("/", requireAuth, getTicketTypesController);
+router.get("/", requireAuth, requireRole("ORGANIZER", "ADMIN"), getTicketTypesController);
 
 /**
  * @openapi
@@ -132,7 +133,7 @@ router.get("/", requireAuth, getTicketTypesController);
  *       404:
  *         description: Event or Ticket type not found
  */
-router.patch("/:id", requireAuth, validate(updateTicketTypeSchema), updateTicketTypeController);
+router.patch("/:id", requireAuth, requireRole("ORGANIZER", "ADMIN"), validate(updateTicketTypeSchema), updateTicketTypeController);
 
 /**
  * @openapi
@@ -168,6 +169,6 @@ router.patch("/:id", requireAuth, validate(updateTicketTypeSchema), updateTicket
  *       409:
  *         description: Cannot delete due to existing registrations
  */
-router.delete("/:id", requireAuth, deleteTicketTypeController);
+router.delete("/:id", requireAuth, requireRole("ORGANIZER", "ADMIN"), deleteTicketTypeController);
 
 export default router;

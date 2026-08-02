@@ -59,7 +59,7 @@ export const getEventController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const event = await getEvent(id);
+    const event = await getEvent(id, req.user.id, req.user.role);
 
     return success(res, event);
   } catch (error) {
@@ -70,9 +70,7 @@ export const getEventController = async (req, res, next) => {
 // List events
 export const listEventsController = async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page, 10) || undefined;
-    const limit = parseInt(req.query.limit, 10) || undefined;
-    const result = await listEvents(page, limit);
+    const result = await listEvents(req.user.id, req.user.role, req.query);
 
     return success(res, result);
   } catch (error) {

@@ -26,7 +26,16 @@ describe('Events API Integration Tests', () => {
         password: 'SecurePassword123',
       });
 
-    organizerToken = regRes.body.data.accessToken;
+    await prisma.user.update({
+      where: { id: regRes.body.data.user.id },
+      data: { role: 'ORGANIZER' },
+    });
+
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'organizer@example.com', password: 'SecurePassword123' });
+
+    organizerToken = loginRes.body.data.accessToken;
   });
 
   afterAll(async () => {
@@ -95,9 +104,33 @@ describe('Events API Integration Tests', () => {
   });
 
   describe('GET /api/v1/events', () => {
+    it('should return 401 without auth', async () => {
+      const response = await request(app)
+        .get('/api/v1/events');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 403 for an ATTENDEE', async () => {
+      const attendeeReg = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Attendee User',
+          email: 'attendee@example.com',
+          password: 'SecurePassword123',
+        });
+
+      const response = await request(app)
+        .get('/api/v1/events')
+        .set('Authorization', `Bearer ${attendeeReg.body.data.accessToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
     it('should return 200 with paginated events list', async () => {
       const response = await request(app)
         .get('/api/v1/events')
+        .set('Authorization', `Bearer ${organizerToken}`)
         .query({ page: 1, limit: 10 });
 
       expect(response.status).toBe(200);
@@ -107,12 +140,56 @@ describe('Events API Integration Tests', () => {
       expect(response.body.data.pagination.page).toBe(1);
       expect(response.body.data.pagination.limit).toBe(10);
     });
+
+    it('should return 422 for an invalid status filter', async () => {
+      const response = await request(app)
+        .get('/api/v1/events')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .query({ status: 'BOGUS' });
+
+      expect(response.status).toBe(422);
+      expect(response.body.status).toBe('error');
+    });
   });
 
   describe('GET /api/v1/events/:id', () => {
-    it('should return 200 with event details', async () => {
+    it('should return 401 without auth', async () => {
       const response = await request(app)
         .get(`/api/v1/events/${eventId}`);
+
+      expect(response.status).toBe(401);
+    });
+
+    it('should return 422 for an invalid event ID format', async () => {
+      const response = await request(app)
+        .get('/api/v1/events/not-a-uuid')
+        .set('Authorization', `Bearer ${organizerToken}`);
+
+      expect(response.status).toBe(422);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 403 for a non-owner', async () => {
+      const viewerReg = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Viewer User',
+          email: 'viewer@example.com',
+          password: 'SecurePassword123',
+        });
+
+      const response = await request(app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${viewerReg.body.data.accessToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.status).toBe('error');
+    });
+
+    it('should return 200 with event details', async () => {
+      const response = await request(app)
+        .get(`/api/v1/events/${eventId}`)
+        .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('success');
@@ -122,7 +199,8 @@ describe('Events API Integration Tests', () => {
 
     it('should return 404 for non-existent event', async () => {
       const response = await request(app)
-        .get('/api/v1/events/00000000-0000-0000-0000-000000000000');
+        .get('/api/v1/events/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(response.status).toBe(404);
       expect(response.body.status).toBe('error');
@@ -270,7 +348,8 @@ describe('Events API Integration Tests', () => {
 
     it('should return 404 for deleted event', async () => {
       const response = await request(app)
-        .get(`/api/v1/events/${deleteEventId}`);
+        .get(`/api/v1/events/${deleteEventId}`)
+        .set('Authorization', `Bearer ${organizerToken}`);
 
       expect(response.status).toBe(404);
     });
