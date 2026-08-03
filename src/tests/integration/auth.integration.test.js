@@ -8,6 +8,14 @@ vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   authLimiter: (_req, _res, next) => next(),
 }));
 
+vi.mock('../../utils/email.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    sendPasswordResetEmail: vi.fn(async () => ({ success: true })),
+  };
+});
+
 describe('Auth API Integration Tests', () => {
 
   beforeAll(async () => {
@@ -75,6 +83,64 @@ describe('Auth API Integration Tests', () => {
       expect(response.body.data.user.role).toBe('ATTENDEE');
       expect(response.body.data.accessToken).toBeDefined();
       expect(response.body.data.refreshToken).toBeDefined();
+    });
+
+    it('should default to ATTENDEE when no role is provided', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Default User',
+          email: 'default@example.com',
+          password: 'SecurePassword123',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.user.role).toBe('ATTENDEE');
+    });
+
+    it('should honor the requested ORGANIZER role at registration', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Event Organizer',
+          email: 'organizer-register@example.com',
+          password: 'SecurePassword123',
+          role: 'ORGANIZER',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.user.role).toBe('ORGANIZER');
+    });
+
+    it('should honor the requested STAFF role at registration', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Event Staff',
+          email: 'staff-register@example.com',
+          password: 'SecurePassword123',
+          role: 'STAFF',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.user.role).toBe('STAFF');
+    });
+
+    it('should return 422 for an unsupported role', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Rogue Admin',
+          email: 'rogue-admin@example.com',
+          password: 'SecurePassword123',
+          role: 'ADMIN',
+        });
+
+      expect(response.status).toBe(422);
+      expect(response.body.status).toBe('error');
+      expect(response.body.message).toBe('Invalid role');
     });
 
   });

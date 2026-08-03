@@ -3,11 +3,10 @@
 | Field | Value |
 |-------|-------|
 | **Product** | QPass QR Code-Based Event Attendance & Ticketing System |
-| **Stack** | Node.js 22, Express 5, Prisma ORM, PostgreSQL, Redis, Socket.IO, Zod, Vitest, Nodemailer |
+| **Stack** | Node.js 22, Express 5, Prisma ORM, PostgreSQL, Redis, Socket.IO, Zod, Vitest, Brevo REST API |
 | **Timebox** | 2-week MVP |
 | **Date** | July 2026 |
 | **Authors** | Crosstrack Group 13 |
-
 ---
 
 ## 1. Executive Summary
@@ -253,14 +252,14 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 
 | # | Method | Endpoint | Auth | Rate Limit | Purpose |
 |---|--------|----------|------|------------|---------|
-| 1 | POST | `/auth/register` | Public | authLimiter (5/15min) | `{ name, email, password }`. Default role: ATTENDEE. |
+| 1 | POST | `/auth/register` | Public | authLimiter (5/15min) | `{ name, email, password, role? }`. Default role: ATTENDEE. Optional `role` may be `ATTENDEE`, `ORGANIZER`, or `STAFF`; `ADMIN` is not self-assignable. |
 | 2 | POST | `/auth/login` | Public | authLimiter | `{ email, password }` → `{ user: { id, name, email, role }, accessToken, refreshToken }` |
 | 3 | POST | `/auth/refresh` | Valid refresh token | — | Rotate access token. Verify refresh not blacklisted. |
 | 4 | POST | `/auth/logout` | Authenticated | — | Blacklist refresh token in Redis. |
 | 5 | POST | `/auth/password/forgot` | Public | authLimiter | Send reset email with time-limited token. |
 | 6 | POST | `/auth/password/reset` | Public | — | `{ token, newPassword }`. |
 
-**Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; `role` field stripped from input.
+**Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; an optional `role` (`ATTENDEE`/`ORGANIZER`/`STAFF`) may be supplied, and `ADMIN` cannot be self-assigned.
 
 ### 7.2 Events
 
@@ -447,7 +446,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 | Task | Details |
 |------|---------|
 | Schema migration | New enums (RegistrationMode, RegistrationSource), new fields on User/Event/Registration/Notification/AuditLog, new models (TicketType, ImportBatch) |
-| Auth module | Register, login, refresh, logout, password reset. JWT + bcrypt + Redis blacklist. `requireAuth` middleware. Strip `role` from input, default ATTENDEE, rate limit, generic errors. |
+| Auth module | Register, login, refresh, logout, password reset. JWT + bcrypt + Redis blacklist. `requireAuth` middleware. Optional `role` at registration (default ATTENDEE; ADMIN not self-assignable), rate limit, generic errors. |
 | Event CRUD | Create (DRAFT), list (paginated, filter by status), get, edit, publish (slug), cancel. Ownership enforcement. |
 | TicketType CRUD | Create, list, edit, delete (only if no registrations). Per-event scoped. |
 | Validate + routes | Zod middleware wrapper. Wire all routes in `v1.js`. Initialize Socket.IO. |

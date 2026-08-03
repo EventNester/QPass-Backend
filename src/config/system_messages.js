@@ -169,6 +169,7 @@ export default {
   VALIDATION: {
     NAME_REQUIRED: "Name is required",
     INVALID_EMAIL: "Invalid email address",
+    INVALID_ROLE: "Invalid role",
     PASSWORD_MIN: "Password must be at least 8 characters",
     PASSWORD_LOWERCASE: "Password must contain a lowercase letter",
     PASSWORD_UPPERCASE: "Password must contain an uppercase letter",

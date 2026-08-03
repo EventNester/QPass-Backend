@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { systemMessages } from "../../config/index.js";
+import { constants, systemMessages } from "../../config/index.js";
 
 const v = systemMessages.VALIDATION;
 
@@ -12,6 +12,16 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
     .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
     .regex(/\d/, v.PASSWORD_NUMBER),
+  role: z
+    .enum(
+      [
+        constants.ROLES.ATTENDEE,
+        constants.ROLES.ORGANIZER,
+        constants.ROLES.STAFF,
+      ],
+      { message: v.INVALID_ROLE }
+    )
+    .default(constants.ROLES.ATTENDEE),
 });
 
 export const loginSchema = z.object({

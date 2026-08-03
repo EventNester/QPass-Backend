@@ -106,9 +106,11 @@ describe('Password Service', () => {
 
       const result = await forgotPassword(mockUser.email);
 
-      expect(result.resetToken).toBeDefined();
+      expect(result).toEqual({ success: false, error: 'Brevo API unavailable' });
+      expect(result.resetToken).toBeUndefined();
+      const tokenKey = mRedisClient.set.mock.calls[0][0];
       await vi.waitFor(() => {
-        expect(mRedisClient.del).toHaveBeenCalledWith(`pwd_reset:${result.resetToken}`);
+        expect(mRedisClient.del).toHaveBeenCalledWith(tokenKey);
       });
     });
   });

@@ -26,7 +26,8 @@ const router = Router();
  *       scans, then creates a CheckIn row (enforced unique by eventId+registrationId).
  *       If the registration has a soft-deleted CheckIn row from an earlier undo, that
  *       row is restored and the result is VALID.
- *       Emits `checkin:update` on the dashboard room after every scan attempt. *     tags: [Checkins]
+ *       Emits `checkin:update` on the dashboard room after every scan attempt.
+ *     tags: [Checkins]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -76,6 +77,12 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), validate(scanQrSchema), checkinController.scanQr);
 
@@ -113,6 +120,12 @@ router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), va
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
  *         description: Forbidden — requires STAFF or ORGANIZER role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
  *         content:
  *           application/json:
  *             schema:
@@ -165,6 +178,16 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Check-in not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.undoCheckin);
 

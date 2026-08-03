@@ -53,8 +53,33 @@ function publicEventPayload(event) {
  *     responses:
  *       200:
  *         description: Event details and ticket types
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/PublicEventResponse'
  *       404:
  *         description: Event not found or not publicly viewable
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: Invalid slug format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 publicEventRouter.get('/:slug', validateParams(publicEventSlugSchema), async (req, res, next) => {
   try {
@@ -100,12 +125,39 @@ publicEventRouter.get('/:slug', validateParams(publicEventSlugSchema), async (re
  *     responses:
  *       201:
  *         description: Registration confirmed with QR
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/RegistrationResult'
  *       400:
  *         description: Event closed, capacity full, or invalid ticket type
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
  *         description: Attendee already registered for this event
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       422:
  *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 publicRegistrationRouter.post('/free', validate(freeRegistrationSchema), async (req, res, next) => {
   try {

@@ -67,18 +67,10 @@ describe('Public Registration API Integration Tests', () => {
         name: 'Public Org',
         email: 'public-org@example.com',
         password: 'SecurePassword123',
+        role: 'ORGANIZER',
       });
 
-    const organizerId = regRes.body.data.user.id;
-    await prisma.user.update({
-      where: { id: organizerId },
-      data: { role: 'ORGANIZER' },
-    });
-
-    const loginRes = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'public-org@example.com', password: 'SecurePassword123' });
-    organizerToken = loginRes.body.data.accessToken;
+    organizerToken = regRes.body.data.accessToken;
 
     const eventRes = await request(app)
       .post('/api/v1/events')

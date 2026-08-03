@@ -59,7 +59,7 @@ export const getEventController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const event = await getEvent(id);
+    const event = await getEvent(id, req.user.id, req.user.role);
 
     return success(res, event);
   } catch (error) {
@@ -70,9 +70,7 @@ export const getEventController = async (req, res, next) => {
 // List events
 export const listEventsController = async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page, 10) || undefined;
-    const limit = parseInt(req.query.limit, 10) || undefined;
-    const result = await listEvents(page, limit);
+    const result = await listEvents(req.user.id, req.user.role, req.query);
 
     return success(res, result);
   } catch (error) {
@@ -88,7 +86,7 @@ export const updateEventController = async (req, res, next) => {
     const validatedData = parseOrNext(updateEventSchema, req.body, next);
     if (!validatedData) return;
 
-    const event = await updateEvent(id, validatedData, req.user.sub);
+    const event = await updateEvent(id, validatedData, req.user.sub, req.user.role);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.UPDATED);
   } catch (error) {
@@ -101,7 +99,7 @@ export const deleteEventController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const event = await deleteEvent(id, req.user.sub);
+    const event = await deleteEvent(id, req.user.sub, req.user.role);
 
     return success(res, event, systemMessages.SUCCESS.EVENT.DELETED);
   } catch (error) {
@@ -115,7 +113,7 @@ export const publishEventController = async (req, res, next) => {
     const eventId = parseEventIdOrNext(req.params.id, next);
     if (!eventId) return;
 
-    const event = await publishEvent(eventId, req.user.sub);
+    const event = await publishEvent(eventId, req.user.sub, req.user.role);
 
     return success(
       res,
@@ -134,7 +132,7 @@ export const cancelEventController = async (req, res, next) => {
     const eventId = parseEventIdOrNext(req.params.id, next);
     if (!eventId) return;
 
-    const event = await cancelEvent(eventId, req.user.sub);
+    const event = await cancelEvent(eventId, req.user.sub, req.user.role);
 
     return success(
       res,

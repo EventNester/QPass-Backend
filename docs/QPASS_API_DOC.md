@@ -99,7 +99,7 @@ Check database and Redis connectivity.
 
 #### `POST /api/v1/auth/register`
 
-Create a new user account. Default role is `ATTENDEE`.
+Create a new user account. Default role is `ATTENDEE`. An optional `role` of `ATTENDEE`, `ORGANIZER`, or `STAFF` may be supplied; `ADMIN` cannot be self-assigned.
 
 **Auth:** No | **Rate Limit:** 5 / 15 min
 

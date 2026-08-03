@@ -1,4 +1,23 @@
 import { z } from "zod";
+import { constants } from "../../config/index.js";
+
+export const eventIdParamsSchema = z.object({
+  id: z.string().uuid("Invalid event ID format"),
+});
+
+export const eventListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  status: z
+    .enum([
+      constants.EVENT_STATUS.DRAFT,
+      constants.EVENT_STATUS.PUBLISHED,
+      constants.EVENT_STATUS.ACTIVE,
+      constants.EVENT_STATUS.COMPLETED,
+      constants.EVENT_STATUS.CANCELLED,
+    ])
+    .optional(),
+});
 
 export const createEventSchema = z
   .object({

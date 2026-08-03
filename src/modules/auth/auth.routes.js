@@ -16,7 +16,8 @@ const router = Router();
  * /api/v1/auth/register:
  *   post:
  *     summary: Register a new user
- *     description: Creates a new user account with ATTENDEE role. Rate limited to 5 requests per 15 minutes. 
+ *     description: Creates a new user account. The account is created as an ATTENDEE by
+ *      default, or as an ORGANIZER/STAFF if a supported role is provided. Rate limited to 5 requests per 15 minutes.
  *      Password must be at least 8 characters, uppercase letter, lowercase letter, and contain a number.
  *     tags: [Auth]
  *     requestBody:
@@ -32,8 +33,8 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/AuthResponse'
- *       400:
- *         description: "Validation error. Possible messages: Name is required, Invalid email address, Password must be at least 8 characters, Password must contain an uppercase letter, Password must contain a lowercase letter, Password must contain a number"
+ *       422:
+ *         description: "Validation error. Possible messages: Name is required, Invalid email address, Password must be at least 8 characters, Password must contain an uppercase letter, Password must contain a lowercase letter, Password must contain a number, Invalid role (allowed roles: ATTENDEE, ORGANIZER, STAFF)"
  *         content:
  *           application/json:
  *             schema:
@@ -47,10 +48,10 @@ router.post('/register', authLimiter, async (req, res, next) => {
     if (!parsed.success) {
       return next(new ValidationError(parsed.error.issues[0].message));
     }
-    const { name, email, password } = parsed.data;
+    const { name, email, password, role } = parsed.data;
 
     const passwordHash = await hashPassword(password);
-    const user = await registerUser({ name, email, passwordHash, role: 'ATTENDEE' });
+    const user = await registerUser({ name, email, passwordHash, role });
 
     const tokens = generateTokens(user);
 

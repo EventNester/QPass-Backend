@@ -5,7 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 
-  CORS_ORIGIN: z.string().default("*"),
+  CORS_ORIGIN: z.string().default("http://localhost:3000"),
   SWAGGER_ENABLED: z
     .enum(["true", "false"])
     .default("true")
@@ -27,19 +27,36 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 
-  SOCKET_CORS_ORIGIN: z.string().default("*"),
+  SOCKET_CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
   PAYSTACK_PUBLIC_KEY: z.string().optional().default(""),
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
   BREVO_API_KEY: z.string().optional().default(""),
-  BREVO_SENDER_EMAIL: z.string().optional().default("noreply@qpass.com"),
-  BREVO_SENDER_NAME: z.string().optional().default("QPass"),
+  BREVO_SENDER_EMAIL: z.string().trim().optional().default(""),
+  BREVO_SENDER_NAME: z.string().trim().optional().default(""),
 
   FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
   SENTRY_DSN: z.string().optional().default(""),
+}).superRefine((env, ctx) => {
+  if (env.BREVO_API_KEY) {
+    if (!env.BREVO_SENDER_NAME) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "BREVO_SENDER_NAME is required and must not be blank when BREVO_API_KEY is set",
+        path: ["BREVO_SENDER_NAME"],
+      });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.BREVO_SENDER_EMAIL)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "BREVO_SENDER_EMAIL must be a valid email address when BREVO_API_KEY is set",
+        path: ["BREVO_SENDER_EMAIL"],
+      });
+    }
+  }
 });
 
 export function validateEnv() {
