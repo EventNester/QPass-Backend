@@ -73,6 +73,26 @@ export async function hasActiveSession(userId, refreshToken) {
 }
 
 /**
+ * Atomically consume a refresh-token session. Only the first request wins:
+ * the GETDEL removes the key, so concurrent requests carrying the same token
+ * observe no session and are rejected during refresh.
+ *
+ * @param {string} userId - Owning user id
+ * @param {string} refreshToken - Raw refresh token
+ * @returns {Promise<boolean>} True when this request consumed a live session
+ */
+export async function consumeSession(userId, refreshToken) {
+  try {
+    const redis = getRedisClient();
+    const raw = await redis.getdel(sessionKey(userId, hashToken(refreshToken)));
+    return raw !== null;
+  } catch (err) {
+    logger.warn({ err: err.message, userId }, 'Failed to consume session');
+    return false;
+  }
+}
+
+/**
  * Remove a session by its raw refresh token.
  * @param {string} userId - Owning user id
  * @param {string} refreshToken - Raw refresh token
@@ -87,32 +107,47 @@ export async function deleteSession(userId, refreshToken) {
 }
 
 /**
- * List all active sessions for a user, newest first.
+ * List all active sessions for a user, newest first. Uses SCAN instead of
+ * KEYS so large session sets never block the Redis event loop. Best-effort:
+ * a Redis failure yields an empty list rather than rejecting the request.
  * @param {string} userId - Owning user id
  * @returns {Promise<Array<{id: string, userAgent: string|null, createdAt: string, expiresAt: string}>>}
  */
 export async function listSessions(userId) {
-  const redis = getRedisClient();
-  const keys = await redis.keys(`${SESSION_PREFIX}${userId}:*`);
+  try {
+    const redis = getRedisClient();
+    const pattern = `${SESSION_PREFIX}${userId}:*`;
 
-  const sessions = [];
-  for (const key of keys) {
-    const raw = await redis.get(key);
-    let meta = {};
-    try {
-      meta = raw ? JSON.parse(raw) : {};
-    } catch {
-      // treat unparseable metadata as an empty session
+    const keys = [];
+    let cursor = '0';
+    do {
+      const [nextCursor, foundKeys] = await redis.scan(cursor, 'MATCH', pattern);
+      keys.push(...foundKeys);
+      cursor = nextCursor;
+    } while (cursor !== '0');
+
+    const sessions = [];
+    for (const key of keys) {
+      const raw = await redis.get(key);
+      let meta = {};
+      try {
+        meta = raw ? JSON.parse(raw) : {};
+      } catch {
+        // treat unparseable metadata as an empty session
+      }
+      sessions.push({
+        id: key.slice(key.lastIndexOf(':') + 1),
+        userAgent: meta.userAgent || null,
+        createdAt: meta.createdAt || null,
+        expiresAt: meta.expiresAt || null,
+      });
     }
-    sessions.push({
-      id: key.slice(key.lastIndexOf(':') + 1),
-      userAgent: meta.userAgent || null,
-      createdAt: meta.createdAt || null,
-      expiresAt: meta.expiresAt || null,
-    });
-  }
 
-  return sessions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return sessions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  } catch (err) {
+    logger.warn({ err: err.message, userId }, 'Failed to list sessions');
+    return [];
+  }
 }
 
 /**
@@ -126,5 +161,21 @@ export async function revokeSession(userId, sessionId) {
     await redis.del(sessionKey(userId, sessionId));
   } catch (err) {
     logger.warn({ err: err.message, userId }, 'Failed to revoke session');
+  }
+}
+
+/**
+ * Revoke all of a user's active sessions, optionally preserving one session
+ * by its id (the refresh-token hash). Best-effort: failures are logged and
+ * never block the caller.
+ * @param {string} userId - Owning user id
+ * @param {string|null} [excludeSessionId] - Session id to keep (usually the current request)
+ */
+export async function revokeAllSessions(userId, excludeSessionId = null) {
+  const sessions = await listSessions(userId);
+  for (const session of sessions) {
+    if (session.id !== excludeSessionId) {
+      await revokeSession(userId, session.id);
+    }
   }
 }

@@ -14,7 +14,7 @@ import { forgotPassword, resetPassword } from './password.service.js';
 import { requestEmailVerification, verifyEmail } from './verification.service.js';
 import {
   recordSession,
-  hasActiveSession,
+  consumeSession,
   deleteSession,
   listSessions,
   revokeSession,
@@ -189,15 +189,26 @@ router.post('/refresh', authLimiter, async (req, res, next) => {
 
     const decoded = verifyRefreshToken(token);
 
-    const active = await hasActiveSession(decoded.sub, token);
-    if (!active) {
-      throw new UnauthorizedError(systemMessages.ERROR.AUTH.SESSION_REVOKED);
+    // Atomic single-use session consumption: GETDEL removes the session key
+    // before new tokens are issued, so a concurrent request reusing the same
+    // refresh token is rejected (see consumeSession). The session is
+    // deliberately destroyed before refreshToken() runs; if refreshToken()
+    // fails after this point (blacklisted/invalid token, deleted user, or a
+    // transient Redis/DB outage) the old session is already gone and the
+    // client must re-authenticate. This is an accepted trade-off: the atomic
+    // consume is what prevents refresh-token replay under concurrency.
+    const consumed = await consumeSession(decoded.sub, token);
+    if (!consumed) {
+      throw new UnauthorizedError(systemMessages.ERROR.AUTH.TOKEN_REFRESH_REVOKED);
     }
 
     const newTokens = await refreshToken(token);
 
-    await deleteSession(decoded.sub, token);
-    await recordSession(decoded.sub, newTokens.refreshToken, req.headers['user-agent'] || null);
+    await recordSession(
+      decoded.sub,
+      newTokens.refreshToken,
+      req.headers['user-agent'] || null
+    );
 
     return success(res, newTokens, systemMessages.SUCCESS.AUTH.TOKEN_REFRESHED);
   } catch (error) {
@@ -488,6 +499,9 @@ router.post('/request-verification', authLimiter, requireAuth, async (req, res, 
       return next(new ValidationError(systemMessages.ERROR.AUTH.EMAIL_ALREADY_VERIFIED));
     }
     const result = await requestEmailVerification({ id: profile.id, email: profile.email });
+    if (result && result.success === false) {
+      return next(new Error(systemMessages.ERROR.EMAIL.FAILED));
+    }
     return success(res, result, systemMessages.SUCCESS.AUTH.VERIFICATION_SENT);
   } catch (error) {
     return next(error);

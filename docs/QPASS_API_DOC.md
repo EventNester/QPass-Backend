@@ -197,7 +197,7 @@ Get the authenticated user's profile.
 
 **Auth:** Authenticated
 
-**Response `200`:** `{ "data": { "id": "...", "name": "...", "email": "...", "role": "...", "phone": "...", "emailVerifiedAt": null, "createdAt": "..." } }`
+**Response `200`:** `{ "status": "success", "data": { "id": "...", "name": "...", "email": "...", "role": "...", "phone": null, "emailVerifiedAt": null, "createdAt": "..." } }`
 
 ---
 
@@ -207,10 +207,9 @@ Update the authenticated user's profile (`name`, `phone`). Empty `phone` clears 
 
 **Auth:** Authenticated
 
-**Body:** `{ "name": "John Doe", "phone": "08012345678" }`
+**Body:** `{ "name": "John Doe", "phone": "080..." }`
 
-**Response `200`:** updated profile
-
+**Response `200`:** `{ "status": "success", "message": "Profile updated successfully", "data": { "id": "...", "name": "...", "email": "...", "role": "...", "phone": "080...", "emailVerifiedAt": null, "createdAt": "..." } }`
 **Response `422`:** invalid phone / name too long
 
 ---
@@ -235,7 +234,7 @@ Send an email verification email to the authenticated user. In non-production en
 
 **Auth:** Authenticated
 
-**Response `200`:** `{ "data": { "verifyToken": "<non-production only>" } }`
+**Response `200`:** `{ "status": "success", "message": "Verification email sent", "data": { "verifyToken": "<non-production only>" } }`
 
 **Response `400`:** email already verified
 
@@ -261,7 +260,7 @@ List the authenticated user's active sessions.
 
 **Auth:** Authenticated
 
-**Response `200`:** `{ "data": { "sessions": [ { "id": "<64-char session id>", "userAgent": "...", "createdAt": "...", "expiresAt": "..." } ] } }`
+**Response `200`:** `{ "status": "success", "data": { "sessions": [ { "id": "<64-char session id>", "userAgent": "...", "createdAt": "...", "expiresAt": "..." } ] } }`
 
 ---
 

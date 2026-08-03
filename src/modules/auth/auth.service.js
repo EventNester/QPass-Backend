@@ -4,6 +4,7 @@ import { ConflictError, UnauthorizedError } from '../../utils/error.js';
 import { getRedisClient } from '../../config/redis.js';
 import { systemMessages } from '../../config/index.js';
 import { writeAuditLog } from '../../utils/audit-log.js';
+import { revokeAllSessions } from './session.service.js';
 import {
   signAccessToken,
   signRefreshToken,
@@ -80,12 +81,12 @@ export async function registerUser({ name, email, passwordHash, role }) {
         where: { id: existing.id },
         data: { deletedAt: null, name, passwordHash, role },
       });
-      await writeAuditLog({
+      writeAuditLog({
         actorId: user.id,
         action: 'USER_REACTIVATED',
         entity: 'User',
         entityId: user.id,
-        afterSnapshot: { email: user.email, role: user.role },
+        afterSnapshot: { role: user.role },
       });
       return user;
     }
@@ -96,12 +97,12 @@ export async function registerUser({ name, email, passwordHash, role }) {
     data: { name, email, passwordHash, role },
   });
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: user.id,
     action: 'USER_REGISTERED',
     entity: 'User',
     entityId: user.id,
-    afterSnapshot: { email: user.email, role: user.role },
+    afterSnapshot: { role: user.role },
   });
 
   return user;
@@ -118,12 +119,12 @@ export async function authenticateUser(email, plainPassword) {
     throw new UnauthorizedError(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
   }
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: user.id,
     action: 'USER_LOGIN',
     entity: 'User',
     entityId: user.id,
-    afterSnapshot: { email: user.email, role: user.role },
+    afterSnapshot: { role: user.role },
   });
 
   return user;
@@ -187,11 +188,13 @@ export async function updateProfile(userId, { name, phone }) {
     where: { id: userId },
     data: {
       ...(name !== undefined && name !== user.name ? { name } : {}),
-      ...(phone !== undefined && phone !== user.phone ? { phone } : {}),
+      ...(phone !== undefined && (phone === '' ? null : phone) !== user.phone
+        ? { phone: phone === '' ? null : phone }
+        : {}),
     },
   });
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: userId,
     action: 'USER_PROFILE_UPDATED',
     entity: 'User',
@@ -202,7 +205,6 @@ export async function updateProfile(userId, { name, phone }) {
 
   return publicProfile(updated);
 }
-
 export async function changePassword(userId, currentPassword, newPassword) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -223,7 +225,9 @@ export async function changePassword(userId, currentPassword, newPassword) {
     data: { passwordHash },
   });
 
-  await writeAuditLog({
+  await revokeAllSessions(userId);
+
+  writeAuditLog({
     actorId: userId,
     action: 'PASSWORD_CHANGED',
     entity: 'User',

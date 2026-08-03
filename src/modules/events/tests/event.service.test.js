@@ -9,6 +9,7 @@ import {
   cancelEvent,
 } from "../event.service.js";
 import prisma from "../../../database/index.js";
+import { writeAuditLog } from "../../../utils/audit-log.js";
 import {
   NotFoundError,
   ForbiddenError,
@@ -18,6 +19,10 @@ import { constants } from "../../../config/index.js";
 
 vi.mock("../../../utils/slug.js", () => ({
   generateSlug: vi.fn(() => "test-event-abc123"),
+}));
+
+vi.mock("../../../utils/audit-log.js", () => ({
+  writeAuditLog: vi.fn(),
 }));
 
 vi.mock("../../../database/index.js", () => ({
@@ -79,6 +84,30 @@ describe("Event Service Tests", () => {
           ownerId: mockOwnerId,
         },
       });
+    });
+
+    test("should return before the audit log write completes (non-blocking)", async () => {
+      let releaseAudit;
+      const pendingAudit = new Promise((resolve) => {
+        releaseAudit = resolve;
+      });
+      let auditResolved = false;
+      pendingAudit.then(() => {
+        auditResolved = true;
+      });
+      writeAuditLog.mockReturnValueOnce(pendingAudit);
+      prisma.event.create.mockResolvedValue(mockEvent);
+
+      const result = await createEvent(mockEventData, mockOwnerId);
+
+      expect(result).toEqual(mockEvent);
+      expect(writeAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "EVENT_CREATED" })
+      );
+      expect(auditResolved).toBe(false);
+
+      releaseAudit({ id: "audit_1" });
+      await pendingAudit;
     });
   });
 

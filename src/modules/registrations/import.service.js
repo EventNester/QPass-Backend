@@ -340,6 +340,7 @@ export async function importRegistrations({
 
     for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
       const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
+      const createdRegistrations = [];
 
       try {
         await prisma.$transaction(async (tx) => {
@@ -354,7 +355,7 @@ export async function importRegistrations({
               },
             });
 
-            await tx.registration.create({
+            const registration = await tx.registration.create({
               data: {
                 eventId,
                 ticketCodeId: ticketCode.id,
@@ -366,10 +367,24 @@ export async function importRegistrations({
                 status: 'CONFIRMED',
               },
             });
+            createdRegistrations.push(registration);
           }
         });
 
         successRows += currentBatch.length;
+
+        for (const registration of createdRegistrations) {
+          try {
+            emitRegistrationNew(getIO(), eventId, {
+              registrationId: registration.id,
+              attendeeName: registration.attendeeName,
+              attendeeEmail: registration.attendeeEmail,
+              ticketTypeId: registration.ticketTypeId || null,
+            });
+          } catch (err) {
+            logger.warn({ err, eventId, registrationId: registration.id }, 'failed to emit registration:new');
+          }
+        }
 
         if (sendEmails) {
           await Promise.all(

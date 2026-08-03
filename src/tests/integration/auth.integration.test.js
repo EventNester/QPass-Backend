@@ -426,6 +426,8 @@ describe('Auth API Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.data.accessToken).toBeDefined();
+      refreshTokenValue = response.body.data.refreshToken;
+      expect(refreshTokenValue).toBeDefined();
     });
 
     it('POST /auth/request-verification returns a verify token in test env', async () => {
@@ -492,7 +494,6 @@ describe('Auth API Integration Tests', () => {
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: refreshTokenValue });
 
-      expect(response.status).toBe(401);
-    });
+      expect(response.status).toBe(401);    });
   });
 });

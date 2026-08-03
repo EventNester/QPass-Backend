@@ -8,6 +8,7 @@ const mRedisClient = {
   set: vi.fn(),
   get: vi.fn(),
   del: vi.fn(),
+  scan: vi.fn().mockResolvedValue(['0', []]),
 };
 
 vi.mock('../../../config/redis.js', () => ({
@@ -22,6 +23,10 @@ vi.mock('../../../config/index.js', () => ({
       GENERAL: { NOT_FOUND: 'Resource not found' },
     },
   },
+}));
+
+vi.mock('../../../utils/audit-log.js', () => ({
+  writeAuditLog: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../../database/index.js', () => ({

@@ -6,6 +6,7 @@ import { logger, systemMessages } from '../../config/index.js';
 import { hashPassword } from './auth.service.js';
 import { sendPasswordResetEmail } from '../../utils/email.js';
 import { writeAuditLog } from '../../utils/audit-log.js';
+import { revokeAllSessions } from './session.service.js';
 
 const RESET_TOKEN_TTL_SECONDS = 900; // 15 minutes
 const REDIS_PREFIX = 'pwd_reset:';
@@ -55,14 +56,18 @@ export async function resetPassword(token, newPassword) {
     data: { passwordHash },
   });
 
-  await writeAuditLog({
-    actorId: userId,
-    action: 'PASSWORD_RESET',
-    entity: 'User',
-    entityId: userId,
-  });
-
   await redis.del(`${REDIS_PREFIX}${token}`);
 
-  return { success: true };
+  await revokeAllSessions(userId);
+
+  try {
+    await writeAuditLog({
+      actorId: userId,
+      action: 'PASSWORD_RESET',
+      entity: 'User',
+      entityId: userId,
+    });
+  } catch (err) {
+    logger.warn({ err: err.message, userId }, 'Failed to write PASSWORD_RESET audit log');
+  }  return { success: true };
 }

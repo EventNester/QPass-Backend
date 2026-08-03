@@ -241,9 +241,8 @@
           },
           "phone": {
             "type": "string",
-            "pattern": "^\\+?[0-9]{7,15}$",
-            "description": "Phone number (optional, empty string allowed to clear it)"
-          }
+            "pattern": "^(?:\\+?[0-9]{7,15})?$",
+            "description": "Phone number (optional, empty string allowed to clear it)"          }
         }
       },
       "AuthUser": {
@@ -269,11 +268,13 @@
           },
           "phone": {
             "type": "string",
+            "nullable": true,
             "description": "Phone number, if set"
           },
           "emailVerifiedAt": {
             "type": "string",
             "format": "date-time",
+            "nullable": true,
             "description": "When the email was verified, null if not verified"
           },
           "createdAt": {
