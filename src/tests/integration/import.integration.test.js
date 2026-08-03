@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
+import { randomBytes } from 'node:crypto';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
 import { cleanDatabase } from '../helpers/cleanup.js';
@@ -12,6 +13,7 @@ vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
 describe('Attendee Import API Integration Tests', () => {
   let organizerToken;
   let otherOrganizerToken;
+  let organizerId;
   let eventId;
   let ticketTypeId;
   const futureDate = new Date(Date.now() + 86400000);
@@ -29,6 +31,11 @@ describe('Attendee Import API Integration Tests', () => {
         role: 'ORGANIZER',
       });
     organizerToken = orgRes.body.data.accessToken;
+    const orgUser = await prisma.user.findUnique({
+      where: { email: 'import-org@example.com' },
+      select: { id: true },
+    });
+    organizerId = orgUser.id;
 
     const otherRes = await request(app)
       .post('/api/v1/auth/register')
@@ -140,11 +147,31 @@ describe('Attendee Import API Integration Tests', () => {
     });
 
     it('should report per-row errors without importing invalid rows', async () => {
+      const dupTicketCode = await prisma.ticketCode.create({
+        data: {
+          eventId,
+          code: `SEED-${randomBytes(4).toString('hex').toUpperCase()}`,
+          attendeeEmail: 'import-dup@example.com',
+          attendeeName: 'Dup Attendee',
+        },
+      });
+      await prisma.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: dupTicketCode.id,
+          attendeeEmail: 'import-dup@example.com',
+          attendeeName: 'Dup Attendee',
+          ticketTypeId,
+          source: 'IMPORT',
+          status: 'CONFIRMED',
+        },
+      });
+
       const csv = [
         'Name,Email,Phone,TicketType',
         `Valid,import-valid@example.com,,${ticketTypeId}`,
         'Bad,not-an-email,',
-        `Dup,import-alice@example.com,,`,
+        `Dup,import-dup@example.com,,`,
       ].join('\n');
 
       const response = await request(app)
@@ -159,7 +186,7 @@ describe('Attendee Import API Integration Tests', () => {
       expect(response.body.data.errors).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ email: 'not-an-email' }),
-          expect.objectContaining({ email: 'import-alice@example.com' }),
+          expect.objectContaining({ email: 'import-dup@example.com' }),
         ])
       );
 
@@ -171,6 +198,23 @@ describe('Attendee Import API Integration Tests', () => {
     });
 
     it('should list import batches for the event', async () => {
+      const seedBatch = (suffix) =>
+        prisma.importBatch.create({
+          data: {
+            eventId,
+            uploadedById: organizerId,
+            originalFilename: `seed-${suffix}.csv`,
+            fileType: 'text/csv',
+            totalRows: 1,
+            successRows: 1,
+            failedRows: 0,
+            status: 'COMPLETED',
+            completedAt: new Date(),
+          },
+        });
+      await seedBatch(randomBytes(4).toString('hex'));
+      await seedBatch(randomBytes(4).toString('hex'));
+
       const response = await request(app)
         .get(`/api/v1/events/${eventId}/import`)
         .set('Authorization', `Bearer ${organizerToken}`);
@@ -182,11 +226,28 @@ describe('Attendee Import API Integration Tests', () => {
     });
 
     it('should generate a unique ticket code for each import', async () => {
+      const csv = [
+        'Name,Email,Phone,TicketType',
+        `Code A,import-code-a@example.com,,${ticketTypeId}`,
+        `Code B,import-code-b@example.com,,${ticketTypeId}`,
+        `Code C,import-code-c@example.com,,${ticketTypeId}`,
+      ].join('\n');
+
+      const response = await request(app)
+        .post(`/api/v1/events/${eventId}/import`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .attach('file', Buffer.from(csv), { filename: 'attendees.csv', contentType: 'text/csv' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.successRows).toBe(3);
+      expect(response.body.data.failedRows).toBe(0);
+
       const codes = await prisma.ticketCode.findMany({
         where: { eventId },
         select: { code: true },
       });
       const unique = new Set(codes.map((c) => c.code));
+      expect(codes.length).toBeGreaterThanOrEqual(3);
       expect(unique.size).toBe(codes.length);
     });
   });

@@ -51,9 +51,12 @@
     {
       "name": "Checkins",
       "description": "QR scanning and attendance tracking"
+    },
+    {
+      "name": "Admin",
+      "description": "Administrative operations: audit log access"
     }
-  ],
-  "components": {
+  ],  "components": {
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",

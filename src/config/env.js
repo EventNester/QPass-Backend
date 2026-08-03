@@ -34,12 +34,20 @@ const envSchema = z.object({
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
   BREVO_API_KEY: z.string().optional().default(""),
-  BREVO_SENDER_EMAIL: z.string().optional().default("noreply@qpass.com"),
-  BREVO_SENDER_NAME: z.string().optional().default("QPass"),
+  BREVO_SENDER_EMAIL: z.string().optional().default(""),
+  BREVO_SENDER_NAME: z.string().optional().default(""),
 
   FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
   SENTRY_DSN: z.string().optional().default(""),
+}).superRefine((env, ctx) => {
+  if (env.BREVO_API_KEY && (!env.BREVO_SENDER_EMAIL || !env.BREVO_SENDER_NAME)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "BREVO_SENDER_EMAIL and BREVO_SENDER_NAME are required when BREVO_API_KEY is set",
+      path: ["BREVO_SENDER_EMAIL"],
+    });
+  }
 });
 
 export function validateEnv() {
