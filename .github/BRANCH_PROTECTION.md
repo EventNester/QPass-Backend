@@ -39,6 +39,6 @@
 | Rule | Setting | Enabled |
 |------|---------|---------|
 | Require status checks to pass | Choose which status checks must pass before the ref is updated | ✅ |
-| Status checks to add | `build`, `lint`, `test`, `validate` | — |
+| Status checks to add | `build`, `lint`, `test`, `validate` | - |
 | Require branches to be up to date before merging | Pull requests must be tested with the latest code | ✅ |
 | Do not require status checks on creation | Leave unchecked | ❌ |

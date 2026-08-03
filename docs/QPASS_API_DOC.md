@@ -1,12 +1,17 @@
 # QPass API Reference
 
-Base URL: `http://localhost:3000`
+- **Base URL:** `http://localhost:3000`
+- **Version:** v1 (all endpoints under `/api/v1` unless noted)
+- **Counts:** 11 tags, 31 paths, 38 operations
+- **Live docs:** Swagger UI at `http://localhost:3000/api-docs` (serves the same OpenAPI 3 spec that this document summarizes)
 
 All responses use the envelope:
 
 ```json
 { "status": "success" | "error", "message": "...", "data": { ... } }
 ```
+
+File downloads (CSV / PDF) bypass the envelope and stream the file directly.
 
 ---
 
@@ -18,7 +23,7 @@ Protected endpoints require a Bearer token in the `Authorization` header:
 Authorization: Bearer <accessToken>
 ```
 
-Tokens are obtained from register/login. Access tokens expire in 15 minutes. Refresh tokens are long-lived and used to rotate access tokens without re-authenticating. Refresh tokens are blacklisted on logout.
+Tokens are obtained from register / login. Access tokens expire in **30 minutes**; refresh tokens are long-lived (**7 days**) and used to rotate access tokens without re-authenticating. Refresh tokens are blacklisted on logout and on every refresh (rotation).
 
 ---
 
@@ -27,18 +32,18 @@ Tokens are obtained from register/login. Access tokens expire in 15 minutes. Ref
 | Role | Access Level |
 |------|-------------|
 | `ATTENDEE` | Registers for events, views own tickets |
-| `STAFF` | Scans QR codes at event check-in |
-| `ORGANIZER` | Creates and manages own events, views reports |
-| `ADMIN` | Full system access across all events |
+| `STAFF` | Scans QR codes at event check-in (needs an active assignment to the event) |
+| `ORGANIZER` | Creates and manages own events, assigns staff, imports attendees, views reports |
+| `ADMIN` | Full system access across all events, plus audit logs |
 
-Organizers can only access their own resources unless they have the `ADMIN` role.
+Organizers can only access their own resources unless they have the `ADMIN` role, which bypasses ownership checks.
 
 ---
 
 ## Rate Limiting
 
 - **Global:** 100 requests / 15 min per IP (applied to all endpoints)
-- **Auth endpoints:** 5 requests / 15 min per IP (register, login, password reset)
+- **Auth endpoints:** 5 requests / 15 min per IP (`register`, `login`, `forgot-password`, `reset-password`)
 
 Rate-limited requests receive a `429 Too Many Requests` response.
 
@@ -52,7 +57,8 @@ Rate-limited requests receive a `429 Too Many Requests` response.
 | 401 | Missing or invalid access token |
 | 403 | Authenticated but insufficient permissions |
 | 404 | Resource not found |
-| 409 | Conflict (e.g. duplicate email, duplicate check-in) |
+| 409 | Conflict (duplicate email, already registered, duplicate check-in, lock held) |
+| 413 | File too large |
 | 422 | Validation failed (Zod schema errors) |
 | 429 | Rate limit exceeded |
 | 500 | Internal server error |
@@ -66,24 +72,20 @@ List endpoints accept `page` and `limit` query parameters (defaults: `page=1`, `
 Response includes:
 
 ```json
-{
-  "pagination": { "page": 1, "limit": 20, "total": 45, "totalPages": 3 }
-}
+{ "pagination": { "page": 1, "limit": 20, "total": 45, "totalPages": 3 } }
 ```
 
 ---
 
 ## Endpoints
 
-### Health
+### 1. Health
 
 ---
 
 #### `GET /health`
 
-Check database and Redis connectivity.
-
-**Auth:** No
+Check database and Redis connectivity. No authentication.
 
 ```json
 // 200
@@ -93,67 +95,59 @@ Check database and Redis connectivity.
 { "status": "degraded", "checks": { "database": "unavailable", "redis": "ok" } }
 ```
 
-### Auth
+---
+
+### 2. Auth
 
 ---
 
 #### `POST /api/v1/auth/register`
 
-Create a new user account. Default role is `ATTENDEE`. An optional `role` of `ATTENDEE`, `ORGANIZER`, or `STAFF` may be supplied; `ADMIN` cannot be self-assigned.
+Create a new user account. Default role is `ATTENDEE`. An optional `role` of `ATTENDEE`, `ORGANIZER`, or `STAFF` may be supplied; `ADMIN` cannot be self-assigned. Rate limit: 5 / 15 min.
 
-**Auth:** No | **Rate Limit:** 5 / 15 min
+**Auth:** No
 
 **Body:**
 
 ```json
-{ "name": "John Doe", "email": "john@example.com", "password": "securePassword123" }
+{ "name": "John Doe", "email": "john@example.com", "password": "SecurePass123", "role": "ORGANIZER" }
 ```
+
+**Password rules:** at least 8 characters, one uppercase letter, one lowercase letter, and one number.
 
 **Response `201`:**
 
 ```json
-{ "user": { "id": "...", "name": "John Doe", "email": "john@example.com", "role": "ATTENDEE" }, "accessToken": "...", "refreshToken": "..." }
+{ "user": { "id": "...", "name": "John Doe", "email": "john@example.com", "role": "ORGANIZER" }, "accessToken": "...", "refreshToken": "..." }
 ```
 
 ---
 
 #### `POST /api/v1/auth/login`
 
-Authenticate and receive tokens.
+Authenticate and receive tokens. Rate limit: 5 / 15 min.
 
-**Auth:** No | **Rate Limit:** 5 / 15 min
+**Auth:** No
 
-**Body:**
+**Body:** `{ "email": "john@example.com", "password": "SecurePass123" }`
 
-```json
-{ "email": "john@example.com", "password": "securePassword123" }
-```
+**Response `200`:** same shape as register (`user` + `accessToken` + `refreshToken`)
 
-**Response `200`:**
-
-```json
-{ "user": { "id": "...", "name": "John Doe", "email": "john@example.com", "role": "ATTENDEE" }, "accessToken": "...", "refreshToken": "..." }
-```
+**Response `401`:** invalid email or password
 
 ---
 
 #### `POST /api/v1/auth/refresh`
 
-Exchange a valid refresh token for a new access token. The old refresh token is blacklisted.
+Exchange a valid refresh token for a new access + refresh pair. The old refresh token is blacklisted.
 
 **Auth:** Valid refresh token
 
-**Body:**
+**Body:** `{ "refreshToken": "..." }`
 
-```json
-{ "refreshToken": "..." }
-```
+**Response `200`:** `{ "accessToken": "...", "refreshToken": "..." }`
 
-**Response `200`:**
-
-```json
-{ "accessToken": "..." }
-```
+**Response `401`:** invalid or expired refresh token
 
 ---
 
@@ -163,41 +157,41 @@ Blacklist the current refresh token.
 
 **Auth:** Authenticated
 
-**Body:**
-
-```json
-{ "refreshToken": "..." }
-```
+**Body:** `{ "refreshToken": "..." }`
 
 **Response `200`:** `{ "message": "Logged out successfully" }`
 
 ---
 
-#### `POST /api/v1/auth/password/forgot`
+#### `POST /api/v1/auth/forgot-password`
 
-Send a password reset email. Returns a generic message regardless of whether the email exists.
+Send a password reset email. Returns a generic message regardless of whether the email exists, to prevent account enumeration. Rate limit: 5 / 15 min.
 
-**Auth:** No | **Rate Limit:** 5 / 15 min
+**Auth:** No
 
 **Body:** `{ "email": "john@example.com" }`
 
 **Response `200`:** `{ "message": "If an account exists with that email, a reset link has been sent" }`
 
+**Note:** The reset token is stored (hashed) in Redis with a 15-minute TTL. In non-production environments the raw token is returned in the payload for local testing; in production the payload is empty.
+
 ---
 
-#### `POST /api/v1/auth/password/reset`
+#### `POST /api/v1/auth/reset-password`
 
-Reset password using the token from the reset email.
+Reset the password using the token from the reset email. Rate limit: 5 / 15 min.
 
 **Auth:** No
 
-**Body:** `{ "token": "...", "newPassword": "newSecurePassword123" }`
+**Body:** `{ "token": "...", "password": "NewSecurePass123" }`
 
 **Response `200`:** `{ "message": "Password reset successful" }`
 
+**Response `401`:** invalid or expired reset token
+
 ---
 
-### Events
+### 3. Events
 
 ---
 
@@ -205,299 +199,354 @@ Reset password using the token from the reset email.
 
 Create a new event. Starts in `DRAFT` status.
 
-**Auth:** ORGANIZER
+**Auth:** ORGANIZER / ADMIN
 
 **Body:**
 
 ```json
-{ "title": "Tech Conference 2026", "description": "...", "venue": "Lagos Convention Center", "startTime": "2026-09-15T09:00:00Z", "endTime": "2026-09-15T17:00:00Z", "maxCapacity": 500 }
+{
+  "title": "Tech Conference 2026",
+  "description": "...",
+  "venue": "Lagos Convention Center",
+  "startTime": "2026-09-15T09:00:00Z",
+  "endTime": "2026-09-15T17:00:00Z",
+  "capacity": 500,
+  "registrationMode": "PUBLIC_LINK",
+  "isPaid": false,
+  "currency": "NGN",
+  "registrationOpensAt": "...",
+  "registrationClosesAt": "..."
+}
 ```
 
-**Response `201`:** `{ "event": { "id": "...", "title": "...", "status": "DRAFT", "ownerId": "..." } }`
+**Response `201`:** `{ "data": { "id": "...", "title": "...", "status": "DRAFT", "slug": "...", "ownerId": "..." } }`
 
 ---
 
 #### `GET /api/v1/events`
 
-List events for the authenticated user. Admins see all events.
+List events. ORGANIZER sees their own events; ADMIN sees all non-deleted events.
 
 **Auth:** ORGANIZER / ADMIN
 
-**Query:** `?page=1&limit=20&status=PUBLISHED`
+**Query:**
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `page` | number | Page number (default: 1) |
 | `limit` | number | Items per page (default: 20) |
-| `status` | string | Filter by `EventStatus` |
+| `status` | string | Filter by `EventStatus` (`DRAFT`, `PUBLISHED`, `ACTIVE`, `COMPLETED`, `CANCELLED`) |
 
-**Response `200`:** `{ "events": [...], "pagination": { ... } }`
+**Response `200`:** `{ "data": { "events": [...], "pagination": { ... } } }`
 
 ---
 
-#### `GET /api/v1/events/:eventId`
+#### `GET /api/v1/events/{id}`
 
-Get full event details including ticket types.
+Get full event details by ID.
 
 **Auth:** Owner (ORGANIZER) / ADMIN
 
-**Response `200`:** `{ "event": { "id", "title", "description", "venue", "startTime", "endTime", "status", "slug", "ownerId", "ticketTypes": [...] } }`
+**Response `200`:** `{ "data": { "id", "title", "description", "venue", "startTime", "endTime", "status", "slug", "ownerId", "ticketTypes": [...] } }`
+
+**Response `404`:** event not found (or not owned)
 
 ---
 
-#### `PATCH /api/v1/events/:eventId`
+#### `PATCH /api/v1/events/{id}`
 
-Update event details. Only allowed while event is in `DRAFT` status.
+Update event details.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
-**Body (all optional):** `{ "title", "description", "venue", "startTime", "endTime", "maxCapacity" }`
+**Body (all optional):** `{ "title", "description", "venue", "startTime", "endTime", "capacity", "currency", "registrationOpensAt", "registrationClosesAt" }`
 
-**Response `200`:** `{ "event": { ... } }`
-
----
-
-#### `POST /api/v1/events/:eventId/publish`
-
-Publish the event. Generates a unique public slug for registration.
-
-**Auth:** Owner (ORGANIZER)
-
-**Response `200`:** `{ "event": { "id": "...", "status": "PUBLISHED", "slug": "tech-conference-2026-a1b2c3" } }`
+**Response `200`:** `{ "data": { ...event } }`
 
 ---
 
-#### `POST /api/v1/events/:eventId/cancel`
+#### `DELETE /api/v1/events/{id}`
 
-Cancel the event.
+Delete an event (soft delete via `deletedAt`).
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
-**Response `200`:** `{ "event": { "id": "...", "status": "CANCELLED" } }`
-
----
-
-### Ticket Types
+**Response `200`:** deleted event data
 
 ---
 
-#### `POST /api/v1/events/:eventId/ticket-types`
+#### `POST /api/v1/events/{id}/publish`
+
+Publish a draft event. Generates a unique public slug.
+
+**Auth:** ORGANIZER / ADMIN (owner)
+
+**Constraints:** event must currently be in `DRAFT`.
+
+**Response `200`:** `{ "data": { "id": "...", "status": "PUBLISHED", "slug": "tech-conference-2026-a1b2c3" } }`
+
+---
+
+#### `POST /api/v1/events/{id}/cancel`
+
+Cancel a published event. Draft events cannot be cancelled (use delete instead).
+
+**Auth:** ORGANIZER / ADMIN (owner)
+
+**Response `200`:** `{ "data": { "id": "...", "status": "CANCELLED" } }`
+
+---
+
+### 4. Ticket Types
+
+---
+
+#### `POST /api/v1/events/{eventId}/ticket-types`
 
 Create a ticket type for an event.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
 **Body:** `{ "name": "General Admission", "description": "...", "price": 5000, "capacity": 200 }`
 
-**Response `201`:** `{ "ticketType": { "id", "name", "price", "capacity" } }`
+**Response `201`:** `{ "data": { "id", "eventId", "name", "price", "capacity", "sortOrder", "active": true } }`
+
+**Note:** `sortOrder` is unique per event. Price is an integer in the event currency's minor unit.
 
 ---
 
-#### `GET /api/v1/events/:eventId/ticket-types`
+#### `GET /api/v1/events/{eventId}/ticket-types`
 
-List all ticket types with sold counts.
+List all ticket types for an event with sold counts.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
-**Response `200`:** `{ "ticketTypes": [{ "id", "name", "price", "capacity", "soldCount" }] }`
-
----
-
-#### `PATCH /api/v1/events/:eventId/ticket-types/:id`
-
-Update a ticket type. Only allowed if no registrations exist for this type.
-
-**Auth:** Owner (ORGANIZER)
-
-**Body (all optional):** `{ "name", "description", "price", "capacity" }`
-
-**Response `200`:** `{ "ticketType": { ... } }`
+**Response `200`:** `{ "data": [{ "id", "name", "price", "capacity", "quantitySold", "sortOrder", "active" }] }`
 
 ---
 
-#### `DELETE /api/v1/events/:eventId/ticket-types/:id`
+#### `PATCH /api/v1/events/{eventId}/ticket-types/{id}`
 
-Delete a ticket type. Only allowed if no registrations exist.
+Update a ticket type.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
-**Response:** `204 No Content`
+**Body (all optional):** `{ "name", "description", "price", "capacity", "active", "sortOrder" }`
 
----
-
-### Attendee Import
+**Response `200`:** `{ "data": { ...ticketType } }`
 
 ---
 
-#### `POST /api/v1/events/:eventId/import`
+#### `DELETE /api/v1/events/{eventId}/ticket-types/{id}`
 
-Upload a CSV, XLSX, PDF, or DOCX file containing attendee data. Returns per-row validation errors for failed rows.
+Delete a ticket type.
 
-**Auth:** Owner (ORGANIZER) | **Content-Type:** `multipart/form-data` | **Max size:** 5MB
+**Auth:** ORGANIZER / ADMIN (owner)
+
+**Response `200`:** deleted ticket type
+
+**Response `409`:** cannot delete because registrations reference this ticket type (FK restrict)
+
+---
+
+### 5. Tickets
+
+---
+
+#### `GET /api/v1/events/{eventId}/tickets`
+
+List tickets (registrations) for an event.
+
+**Auth:** Owner (ORGANIZER) / ADMIN
+
+**Query:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 20) |
+| `status` | string | Filter by `RegistrationStatus` (`PENDING`, `CONFIRMED`, `CANCELLED`) |
+| `paymentStatus` | string | Filter by `PaymentStatus` (`PENDING`, `SUCCESS`, `FAILED`, `REFUNDED`) |
+
+**Response `200`:** `{ "data": { "tickets": [...], "pagination": { ... } } }`
+
+---
+
+#### `POST /api/v1/events/{eventId}/tickets/export`
+
+Export all tickets for an event as CSV or PDF.
+
+**Auth:** Owner (ORGANIZER) / ADMIN
+
+**Body:** `{ "format": "csv" | "pdf" }`
+
+**Response `200`:** file download (`Content-Type: text/csv` or `application/pdf`)
+
+---
+
+#### `GET /api/v1/tickets/{ticketId}`
+
+View a ticket (registration) and its QR code data URL.
+
+**Auth:** Authenticated; caller must be the attendee or the event owner
+
+**Response `200`:** `{ "data": { "id", "code", "attendeeName", "attendeeEmail", "status", "event": { "title", "startTime", "venue" }, "qrDataUrl": "data:image/png;base64,..." } }`
+
+---
+
+#### `GET /api/v1/tickets/{ticketId}/download`
+
+Download a ticket as a printable PDF (includes event details and QR code).
+
+**Auth:** Authenticated; caller must be the attendee or the event owner
+
+**Response `200`:** PDF file download (`Content-Type: application/pdf`)
+
+---
+
+### 6. Registrations (Public)
+
+---
+
+#### `GET /api/v1/e/{slug}`
+
+Get a public event by slug with its active ticket types. No authentication required.
+
+**Auth:** No
+
+**Response `200`:** `{ "data": { "id", "title", "description", "venue", "slug", "startTime", "endTime", "status", "registrationMode", "isPaid", "capacity", "currency", "registrationOpensAt", "registrationClosesAt", "ticketTypes": [...] } }`
+
+**Note:** `ownerId` and internal fields are never exposed on this endpoint.
+
+**Response `404`:** event not found or not publicly viewable
+
+---
+
+#### `POST /api/v1/registrations/free`
+
+Register for a free public event. Creates a `CONFIRMED` registration with a QR token and emails confirmation + QR to the attendee. No authentication required.
+
+**Auth:** No
+
+**Body:** `{ "slug": "tech-conference-2026-a1b2c3", "name": "Jane Doe", "email": "jane@example.com", "phone": "+2348012345678", "ticketTypeId": "...", "metadata": { } }`
+
+**Response `201`:** `{ "data": { "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED", "confirmationCode": "..." }, "qrDataUrl": "data:image/png;base64,..." } }`
+
+**Response `400`:** event closed / capacity full / invalid ticket type
+**Response `409`:** attendee already registered for this event
+
+---
+
+### 7. Attendee Import
+
+---
+
+#### `POST /api/v1/events/{eventId}/import`
+
+Upload a file to batch-import attendees. Supported types: CSV, XLSX, PDF, DOCX. Max size: 5 MB. Each valid row creates a `Registration`, `TicketCode`, and `QrToken`. Returns per-row validation errors for failed rows.
+
+**Auth:** ORGANIZER (owner) | **Content-Type:** `multipart/form-data`
 
 | Field | Type | Constraints |
 |-------|------|-------------|
-| `file` | File | `.csv`, `.xlsx`, `.pdf`, `.docx` only |
+| `file` | File | `.csv`, `.xlsx`, `.pdf`, `.docx`, max 5 MB, max 1000 rows |
 
-**Response `200`:**
+Expected columns: `Name`, `Email`, `Phone`, `TicketType`.
+
+**Response `201`:**
 
 ```json
-{ "batchId": "...", "totalRows": 100, "successRows": 95, "failedRows": 5, "errors": [{ "row": 12, "email": "bad@@", "reason": "Invalid email format" }] }
+{ "data": { "batchId": "...", "totalRows": 100, "successRows": 95, "failedRows": 5, "errors": [{ "row": 12, "email": "bad@bad", "reason": "Invalid email format" }] } }
 ```
 
 ---
 
-#### `GET /api/v1/events/:eventId/import/:batchId`
+#### `GET /api/v1/events/{eventId}/import`
 
-Get import batch status and per-row errors.
+List import batches for an event, newest first.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER (owner)
 
-**Response `200`:** `{ "batch": { "id", "totalRows", "successRows", "failedRows", "status", "errors": [...] } }`
+**Response `200`:** `{ "data": [{ "id", "originalFilename", "fileType", "totalRows", "successRows", "failedRows", "status", "createdAt" }] }`
 
 ---
 
-#### `GET /api/v1/events/:eventId/import-template`
+#### `GET /api/v1/events/{eventId}/import/{batchId}`
 
-Download a template with the correct column headers for attendee import. Supports CSV and PDF formats.
+Get a single import batch with its success/failure summary and per-row error report.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER (owner)
+
+**Response `200`:** `{ "data": { "id", "originalFilename", "fileType", "totalRows", "successRows", "failedRows", "status", "errorReport": [...], "createdAt", "completedAt" } }`
+
+---
+
+#### `GET /api/v1/events/{eventId}/import-template`
+
+Download a template with the correct column headers for the import endpoint.
+
+**Auth:** ORGANIZER (owner)
 
 **Query:** `?format=csv` (default) or `?format=pdf`
 
-**Response:** File download (`Content-Type: text/csv` or `application/pdf`)
+**Response `200`:** file download (`Content-Type: text/csv` or `application/pdf`)
 
 ---
 
-### Public Registration
+### 8. Staff Management
 
 ---
 
-#### `GET /api/v1/public/events/:slug`
+#### `POST /api/v1/events/{eventId}/staff`
 
-Get public event details and available ticket types. No authentication required.
+Assign staff to an event. If no account exists for the email, a pending `STAFF` user is created automatically. Creates an `EventStaffAssignment` and sends a staff invite email.
 
-**Auth:** No
-
-**Response `200`:**
-
-```json
-{ "event": { "id", "title", "description", "venue", "startTime", "endTime", "slug" }, "ticketTypes": [{ "id", "name", "price", "capacity", "availableCount" }] }
-```
-
----
-
-#### `POST /api/v1/public/events/:slug/register`
-
-Register for an event. Free events are confirmed instantly.
-
-**Auth:** No
-
-**Body:** `{ "name": "Jane Doe", "email": "jane@example.com", "phone": "+2348012345678", "ticketTypeId": "..." }`
-
-**Response `200`:** `{ "registration": { "id", "attendeeName", "attendeeEmail", "status": "CONFIRMED" } }`
-
----
-
-### Tickets
-
----
-
-#### `GET /api/v1/tickets/:ticketId`
-
-View a ticket and its QR code image.
-
-**Auth:** Token-based (secure link)
-
-**Response `200`:**
-
-```json
-{ "ticket": { "id", "code", "attendeeName", "attendeeEmail", "status", "event": { "title", "startTime", "venue" } }, "qrDataUrl": "data:image/png;base64,..." }
-```
-
----
-
-#### `GET /api/v1/events/:eventId/tickets`
-
-List all tickets for an event.
-
-**Auth:** Owner (ORGANIZER)
-
-**Query:** `?page=1&limit=20&status=UNUSED`
-
-**Response `200`:** `{ "tickets": [...], "pagination": { ... } }`
-
----
-
-#### `POST /api/v1/events/:eventId/tickets/export`
-
-Export all event tickets as a CSV or PDF file download.
-
-**Auth:** Owner (ORGANIZER)
-
-**Query:** `?format=csv` (default) or `?format=pdf`
-
-**Response:** CSV/PDF file download (`Content-Type: text/csv` or `application/pdf`)
-
----
-
-#### `GET /api/v1/tickets/:ticketId/download`
-
-Download a ticket as a printable PDF.
-
-**Auth:** Token-based (secure link)
-
-**Response:** PDF file download (`Content-Type: application/pdf`)
-
----
-
-### Staff Management
-
----
-
-#### `POST /api/v1/events/:eventId/staff`
-
-Assign a registered user as staff for an event.
-
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER (owner)
 
 **Body:** `{ "email": "staff@example.com", "permissionScope": "check-in-only" }`
 
-**Response `201`:** `{ "assignment": { "id", "eventId", "userId", "permissionScope", "active": true } }`
+**Response `201`:** `{ "data": { "id", "eventId", "userId", "permissionScope", "active": true } }`
+
+**Response `409`:** user is already assigned as staff for this event
+**Response `403`:** cannot assign a privileged user (ORGANIZER / ADMIN) as staff
 
 ---
 
-#### `GET /api/v1/events/:eventId/staff`
+#### `GET /api/v1/events/{eventId}/staff`
 
-List all staff assigned to an event.
+List active staff assignments for an event, newest first.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER (owner)
 
-**Response `200`:** `{ "staff": [{ "id", "userId", "name", "email", "permissionScope", "active" }] }`
-
----
-
-#### `DELETE /api/v1/events/:eventId/staff/:staffId`
-
-Remove a staff member from an event.
-
-**Auth:** Owner (ORGANIZER)
-
-**Response:** `204 No Content`
+**Response `200`:** `{ "data": [{ "id", "eventId", "userId", "name", "email", "permissionScope", "active", "assignedAt" }] }`
 
 ---
 
-### Check-ins
+#### `DELETE /api/v1/events/{eventId}/staff/{staffId}`
+
+Remove a staff member from an event. Records an audit log entry.
+
+**Auth:** ORGANIZER (owner)
+
+**Response `200`:** `{ "data": { "id", "eventId" } }`
 
 ---
 
-#### `POST /api/v1/checkins/:eventId/scan`
+### 9. Check-ins
 
-Scan a QR code to check in an attendee. Uses distributed locking to prevent race conditions.
+---
 
-**Auth:** ORGANIZER / STAFF — must be the event owner or have an active staff assignment. Emits `checkin:update` on `event:{eventId}:dashboard` after every scan attempt.
+#### `POST /api/v1/checkins/{eventId}/scan`
+
+Scan a QR code to check in an attendee.
+
+**Auth:** STAFF / ORGANIZER; caller must be the event owner or have an active staff assignment
 
 **Body:** `{ "token": "qr-token-string", "deviceInfo": "iPhone 15 - CheckIn App v1.0" }`
+
+**Flow:** takes a Redis distributed lock (10 s TTL) to prevent duplicate in-flight scans, looks up the SHA-256 hash of the token, maps the result, creates the `CheckIn` row (DB-enforced unique on `eventId + registrationId`), writes an audit log, and emits `checkin:update` on the dashboard room after every scan attempt.
+
+**Result mapping:**
 
 | Result | Meaning |
 |--------|---------|
@@ -507,19 +556,20 @@ Scan a QR code to check in an attendee. Uses distributed locking to prevent race
 | `EXPIRED` | QR token has expired |
 | `WRONG_EVENT` | QR belongs to a different event |
 | `REVOKED` | QR token has been revoked |
+| `NOT_AUTHORIZED` | Caller is not the owner or an active assigned staff member |
 
-**Response `200` (valid):** `{ "result": "VALID", "message": "Check-in recorded successfully", "attendeeName": "Jane Doe", "checkinId": "..." }`
+**Response `200` (valid):** `{ "data": { "result": "VALID", "message": "...", "attendeeName": "Jane Doe", "checkinId": "..." } }`
 
-**Response `403`:** Caller is not the event owner, has no active staff assignment, or the event does not exist (`NOT_AUTHORIZED`)
-**Response `409`:** Scan already in progress (Redis lock held)
+**Response `403`:** caller not authorized for this event (`NOT_AUTHORIZED`)
+**Response `409`:** scan already in progress (Redis lock held)
 
 ---
 
-#### `GET /api/v1/checkins/:eventId/checkins`
+#### `GET /api/v1/checkins/{eventId}/checkins`
 
 List all check-ins for an event with attendee and staff details. Undone (soft-deleted) check-ins are excluded.
 
-**Auth:** ORGANIZER / STAFF
+**Auth:** STAFF / ORGANIZER
 
 **Response `200`:**
 
@@ -529,61 +579,101 @@ List all check-ins for an event with attendee and staff details. Undone (soft-de
 
 ---
 
-#### `POST /api/v1/checkins/:eventId/checkins/:checkInId/undo`
+#### `POST /api/v1/checkins/{eventId}/checkins/{checkInId}/undo`
 
 Undo a check-in. Soft-deletes the `CheckIn` row (`deletedAt`), reverts the registration status to `CONFIRMED`, re-enables the QR token, and writes an audit log entry with a before-snapshot.
 
-**Auth:** Event owner or the staff member who performed the check-in
+**Auth:** STAFF / ORGANIZER; event owner or the staff member who performed the scan
 
-**Constraints:** Cannot undo a check-in older than 24 hours.
+**Constraints:** cannot undo a check-in older than 24 hours.
 
 **Response `200`:** `{ "data": { "success": true } }`
 
-**Response `400`:** Check-in older than 24 hours
-
-**Response `403`:** Caller is neither the event owner nor the scanning staff
-
----
-
-### Reports & Dashboard
+**Response `400`:** check-in is older than 24 hours
+**Response `403`:** caller is neither the event owner nor the scanning staff
+**Response `404`:** check-in not found
 
 ---
 
-#### `GET /api/v1/events/:eventId/dashboard`
+### 10. Reports & Dashboard
 
-Get event dashboard statistics: registration counts, check-in rates, no-shows, capacity utilization, and ticket type breakdown.
+---
 
-**Auth:** Owner (ORGANIZER)
+#### `GET /api/v1/events/{eventId}/dashboard`
+
+Get event dashboard statistics: registration counts, check-in rates, capacity utilization, and ticket-type breakdown.
+
+**Auth:** ORGANIZER / ADMIN / active assigned STAFF
 
 **Response `200`:**
 
 ```json
-{ "registrations": { "total", "confirmed", "pending" }, "checkins": { "total", "valid", "duplicate" }, "noShows": 20, "capacity": { "max", "utilization" }, "ticketBreakdown": [{ "ticketType", "sold", "checkedIn" }] }
+{ "data": { "registrations": { "total", "confirmed", "pending", "cancelled" }, "checkins": { "total", "valid", "duplicate", "invalid", "expired", "wrongEvent", "revoked" }, "capacity": { "max", "utilization" }, "ticketBreakdown": [{ "ticketType", "sold", "checkedIn" }] } }
 ```
 
 ---
 
-#### `GET /api/v1/events/:eventId/exports/attendance`
+#### `GET /api/v1/events/{eventId}/exports/registrations`
 
-Export attendance data (check-in records with attendee info) as CSV or PDF.
+Export all registrations for an event as CSV or PDF.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
 **Query:** `?format=csv` (default) or `?format=pdf`
 
-**Response:** CSV/PDF file download
+**Response `200`:** file download (`Content-Type: text/csv` or `application/pdf`)
 
 ---
 
-#### `GET /api/v1/events/:eventId/exports/registrations`
+#### `GET /api/v1/events/{eventId}/exports/attendance`
 
-Export registration data as CSV or PDF.
+Export check-in records (attendance) with attendee info as CSV or PDF.
 
-**Auth:** Owner (ORGANIZER)
+**Auth:** ORGANIZER / ADMIN (owner)
 
 **Query:** `?format=csv` (default) or `?format=pdf`
 
-**Response:** CSV/PDF file download
+**Response `200`:** file download (`Content-Type: text/csv` or `application/pdf`)
+
+---
+
+### 11. Admin
+
+---
+
+#### `GET /api/v1/audit-logs`
+
+List the audit trail, newest first. Filterable by action, entity, actor ID, and creation date range.
+
+**Auth:** ADMIN only
+
+**Query:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `page` | number | Page number |
+| `limit` | number | Items per page (max 100) |
+| `action` | string | e.g. `STAFF_ASSIGN`, `CHECKIN_VALID`, `UNDO_CHECKIN`, `PUBLIC_REGISTRATION` |
+| `entity` | string | e.g. `CheckIn`, `Registration`, `EventStaffAssignment` |
+| `actorId` | uuid | The user who performed the action |
+| `from` | date-time | Only entries created at or after this timestamp |
+| `to` | date-time | Only entries created at or before this timestamp |
+
+**Response `200`:** `{ "data": { "logs": [{ "id", "actorId", "action", "entity", "entityId", "beforeSnapshot", "afterSnapshot", "createdAt" }], "pagination": { ... } } }`
+
+---
+
+## Real-time Events (Socket.IO)
+
+Socket.IO is mounted on the same HTTP server. Clients authenticate by passing the access token in `socket.handshake.auth.token`. Rooms reject unauthorized joins.
+
+| Room | Event | When emitted |
+|------|-------|-------------|
+| `event:{eventId}:dashboard` | `checkin:update` | after every scan attempt (result + timestamp + total checked in) |
+| `event:{eventId}:dashboard` | `registration:new` | after a new public registration |
+| `event:{eventId}:scan` | `scan:result` | per-scan feedback to the staff device |
+
+A Redis adapter (pub/sub) propagates room messages across server instances; it falls back to in-memory when Redis is unreachable.
 
 ---
 
@@ -596,5 +686,13 @@ Export registration data as CSV or PDF.
 | `EventStatus` | `DRAFT`, `PUBLISHED`, `ACTIVE`, `COMPLETED`, `CANCELLED` |
 | `TicketCodeStatus` | `UNUSED`, `USED`, `REVOKED` |
 | `RegistrationStatus` | `PENDING`, `CONFIRMED`, `CANCELLED` |
-| `CheckInResult` | `VALID`, `DUPLICATE`, `INVALID` |
+| `CheckInResult` | `VALID`, `DUPLICATE`, `INVALID`, `EXPIRED`, `WRONG_EVENT`, `REVOKED`, `NOT_AUTHORIZED` |
+| `PaymentStatus` | `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` |
+| `InvoiceStatus` | `PENDING`, `PAID`, `OVERDUE`, `CANCELLED` |
 | `NotificationStatus` | `PENDING`, `SENT`, `FAILED`, `READ` |
+| `RegistrationMode` | `PUBLIC_LINK`, `CLOSED_IMPORT`, `HYBRID` |
+| `RegistrationSource` | `IMPORT`, `PUBLIC_LINK` |
+
+---
+
+*Keep this document in sync with the Swagger spec. Run `npm run docs` to regenerate the spec file if the route annotations change.*
