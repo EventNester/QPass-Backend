@@ -9,9 +9,7 @@
 | **Authors** | Crosstrack Group 13 |
 ---
 
-> **Status:** This TRD reflects the finished, as-built backend. For the live source of truth see `README.md` (quick start), `Architecture.md` (system design), `docs/ERD.dbml` (data model), and `docs/QPASS_API_DOC.md` (current endpoints).
-
-## 1. Executive Summary
+> **Status:** This TRD reflects the finished, as-built backend. For the live source of truth see [README](../README.md) (quick start), [Architecture](../ARCHITECTURE.md) (system design), [ERD](./ERD.dbml) (data model), and [API documentation](./QPASS_API_DOC.md) (current endpoints).## 1. Executive Summary
 
 QPass is an event registration, ticketing, and attendance intelligence platform that enables event organizers to create, manage, verify, and analyze events from a single platform. The backend uses Node.js 22, Express 5, Prisma ORM with PostgreSQL, Redis for distributed locking, Socket.IO for real-time updates.
 
@@ -494,7 +492,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 | Dashboard + exports | Stats service, PDF/CSV export (attendance + registrations), audit log queries |
 | Seed + docs | Admin/organizer users, sample events, Swagger annotations |
 | Tests | Integration (auth, events, registrations, check-ins), Unit (QR, import, auth) |
-| Deploy | Render config, security pass, lint clean |
+| Deploy | Railway config, security pass, lint clean |
 
 **Exit:** All scan results correct. Dashboard real-time. Tests pass. Lint clean. Deployed. Health 200.
 

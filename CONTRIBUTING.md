@@ -137,16 +137,7 @@ mkdirSync(uploadDir, { recursive: true });
 const ALLOWED_EXT = new Set(constants.UPLOAD.ALLOWED_EXTENSIONS);
 ```
 
-Keep comments to **1-3 lines**. Prefer explaining the *intent* over restating what the code does:
-
-```js
-// Good - explains intent
-// Swallow unlink errors to avoid masking the original upload failure.
-await unlink(filePath).catch(() => {});
-
-// Bad - just restates the code
-// Unlink the file and ignore errors
-await unlink(filePath).catch(() => {});
+Keep inline comments to **1-3 lines**. Prefer explaining the *intent* over restating what the code does:
 ```
 
 For classes and public methods, use **JSDoc** blocks with `@param`/`@returns`/`@throws`:

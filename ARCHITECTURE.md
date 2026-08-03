@@ -129,7 +129,7 @@ See [docs/ERD.dbml](./docs/ERD.dbml) for the full entity-relationship model (pas
 
 ### Issue
 - Each registration gets a 64-char hex token (`crypto.randomBytes(32)`).
-- Only `SHA-256(tokenHash)` is stored; the raw token is delivered to the attendee (email / web / PDF).
+- Only `SHA-256(rawToken)` is stored in the `tokenHash` column; the raw token is delivered to the attendee (email / web / PDF).
 - A `QrToken` row stores `expiresAt = event.endTime + 24h`, `revokedAt`, and `scanCount`.
 
 ### Verify (scan)
