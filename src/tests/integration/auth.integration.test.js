@@ -9,6 +9,19 @@ vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   authLimiter: (_req, _res, next) => next(),
 }));
 
+vi.mock('../../integrations/email/brevo.js', () => ({
+  sendTransactionalEmail: vi.fn(() => Promise.resolve({ messageId: 'auth-integration-msg' })),
+  isBrevoConfigured: vi.fn(() => true),
+  BrevoApiError: class BrevoApiError extends Error {
+    constructor(message, status = 0, retryable = false) {
+      super(message);
+      this.name = 'BrevoApiError';
+      this.status = status;
+      this.retryable = retryable;
+    }
+  },
+}));
+
 vi.mock('../../utils/email.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {

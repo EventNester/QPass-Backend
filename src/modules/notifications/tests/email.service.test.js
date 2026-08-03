@@ -234,6 +234,22 @@ describe('Email Service', () => {
       expect(m.mSendTransactionalEmail).toHaveBeenCalledTimes(1);
     });
 
+    test('should simulate success without calling the provider when Brevo is not configured', async () => {
+      m.mIsBrevoConfigured.mockReturnValue(false);
+
+      const res = await sendEmail({
+        to: 'simulated@example.com',
+        subject: 'Simulated',
+        template: 'registration',
+        context: { name: 'Simulated User', email: 'simulated@example.com' },
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.messageId).toBe(null);
+      expect(res.previewUrl).toBe(null);
+      expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
+    });
+
     test('should return success: false after persistent transient failures (non-blocking)', async () => {
       m.mSendTransactionalEmail.mockRejectedValue(
         new m.MockBrevoApiError('Persistent network error', 0, true)

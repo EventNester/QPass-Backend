@@ -111,6 +111,16 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
 
   const maskedTo = maskRecipient(to);
 
+  if (!isBrevoConfigured()) {
+    logger.warn({ to: maskedTo, subject }, 'Brevo API not configured — email not sent');
+    return {
+      success: true,
+      messageId: null,
+      info: null,
+      previewUrl: null,
+    };
+  }
+
   try {
     let renderedHtml = html;
     if (template && !renderedHtml) {
