@@ -42,7 +42,7 @@ We use a **feature branch** workflow. The `dev` branch is the default integratio
 | Branch | Purpose |
 |--------|---------|
 | `main` | Production-ready code |
-| `dev` | Integration branch — PRs merge here first |
+| `dev` | Integration branch - PRs merge here first |
 | `feat/<name>` | New features |
 | `fix/<name>` | Bug fixes |
 | `chore/<name>` | Maintenance, config, docs |
@@ -68,7 +68,7 @@ git checkout -b feat/your-feature-name
 2. **Make your changes** in small, focused commits
 3. **Run lint and tests** locally before pushing
 4. **Push** and open a PR against `dev`
-5. **Fill out the PR description** — what changed, why, and how to test
+5. **Fill out the PR description** - what changed, why, and how to test
 6. **Request a review** from at least one team member
 7. **Address review feedback**, push additional commits to the same branch
 8. **Merge** once approved and CI passes
@@ -137,16 +137,7 @@ mkdirSync(uploadDir, { recursive: true });
 const ALLOWED_EXT = new Set(constants.UPLOAD.ALLOWED_EXTENSIONS);
 ```
 
-Keep comments to **1–3 lines**. Prefer explaining the *intent* over restating what the code does:
-
-```js
-// Good — explains intent
-// Swallow unlink errors to avoid masking the original upload failure.
-await unlink(filePath).catch(() => {});
-
-// Bad — just restates the code
-// Unlink the file and ignore errors
-await unlink(filePath).catch(() => {});
+Keep inline comments to **1-3 lines**. Prefer explaining the *intent* over restating what the code does:
 ```
 
 For classes and public methods, use **JSDoc** blocks with `@param`/`@returns`/`@throws`:
@@ -170,7 +161,7 @@ async validateToken(token) { ... }
 Controllers handle HTTP concerns (request parsing, response formatting, error delegation). **Services must never touch `req` or `res`**; they contain pure business logic and throw `AppError` subclasses. Controllers call `next(err)` to forward errors to the global handler.
 
 ```js
-// controller — thin, delegates to service
+// controller - thin, delegates to service
 export async function createEvent(req, res, next) {
   try {
     const event = await eventService.create(req.user.id, req.body);
@@ -180,7 +171,7 @@ export async function createEvent(req, res, next) {
   }
 }
 
-// service — no req/res, throws on failure
+// service - no req/res, throws on failure
 async function create(ownerId, data) {
   if (!ownerId) throw new NotFoundError("User not found");
   return prisma.event.create({ data: { ...data, ownerId } });
@@ -191,15 +182,15 @@ async function create(ownerId, data) {
 Every protected route must apply middleware in this order:
 
 ```
-validate(schema) → requireAuth → requireRole("ROLE") → controller
+requireAuth → requireRole("ROLE") → validate(schema) → controller
 ```
 
 ```js
 router.post(
   "/events",
-  validate(createEventSchema),
   requireAuth,
   requireRole("ORGANIZER"),
+  validate(createEventSchema),
   eventController.createEvent
 );
 ```
@@ -216,7 +207,7 @@ res.status(201).json(created(data, "Event created"));
 
 ### Database conventions
 - Columns use `snake_case` in the schema via `@map`; application code uses `camelCase`.
-- Use soft deletes (`deletedAt`) where specified — never `DELETE FROM`.
+- Use soft deletes (`deletedAt`) where specified - never `DELETE FROM`.
 - Add indexes for columns that appear in `where` clauses, foreign keys, and unique constraints.
 
 ```prisma
@@ -241,10 +232,10 @@ Log all key actions (event CRUD, registration, QR issue, scan, payment, staff ac
 Emails, notifications, and Socket.IO emissions must never block the core response. Use fire-and-forget patterns:
 
 ```js
-// Good — email failure does not prevent registration
+// Good - email failure does not prevent registration
 notificationService.send(registration.id).catch(() => {});
 
-// Bad — blocks the response, email failure breaks the flow
+// Bad - blocks the response, email failure breaks the flow
 await notificationService.send(registration.id);
 ```
 
@@ -338,7 +329,7 @@ When reviewing PRs:
 - Verify error handling covers edge cases
 - Ensure new endpoints have validation schemas
 - Confirm database queries are efficient (check for missing indexes)
-- Verify the route middleware chain: `validate → requireAuth → requireRole → controller`
+- Verify the route middleware chain: `requireAuth → requireRole → validate → controller`
 - Ensure services do not touch `req` or `res`
 - Check that response messages come from `system_messages.js`, not hardcoded strings
 - Confirm emails/notifications are non-blocking (fire-and-forget)
