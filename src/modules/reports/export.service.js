@@ -1,11 +1,11 @@
 import prisma from "../../database/index.js";
 import { NotFoundError, ForbiddenError, BadRequestError } from "../../utils/error.js";
-import { systemMessages } from "../../config/index.js";
+import { constants, systemMessages } from "../../config/index.js";
 import { generateTablePdf } from "./pdf.service.js";
 
 const msg = systemMessages.ERROR;
 
-async function checkEventOwnership(eventId, userId) {
+async function checkEventOwnership(eventId, userId, userRole) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: { ownerId: true, deletedAt: true },
@@ -15,7 +15,7 @@ async function checkEventOwnership(eventId, userId) {
     throw new NotFoundError(msg.EVENT.NOT_FOUND);
   }
 
-  if (event.ownerId !== userId) {
+  if (event.ownerId !== userId && userRole !== constants.ROLES.ADMIN) {
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 }
@@ -35,7 +35,7 @@ function toCsv(headers, rows) {
 
 function formatDateTime(value) {
   if (!value) return "";
-  return new Date(value).toLocaleString();
+  return new Date(value).toISOString();
 }
 
 async function buildExport(format, { title, headers, rows }) {
@@ -59,8 +59,8 @@ async function buildExport(format, { title, headers, rows }) {
   throw new BadRequestError("Unsupported export format");
 }
 
-export async function exportRegistrations(eventId, userId, format) {
-  await checkEventOwnership(eventId, userId);
+export async function exportRegistrations(eventId, userId, userRole, format) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const [registrations, event] = await Promise.all([
     prisma.registration.findMany({
@@ -102,8 +102,8 @@ export async function exportRegistrations(eventId, userId, format) {
   });
 }
 
-export async function exportAttendance(eventId, userId, format) {
-  await checkEventOwnership(eventId, userId);
+export async function exportAttendance(eventId, userId, userRole, format) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const [checkins, event] = await Promise.all([
     prisma.checkIn.findMany({

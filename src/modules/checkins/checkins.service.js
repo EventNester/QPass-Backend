@@ -104,7 +104,7 @@ export async function scanQr(eventId, data, staffId) {
               afterSnapshot: {
                 tokenHash,
                 restored: true,
-                scannedAt: new Date().toISOString(),
+                scannedAt: checkin.scannedAt.toISOString(),
               },
             },
           });
@@ -145,7 +145,7 @@ export async function scanQr(eventId, data, staffId) {
               entityId: created.id,
               afterSnapshot: {
                 tokenHash,
-                scannedAt: new Date().toISOString(),
+                scannedAt: created.scannedAt.toISOString(),
               },
             },
           });

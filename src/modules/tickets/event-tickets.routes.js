@@ -63,7 +63,7 @@ const router = Router({ mergeParams: true });
  *                     data:
  *                       $ref: '#/components/schemas/TicketListResponse'
  *       400:
- *         description: Validation error in query parameters
+ *         description: Malformed request syntax (invalid query string)
  *         content:
  *           application/json:
  *             schema:
@@ -143,7 +143,7 @@ router.get("/", requireAuth, validateQuery(ticketQuerySchema), listTicketsContro
  *               type: string
  *               format: binary
  *       400:
- *         description: Validation error
+ *         description: Malformed request body (invalid JSON syntax)
  *         content:
  *           application/json:
  *             schema:

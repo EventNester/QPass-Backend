@@ -58,7 +58,7 @@ const router = Router({ mergeParams: true });
  *                     data:
  *                       $ref: '#/components/schemas/TicketType'
  *       400:
- *         description: Validation error in request body
+ *         description: Malformed request body (invalid JSON syntax)
  *         content:
  *           application/json:
  *             schema:
@@ -208,7 +208,7 @@ router.get("/", requireAuth, requireRole("ORGANIZER", "ADMIN"), getTicketTypesCo
  *                     data:
  *                       $ref: '#/components/schemas/TicketType'
  *       400:
- *         description: Validation error in request body
+ *         description: Malformed request body (invalid JSON syntax)
  *         content:
  *           application/json:
  *             schema:

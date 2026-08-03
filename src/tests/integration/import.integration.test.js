@@ -242,13 +242,18 @@ describe('Attendee Import API Integration Tests', () => {
       expect(response.body.data.successRows).toBe(3);
       expect(response.body.data.failedRows).toBe(0);
 
+      const importedEmails = [
+        'import-code-a@example.com',
+        'import-code-b@example.com',
+        'import-code-c@example.com',
+      ];
       const codes = await prisma.ticketCode.findMany({
-        where: { eventId },
+        where: { eventId, attendeeEmail: { in: importedEmails } },
         select: { code: true },
       });
       const unique = new Set(codes.map((c) => c.code));
-      expect(codes.length).toBeGreaterThanOrEqual(3);
-      expect(unique.size).toBe(codes.length);
+      expect(codes).toHaveLength(3);
+      expect(unique.size).toBe(3);
     });
   });
 });

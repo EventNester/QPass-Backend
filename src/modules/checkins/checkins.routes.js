@@ -27,7 +27,8 @@ const router = Router();
  *       If the registration has a soft-deleted CheckIn row from an earlier undo, that
  *       row is restored and the result is VALID.
  *       Emits `checkin:update` on the dashboard room after every scan attempt.
- *     tags: [Checkins] *     security:
+ *     tags: [Checkins]
+ *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
