@@ -30,9 +30,11 @@ export async function forgotPassword(email) {
   });
 
   if (emailResult && emailResult.success === false) {
+    try {
+      await redis.del(`${REDIS_PREFIX}${resetToken}`);
+    } catch { /* ignore cleanup error */ }
     logger.error({ err: emailResult.error || 'unknown' }, 'Password reset email failed to send');
   }
-
   return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }
 

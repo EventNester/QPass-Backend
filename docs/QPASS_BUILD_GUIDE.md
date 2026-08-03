@@ -203,8 +203,7 @@ export function validate(schema) {
     req.validated = result.data;
     next();
   };
-}```
-
+}
 ---
 
 ## Step 1.3 - Auth Module
