@@ -26,6 +26,7 @@ describe('Tickets API Integration Tests', () => {
         name: 'Ticket Organizer',
         email: 'ticket-org@example.com',
         password: 'SecurePassword123',
+        role: 'ORGANIZER',
       });
     organizerToken = orgReg.body.data.accessToken;
 

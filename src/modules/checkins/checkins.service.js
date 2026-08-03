@@ -4,7 +4,7 @@ import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from "../../utils/error.js";
 import { constants, systemMessages, logger } from "../../config/index.js";
 import { getIO } from "../../realtime/socket.js";
-import { emitCheckinUpdate } from "../../realtime/rooms.js";
+import { emitCheckinUpdate, emitScanResult } from "../../realtime/rooms.js";
 
 const errMsg = systemMessages.ERROR;
 const successMsg = systemMessages.SUCCESS;
@@ -95,6 +95,20 @@ export async function scanQr(eventId, data, staffId) {
             data: { scanCount: { increment: 1 }, revokedAt: new Date() },
           });
 
+          await tx.auditLog.create({
+            data: {
+              actorId: staffId,
+              action: "CHECKIN_VALID",
+              entity: "CheckIn",
+              entityId: checkin.id,
+              afterSnapshot: {
+                tokenHash,
+                restored: true,
+                scannedAt: checkin.scannedAt.toISOString(),
+              },
+            },
+          });
+
           return checkin;
         });
 
@@ -123,6 +137,19 @@ export async function scanQr(eventId, data, staffId) {
             data: { scanCount: { increment: 1 }, revokedAt: new Date() },
           });
 
+          await tx.auditLog.create({
+            data: {
+              actorId: staffId,
+              action: "CHECKIN_VALID",
+              entity: "CheckIn",
+              entityId: created.id,
+              afterSnapshot: {
+                tokenHash,
+                scannedAt: created.scannedAt.toISOString(),
+              },
+            },
+          });
+
           return created;
         });
 
@@ -148,6 +175,16 @@ export async function scanQr(eventId, data, staffId) {
       });
     } catch (err) {
       logger.warn({ err, eventId }, "failed to emit checkin:update");
+    }
+
+    try {
+      emitScanResult(getIO(), eventId, {
+        result: scanResult.result,
+        message: scanResult.message,
+        ...(attendeeName ? { attendee: { name: attendeeName } } : {}),
+      });
+    } catch (err) {
+      logger.warn({ err, eventId }, "failed to emit scan:result");
     }
 
     return scanResult;

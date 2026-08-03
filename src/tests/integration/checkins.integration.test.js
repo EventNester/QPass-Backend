@@ -30,21 +30,10 @@ describe('Checkins API Integration Tests', () => {
         name: 'Checkin Organizer',
         email: 'checkin-org@example.com',
         password: 'SecurePassword123',
+        role: 'ORGANIZER',
       });
 
     organizerToken = orgReg.body.data.accessToken;
-    const organizerId = orgReg.body.data.user.id;
-
-    await prisma.user.update({
-      where: { id: organizerId },
-      data: { role: 'ORGANIZER' },
-    });
-
-    const loginRes = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'checkin-org@example.com', password: 'SecurePassword123' });
-
-    organizerToken = loginRes.body.data.accessToken;
 
     const staffReg = await request(app)
       .post('/api/v1/auth/register')
@@ -52,21 +41,11 @@ describe('Checkins API Integration Tests', () => {
         name: 'Checkin Staff',
         email: 'checkin-staff@example.com',
         password: 'SecurePassword123',
+        role: 'STAFF',
       });
 
     staffToken = staffReg.body.data.accessToken;
     staffUserId = staffReg.body.data.user.id;
-
-    await prisma.user.update({
-      where: { id: staffUserId },
-      data: { role: 'STAFF' },
-    });
-
-    const staffLoginRes = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'checkin-staff@example.com', password: 'SecurePassword123' });
-
-    staffToken = staffLoginRes.body.data.accessToken;
 
     const eventRes = await request(app)
       .post('/api/v1/events')
@@ -203,6 +182,47 @@ describe('Checkins API Integration Tests', () => {
       expect(response.body.data.result).toBe('INVALID');
     });
 
+    it('should return 200 with EXPIRED result for an expired QR token', async () => {
+      const expiredTicketCode = await prisma.ticketCode.create({
+        data: {
+          eventId,
+          code: `TICKET-${randomBytes(4).toString('hex').toUpperCase()}`,
+          attendeeEmail: 'expired@example.com',
+          attendeeName: 'Expired Attendee',
+        },
+      });
+
+      const expiredReg = await prisma.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: expiredTicketCode.id,
+          attendeeEmail: 'expired@example.com',
+          attendeeName: 'Expired Attendee',
+          source: 'IMPORT',
+          status: 'CONFIRMED',
+        },
+      });
+
+      const expiredRawToken = randomBytes(32).toString('hex');
+
+      await prisma.qrToken.create({
+        data: {
+          registrationId: expiredReg.id,
+          tokenHash: hashToken(expiredRawToken),
+          expiresAt: new Date(Date.now() - 60000),
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: expiredRawToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('EXPIRED');
+    });
+
     it('should return 200 with WRONG_EVENT result for wrong event', async () => {
       const wrongEventRes = await request(app)
         .post('/api/v1/events')
@@ -263,20 +283,10 @@ describe('Checkins API Integration Tests', () => {
           name: 'Unassigned Staff',
           email: 'unassigned-staff@example.com',
           password: 'SecurePassword123',
+          role: 'STAFF',
         });
 
-      const unassignedUserId = unassignedReg.body.data.user.id;
-
-      await prisma.user.update({
-        where: { id: unassignedUserId },
-        data: { role: 'STAFF' },
-      });
-
-      const unassignedLogin = await request(app)
-        .post('/api/v1/auth/login')
-        .send({ email: 'unassigned-staff@example.com', password: 'SecurePassword123' });
-
-      const unassignedToken = unassignedLogin.body.data.accessToken;
+      const unassignedToken = unassignedReg.body.data.accessToken;
 
       const response = await request(app)
         .post(`/api/v1/checkins/${eventId}/scan`)

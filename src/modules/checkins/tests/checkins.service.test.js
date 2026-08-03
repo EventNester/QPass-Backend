@@ -10,7 +10,8 @@ const successMsg = systemMessages.SUCCESS;
 const m = vi.hoisted(() => {
   const mSocketIO = {};
   const mEmitCheckinUpdate = vi.fn();
-  return { mSocketIO, mEmitCheckinUpdate };
+  const mEmitScanResult = vi.fn();
+  return { mSocketIO, mEmitCheckinUpdate, mEmitScanResult };
 });
 
 vi.mock("../../../database/index.js", () => ({
@@ -49,6 +50,7 @@ vi.mock("../../../realtime/socket.js", () => ({
 
 vi.mock("../../../realtime/rooms.js", () => ({
   emitCheckinUpdate: m.mEmitCheckinUpdate,
+  emitScanResult: m.mEmitScanResult,
 }));
 
 const mRedisClient = {
@@ -152,6 +154,15 @@ describe("Checkin Service Tests", () => {
         mockEventId,
         expect.objectContaining({ result: constants.CHECKIN_RESULT.VALID, attendeeName: "John Doe", totalCheckedIn: 1 })
       );
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({
+          result: constants.CHECKIN_RESULT.VALID,
+          message: successMsg.CHECKIN.SUCCESS,
+          attendee: { name: "John Doe" },
+        })
+      );
     });
 
     test("should throw ConflictError if scan already in progress", async () => {
@@ -217,6 +228,11 @@ describe("Checkin Service Tests", () => {
         m.mSocketIO,
         mockEventId,
         expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID, totalCheckedIn: 1 })
+      );
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID, message: errMsg.CHECKIN.INVALID_QR })
       );
     });
 
@@ -388,7 +404,7 @@ describe("Checkin Service Tests", () => {
       expect(mRedisClient.del).toHaveBeenCalled();
     });
 
-    test("should still return scan result and log a warning when emit fails", async () => {
+    test("should still emit scan:result when the checkin:update emit fails", async () => {
       mRedisClient.set.mockResolvedValue("OK");
       prisma.qrToken.findUnique.mockResolvedValue(null);
       m.mEmitCheckinUpdate.mockImplementationOnce(() => {
@@ -400,6 +416,27 @@ describe("Checkin Service Tests", () => {
 
       expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
       expect(warnSpy).toHaveBeenCalled();
+      expect(m.mEmitScanResult).toHaveBeenCalledWith(
+        m.mSocketIO,
+        mockEventId,
+        expect.objectContaining({ result: constants.CHECKIN_RESULT.INVALID })
+      );
+      expect(mRedisClient.del).toHaveBeenCalled();
+    });
+
+    test("should still return scan result and log a warning when emitScanResult fails", async () => {
+      mRedisClient.set.mockResolvedValue("OK");
+      prisma.qrToken.findUnique.mockResolvedValue(null);
+      m.mEmitScanResult.mockImplementationOnce(() => {
+        throw new Error("socket error");
+      });
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      const result = await scanQr(mockEventId, { token: "bad_token" }, mockStaffId);
+
+      expect(result.result).toBe(constants.CHECKIN_RESULT.INVALID);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(m.mEmitCheckinUpdate).toHaveBeenCalled();
       expect(mRedisClient.del).toHaveBeenCalled();
     });
   });

@@ -83,10 +83,10 @@ describe("Event Service Tests", () => {
   });
 
   describe("getEvent", () => {
-    test("should return an event by id", async () => {
+    test("should return an event by id when caller is the owner", async () => {
       prisma.event.findFirst.mockResolvedValue(mockEvent);
 
-      const result = await getEvent("event_1");
+      const result = await getEvent("event_1", mockOwnerId, "ORGANIZER");
 
       expect(result).toEqual(mockEvent);
       expect(prisma.event.findFirst).toHaveBeenCalledWith({
@@ -94,16 +94,32 @@ describe("Event Service Tests", () => {
       });
     });
 
+    test("should allow ADMIN to view any event", async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+
+      const result = await getEvent("event_1", "admin_1", "ADMIN");
+
+      expect(result).toEqual(mockEvent);
+    });
+
+    test("should throw ForbiddenError when caller is not the owner", async () => {
+      prisma.event.findFirst.mockResolvedValue(mockEvent);
+
+      await expect(getEvent("event_1", "attacker_user", "ORGANIZER")).rejects.toThrow(
+        ForbiddenError
+      );
+    });
+
     test("should throw NotFoundError if event does not exist", async () => {
       prisma.event.findFirst.mockResolvedValue(null);
 
-      await expect(getEvent("nonexistent")).rejects.toThrow(NotFoundError);
+      await expect(getEvent("nonexistent", mockOwnerId, "ORGANIZER")).rejects.toThrow(NotFoundError);
     });
 
     test("should throw NotFoundError for soft-deleted events", async () => {
       prisma.event.findFirst.mockResolvedValue(null);
 
-      await expect(getEvent("event_1")).rejects.toThrow(NotFoundError);
+      await expect(getEvent("event_1", mockOwnerId, "ORGANIZER")).rejects.toThrow(NotFoundError);
       expect(prisma.event.findFirst).toHaveBeenCalledWith({
         where: { id: "event_1", deletedAt: null },
       });
@@ -111,12 +127,12 @@ describe("Event Service Tests", () => {
   });
 
   describe("listEvents", () => {
-    test("should return paginated non-deleted events", async () => {
+    test("should return paginated events for an organizer", async () => {
       const events = [mockEvent, { ...mockEvent, id: "event_2", title: "Second Event" }];
       prisma.event.findMany.mockResolvedValue(events);
       prisma.event.count.mockResolvedValue(2);
 
-      const result = await listEvents();
+      const result = await listEvents(mockOwnerId, "ORGANIZER", { page: 1, limit: 20 });
 
       expect(result.events).toEqual(events);
       expect(result.events).toHaveLength(2);
@@ -126,6 +142,39 @@ describe("Event Service Tests", () => {
         total: 2,
         totalPages: 1,
       });
+      expect(prisma.event.findMany).toHaveBeenCalledWith({
+        where: { deletedAt: null, ownerId: mockOwnerId },
+        orderBy: { startTime: "asc" },
+        skip: 0,
+        take: 20,
+      });
+    });
+
+    test("should filter events by status", async () => {
+      prisma.event.findMany.mockResolvedValue([mockEvent]);
+      prisma.event.count.mockResolvedValue(1);
+
+      await listEvents(mockOwnerId, "ORGANIZER", { page: 1, limit: 20, status: "PUBLISHED" });
+
+      expect(prisma.event.findMany).toHaveBeenCalledWith({
+        where: { deletedAt: null, ownerId: mockOwnerId, status: "PUBLISHED" },
+        orderBy: { startTime: "asc" },
+        skip: 0,
+        take: 20,
+      });
+      expect(prisma.event.count).toHaveBeenCalledWith({
+        where: { deletedAt: null, ownerId: mockOwnerId, status: "PUBLISHED" },
+      });
+    });
+
+    test("should return all non-deleted events for an admin", async () => {
+      const events = [mockEvent];
+      prisma.event.findMany.mockResolvedValue(events);
+      prisma.event.count.mockResolvedValue(1);
+
+      const result = await listEvents("admin_1", "ADMIN", {});
+
+      expect(result.events).toEqual(events);
       expect(prisma.event.findMany).toHaveBeenCalledWith({
         where: { deletedAt: null },
         orderBy: { startTime: "asc" },
@@ -138,7 +187,7 @@ describe("Event Service Tests", () => {
       prisma.event.findMany.mockResolvedValue([]);
       prisma.event.count.mockResolvedValue(0);
 
-      const result = await listEvents();
+      const result = await listEvents(mockOwnerId, "ORGANIZER", {});
 
       expect(result.events).toEqual([]);
       expect(result.pagination.total).toBe(0);
@@ -179,6 +228,20 @@ describe("Event Service Tests", () => {
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: { id: "event_1", ownerId: "attacker_user", deletedAt: null },
         data: { title: "Updated" },
+      });
+    });
+
+    test("should allow an ADMIN to update any event", async () => {
+      const updatedData = { title: "Admin Updated" };
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+      prisma.event.findFirst.mockResolvedValue({ ...mockEvent, ...updatedData });
+
+      const result = await updateEvent("event_1", updatedData, "admin_1", "ADMIN");
+
+      expect(result.title).toBe("Admin Updated");
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: { id: "event_1", deletedAt: null },
+        data: updatedData,
       });
     });
 
@@ -223,6 +286,18 @@ describe("Event Service Tests", () => {
       ).rejects.toThrow(ForbiddenError);
       expect(prisma.event.updateMany).toHaveBeenCalledWith({
         where: { id: "event_1", ownerId: "attacker_user", deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    test("should allow an ADMIN to delete any event", async () => {
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await deleteEvent("event_1", "admin_1", "ADMIN");
+
+      expect(result).toEqual({ id: "event_1" });
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: { id: "event_1", deletedAt: null },
         data: { deletedAt: expect.any(Date) },
       });
     });
@@ -298,6 +373,34 @@ describe("Event Service Tests", () => {
       await expect(
         publishEvent("event_1", "attacker_user")
       ).rejects.toThrow(ForbiddenError);
+    });
+
+    test("should allow an ADMIN to publish any draft event", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+        publishedAt: new Date(),
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(mockEvent)
+        .mockResolvedValueOnce(publishedEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await publishEvent("event_1", "admin_1", "ADMIN");
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          deletedAt: null,
+          status: constants.EVENT_STATUS.DRAFT,
+        },
+        data: {
+          status: constants.EVENT_STATUS.PUBLISHED,
+          publishedAt: expect.any(Date),
+        },
+      });
+      expect(result).toEqual(publishedEvent);
     });
   });
 
@@ -376,6 +479,42 @@ describe("Event Service Tests", () => {
       await expect(
         cancelEvent("event_1", "attacker_user")
       ).rejects.toThrow(ForbiddenError);
+    });
+
+    test("should allow an ADMIN to cancel any event", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+      };
+      const cancelledEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.CANCELLED,
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(publishedEvent)
+        .mockResolvedValueOnce(cancelledEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await cancelEvent("event_1", "admin_1", "ADMIN");
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          deletedAt: null,
+          status: {
+            in: [
+              constants.EVENT_STATUS.PUBLISHED,
+              constants.EVENT_STATUS.ACTIVE,
+              constants.EVENT_STATUS.COMPLETED,
+            ],
+          },
+        },
+        data: {
+          status: constants.EVENT_STATUS.CANCELLED,
+        },
+      });
+      expect(result).toEqual(cancelledEvent);
     });
   });
 });
