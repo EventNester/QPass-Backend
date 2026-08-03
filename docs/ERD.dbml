@@ -1,0 +1,353 @@
+// QPass Database ERD
+// Generated from src/database/schema.prisma
+// Paste into https://dbdiagram.io to render.
+
+Project QPass {
+  database_type: 'PostgreSQL'
+  Note: 'QPass event ticketing database'
+}
+
+Table users {
+  id              uuid        [pk, note: 'gen_random_uuid()']
+  name            varchar
+  email           varchar     [unique]
+  password_hash   varchar
+  phone           varchar
+  role            user_role   [default: 'ATTENDEE']
+  status          user_status [default: 'ACTIVE']
+  email_verified_at timestamp
+  last_login_at   timestamp
+  created_at      timestamp   [default: `now()`]
+  updated_at      timestamp
+  deleted_at      timestamp
+  indexes {
+    (id) [pk]
+  }
+}
+
+Table events {
+  id                     uuid          [pk, note: 'gen_random_uuid()']
+  title                  varchar
+  description            text
+  venue                  varchar
+  slug                   varchar       [unique]
+  start_time             timestamp
+  end_time               timestamp
+  status                 event_status  [default: 'DRAFT']
+  owner_id               uuid
+  registration_mode      registration_mode [default: 'PUBLIC_LINK']
+  is_paid                boolean       [default: false]
+  capacity               int
+  currency               varchar       [default: 'NGN']
+  registration_opens_at  timestamp
+  registration_closes_at timestamp
+  published_at           timestamp
+  created_at             timestamp     [default: `now()`]
+  updated_at             timestamp
+  deleted_at             timestamp
+  indexes {
+    (id) [pk]
+    (owner_id)
+    (status)
+    (slug)
+  }
+}
+
+Table event_staff_assignments {
+  id               uuid    [pk, note: 'gen_random_uuid()']
+  event_id         uuid
+  user_id          uuid
+  permission_scope varchar
+  active           boolean [default: true]
+  assigned_at      timestamp [default: `now()`]
+  indexes {
+    (id) [pk]
+    (event_id, user_id) [unique]
+  }
+}
+
+Table ticket_types {
+  id            uuid    [pk, note: 'gen_random_uuid()']
+  event_id      uuid
+  name          varchar
+  description   text
+  price         int     [default: 0]
+  capacity      int
+  quantity_sold int     [default: 0]
+  active        boolean [default: true]
+  sort_order    int     [default: 0]
+  created_at    timestamp [default: `now()`]
+  updated_at    timestamp
+  indexes {
+    (id) [pk]
+    (event_id)
+    (event_id, sort_order) [unique]
+  }
+}
+
+Table ticket_codes {
+  id             uuid    [pk, note: 'gen_random_uuid()']
+  event_id       uuid
+  code           varchar
+  status         ticket_code_status [default: 'UNUSED']
+  used_at        timestamp
+  attendee_email varchar
+  attendee_name  varchar
+  created_at     timestamp [default: `now()`]
+  indexes {
+    (id) [pk]
+    (event_id, code) [unique]
+    (event_id)
+    (code)
+  }
+}
+
+Table registrations {
+  id                uuid    [pk, note: 'gen_random_uuid()']
+  event_id          uuid
+  ticket_code_id    uuid    [unique]
+  attendee_email    varchar
+  attendee_name     varchar
+  phone             varchar
+  ticket_type_id    uuid
+  payment_status    payment_status [default: 'PENDING']
+  source            registration_source [default: 'PUBLIC_LINK']
+  confirmation_code varchar [unique]
+  metadata          json
+  qr_issued         boolean [default: false]
+  qr_issued_at      timestamp
+  status            registration_status [default: 'PENDING']
+  created_at        timestamp [default: `now()`]
+  updated_at        timestamp
+  indexes {
+    (id) [pk]
+    (event_id, attendee_email) [unique]
+    (event_id)
+    (attendee_email)
+  }
+}
+
+Table qr_tokens {
+  id              uuid    [pk, note: 'gen_random_uuid()']
+  registration_id uuid    [unique]
+  token_hash      varchar [unique]
+  issued_at       timestamp [default: `now()`]
+  expires_at      timestamp
+  revoked_at      timestamp
+  scan_count      int     [default: 0]
+  indexes {
+    (id) [pk]
+    (token_hash)
+  }
+}
+
+Table check_ins {
+  id              uuid    [pk, note: 'gen_random_uuid()']
+  event_id        uuid
+  registration_id uuid
+  staff_id        uuid
+  scanned_at      timestamp [default: `now()`]
+  result          check_in_result
+  device_info     varchar
+  ip_address      varchar
+  deleted_at      timestamp
+  indexes {
+    (id) [pk]
+    (event_id, registration_id) [unique]
+    (event_id)
+    (registration_id)
+  }
+}
+
+Table payments {
+  id                uuid    [pk, note: 'gen_random_uuid()']
+  event_id          uuid
+  user_id           uuid
+  registration_id   uuid    [unique]
+  paystack_reference varchar [unique]
+  amount            int
+  currency          varchar [default: 'NGN']
+  status            payment_status [default: 'PENDING']
+  gateway           varchar [default: 'PAYSTACK']
+  metadata          json
+  verified_at       timestamp
+  created_at        timestamp [default: `now()`]
+  paid_at           timestamp
+  indexes {
+    (id) [pk]
+    (event_id)
+    (user_id)
+    (paystack_reference)
+  }
+}
+
+Table invoices {
+  id             uuid    [pk, note: 'gen_random_uuid()']
+  event_id       uuid
+  payment_id     uuid    [unique]
+  invoice_number varchar [unique]
+  amount         int
+  issue_date     timestamp [default: `now()`]
+  due_date       timestamp
+  status         invoice_status [default: 'PENDING']
+  indexes {
+    (id) [pk]
+    (event_id)
+  }
+}
+
+Table notifications {
+  id                  uuid    [pk, note: 'gen_random_uuid()']
+  recipient           varchar
+  channel             varchar
+  template            varchar
+  subject             varchar
+  context             json
+  status              notification_status [default: 'PENDING']
+  user_id             uuid
+  event_id            uuid
+  registration_id     uuid
+  provider_message_id varchar
+  failure_reason      varchar
+  sent_at             timestamp
+  read_at             timestamp
+  created_at          timestamp [default: `now()`]
+  indexes {
+    (id) [pk]
+    (recipient)
+  }
+}
+
+Table audit_logs {
+  id              uuid    [pk, note: 'gen_random_uuid()']
+  actor_id        uuid
+  action          varchar
+  entity          varchar
+  entity_id       varchar
+  before_snapshot json
+  after_snapshot  json
+  created_at      timestamp [default: `now()`]
+  indexes {
+    (id) [pk]
+    (actor_id)
+    (entity, entity_id)
+  }
+}
+
+Table import_batches {
+  id                uuid    [pk, note: 'gen_random_uuid()']
+  event_id          uuid
+  uploaded_by_id    uuid
+  original_filename varchar
+  file_type         varchar
+  total_rows        int     [default: 0]
+  success_rows      int     [default: 0]
+  failed_rows       int     [default: 0]
+  status            varchar [default: 'PROCESSING']
+  error_report      json
+  created_at        timestamp [default: `now()`]
+  completed_at      timestamp
+  indexes {
+    (id) [pk]
+    (event_id)
+  }
+}
+
+Ref: events.owner_id > users.id
+Ref: event_staff_assignments.event_id > events.id
+Ref: event_staff_assignments.user_id > users.id
+Ref: ticket_types.event_id > events.id
+Ref: ticket_codes.event_id > events.id
+Ref: registrations.event_id > events.id
+Ref: registrations.ticket_code_id > ticket_codes.id
+Ref: registrations.ticket_type_id > ticket_types.id
+Ref: qr_tokens.registration_id > registrations.id
+Ref: check_ins.event_id > events.id
+Ref: check_ins.registration_id > registrations.id
+Ref: check_ins.staff_id > users.id
+Ref: payments.event_id > events.id
+Ref: payments.user_id > users.id
+Ref: payments.registration_id > registrations.id
+Ref: invoices.event_id > events.id
+Ref: invoices.payment_id > payments.id
+Ref: notifications.user_id > users.id
+Ref: notifications.event_id > events.id
+Ref: notifications.registration_id > registrations.id
+Ref: audit_logs.actor_id > users.id
+Ref: import_batches.event_id > events.id
+Ref: import_batches.uploaded_by_id > users.id
+
+Enum user_role {
+  ATTENDEE
+  STAFF
+  ORGANIZER
+  ADMIN
+}
+
+Enum user_status {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+Enum event_status {
+  DRAFT
+  PUBLISHED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+Enum ticket_code_status {
+  UNUSED
+  USED
+  REVOKED
+}
+
+Enum registration_status {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+Enum check_in_result {
+  VALID
+  DUPLICATE
+  INVALID
+  EXPIRED
+  WRONG_EVENT
+  REVOKED
+  NOT_AUTHORIZED
+}
+
+Enum payment_status {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+Enum invoice_status {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+Enum notification_status {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+Enum registration_mode {
+  PUBLIC_LINK
+  CLOSED_IMPORT
+  HYBRID
+}
+
+Enum registration_source {
+  IMPORT
+  PUBLIC_LINK
+}

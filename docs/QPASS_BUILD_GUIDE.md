@@ -2,6 +2,8 @@
 
 > Developer-facing step-by-step plan. Each task lists exact files to create/edit, what goes in them, and dependencies. Follow in order within each phase.
 
+> **Status:** The build is complete. This guide is the historical construction plan; for the current, finished state see `../README.md`, `../ARCHITECTURE.md`, and `./QPASS_API_DOC.md`. The steps below reflect the plan as executed.
+
 ---
 
 ## Existing Foundations (Already Built - Do Not Modify)
@@ -14,7 +16,7 @@ These files are production-quality and should be treated as stable:
 | `src/server.js` | HTTP server (Prisma, Redis, graceful shutdown) - needs Socket.IO attachment in Phase 1 |
 | `src/config/*` (7 files) | env.js, constants.js, system_messages.js, logger.js, redis.js, swagger.js, index.js |
 | `src/database/index.js` | Prisma client singleton |
-| `src/database/schema.prisma` | Base schema (10 models, 9 enums) - needs extension in Phase 1 |
+| `src/database/schema.prisma` | Base schema (13 models, 11 enums) |
 | `src/middlewares/logging.middleware.js` | pino-http |
 | `src/middlewares/rate-limit.middleware.js` | globalLimiter + authLimiter |
 | `src/middlewares/rbac.middleware.js` | requireAuth + requireRole |
@@ -70,7 +72,7 @@ export default router;
 
 ---
 
-# Phase 1: Foundation (Days 1–3)
+# Phase 1: Foundation (Days 1-3)
 
 **Goal:** Auth, Event CRUD, TicketType CRUD, routes wired, Socket.IO initialized.
 
@@ -218,7 +220,7 @@ Define Zod schemas:
 - `refreshSchema` - body: refreshToken (string)
 - `logoutSchema` - body: refreshToken (string)
 - `forgotPasswordSchema` - body: email
-- `resetPasswordSchema` - body: token (string), newPassword (min 8)
+- `resetPasswordSchema` - body: token (string), password (min 8)
 
 Each exported as `{ body, query, params }` shape for the validate middleware.
 
@@ -231,8 +233,8 @@ Implement:
 - `login(data)` - find by email (throw UnauthorizedError if not found), bcrypt compare (throw UnauthorizedError if mismatch), update lastLoginAt, generate tokens, return `{ user, accessToken, refreshToken }`
 - `refresh(refreshToken)` - verify JWT with refresh secret, check Redis blacklist (throw if blacklisted), blacklist old token, issue new pair, return `{ accessToken, refreshToken }`
 - `logout(refreshToken)` - verify JWT, add to Redis blacklist with 7d TTL
-- `forgotPassword(email)` - find user, generate reset token (crypto.randomBytes), hash it, store in Redis with 1h TTL, send email (non-blocking)
-- `resetPassword(token, newPassword)` - lookup hash in Redis, find user, bcrypt new password, delete Redis key
+- `forgotPassword(email)` - find user, generate reset token (crypto.randomBytes), hash it, store in Redis with 15 min TTL, send email (non-blocking)
+- `resetPassword(token, password)` - lookup hash in Redis, find user, bcrypt new password, delete Redis key
 
 **JWT signing:** Use `jsonwebtoken` library. Access token payload: `{ id, email, role }`. Sign with `JWT_SECRET`, expire `JWT_EXPIRES_IN`. Refresh token: sign with `JWT_REFRESH_SECRET`, expire `JWT_REFRESH_EXPIRES_IN`.
 
@@ -262,8 +264,8 @@ POST /register    → authLimiter → validate(schema) → controller.register
 POST /login       → authLimiter → validate(schema) → controller.login
 POST /refresh     → validate(schema) → controller.refresh
 POST /logout      → authenticateUser → validate(schema) → controller.logout
-POST /password/forgot → authLimiter → validate(schema) → controller.forgotPassword
-POST /password/reset  → validate(schema) → controller.resetPassword
+POST /forgot-password → authLimiter → validate(schema) → controller.forgotPassword
+POST /reset-password  → authLimiter → validate(schema) → controller.resetPassword
 ```
 
 ---
@@ -404,7 +406,7 @@ router.use("/checkins", authenticateUser, checkinRoutes);
 // Public registration routes (Phase 2)
 // router.use("/public", publicRoutes);
 
-// Payments (Phase 2 — deferred)
+// Payments (Phase 2 - deferred)
 // router.use("/payments", paymentRoutes);
 
 // Reports (Phase 3)
@@ -477,7 +479,7 @@ export function emitToDashboard(io, eventId, event, data) {
 
 ---
 
-# Phase 2: Registration & QR (Days 4–7)
+# Phase 2: Registration & QR (Days 4-7)
 
 **Goal:** Both registration flows, QR generation, email delivery, file import, ticket PDF, staff management.
 
@@ -518,8 +520,8 @@ Implement:
 **File:** `src/modules/registrations/public.routes.js`
 
 ```
-GET  /public/events/:slug          → controller.getPublicEvent
-POST /public/events/:slug/register → validate → controller.register
+GET  /e/:slug          → controller.getPublicEvent
+POST /registrations/free → validate → controller.register
 ```
 
 ---
@@ -679,7 +681,7 @@ export async function sendTransactionalEmail({ to, subject, html, text }) {
 > BREVO_API_KEY: z.string().default(""),
 > BREVO_SENDER_EMAIL: z.string().default("noreply@qpass.com"),
 > BREVO_SENDER_NAME: z.string().default("QPass"),
-> FRONTEND_BASE_URL: z.string().default("http://localhost:3001"),
+> FRONTEND_URL: z.string().default("http://localhost:3000"),
 > ```
 > When `BREVO_API_KEY` is empty, sends are skipped with a warning instead of failing.
 
@@ -724,7 +726,7 @@ DELETE /:eventId/staff/:staffId  → authenticateUser → controller.remove
 
 ## Phase 2 Exit Checklist
 
-- [ ] Public event view (`GET /public/events/:slug`) returns event + ticket types
+- [ ] Public event view (`GET /e/:slug`) returns event + ticket types
 - [ ] Public registration → Registration CONFIRMED + TicketCode + QrToken + email sent
 - [ ] CSV/XLSX import works with row validation and error reporting
 - [ ] PDF import extracts tables, DOCX import extracts tables
@@ -739,11 +741,11 @@ DELETE /:eventId/staff/:staffId  → authenticateUser → controller.remove
 
 ---
 
-# Phase 3: Check-in, Reporting & Release (Days 8–14)
+# Phase 3: Check-in, Reporting & Release (Days 8-14)
 
 **Goal:** Enhanced check-in, real-time updates via Socket.IO, dashboard stats, exports, seed script, tests, deployment.
 
-> **Note:** Payment processing (Paystack integration, paid registration, webhooks) is deferred to Phase 2. MVP handles free events only — all registrations are confirmed immediately.
+> **Note:** Payment processing (Paystack integration, paid registration, webhooks) is deferred to Phase 2. MVP handles free events only - all registrations are confirmed immediately.
 
 ## Step 3.1 - Enhanced Check-in
 
@@ -961,22 +963,25 @@ export { prisma };
 
 ## Step 3.9 - Deployment Config
 
-### Render.com Settings
+### Railway Settings
 
 | Setting | Value |
 |---------|-------|
-| Build command | `npm install && npx prisma migrate deploy && npx prisma generate` |
+| Deploy config | `railway.json` (one-click) |
+| Build command | `npm ci && npx prisma generate` |
 | Start command | `node src/server.js` |
-| Region | Frankfurt (EU) |
+| Post-deploy | `npx prisma migrate deploy` |
 
 ### Environment Variables Checklist
 
 ```
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
-DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
+DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DATABASE_URL,
+REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
+PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, PAYSTACK_WEBHOOK_SECRET (optional),
 BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME,
-SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
+FRONTEND_URL, SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, SOCKET_CORS_ORIGIN, UPLOAD_DIR
 ```
 
 ---
@@ -1016,7 +1021,7 @@ Final checklist before release:
 - [ ] Unit tests pass for: auth, QR, import, PDF
 - [ ] Integration tests pass for: auth, events, registrations, check-ins
 - [ ] `npm run lint` clean
-- [ ] Deployed to Render, health check returns 200
+- [ ] Deployed to Railway, health check returns 200
 - [ ] Security pass complete
 
 ---
