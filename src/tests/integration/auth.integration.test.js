@@ -8,6 +8,14 @@ vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   authLimiter: (_req, _res, next) => next(),
 }));
 
+vi.mock('../../utils/email.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    sendPasswordResetEmail: vi.fn(async () => ({ success: true })),
+  };
+});
+
 describe('Auth API Integration Tests', () => {
 
   beforeAll(async () => {
