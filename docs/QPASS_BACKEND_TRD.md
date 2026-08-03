@@ -9,6 +9,8 @@
 | **Authors** | Crosstrack Group 13 |
 ---
 
+> **Status:** This TRD reflects the finished, as-built backend. For the live source of truth see `README.md` (quick start), `Architecture.md` (system design), `docs/ERD.dbml` (data model), and `docs/QPASS_API_DOC.md` (current endpoints).
+
 ## 1. Executive Summary
 
 QPass is an event registration, ticketing, and attendance intelligence platform that enables event organizers to create, manage, verify, and analyze events from a single platform. The backend uses Node.js 22, Express 5, Prisma ORM with PostgreSQL, Redis for distributed locking, Socket.IO for real-time updates.
@@ -25,7 +27,7 @@ QPass is an event registration, ticketing, and attendance intelligence platform 
 
 ### 2.1 Problem Statement
 
-The event industry in Nigeria suffers from fragmented attendance management. Organizers rely on printed lists, WhatsApp confirmations, and manual verification, leading to slow check-in (10–30 seconds per person), duplicate ticket fraud, lost paper records, and zero real-time visibility. QPass unifies registration, QR-based verification, attendance tracking, and analytics in one platform.
+The event industry in Nigeria suffers from fragmented attendance management. Organizers rely on printed lists, WhatsApp confirmations, and manual verification, leading to slow check-in (10-30 seconds per person), duplicate ticket fraud, lost paper records, and zero real-time visibility. QPass unifies registration, QR-based verification, attendance tracking, and analytics in one platform.
 
 ### 2.2 Product Vision
 
@@ -66,7 +68,7 @@ Become Africa's most trusted attendance verification & ticket management platfor
 | QR code generation | One per registration. SHA-256 hashed server-side. Raw token delivered to attendee. Expires event end + 24h. |
 | Payment processing (Phase 2) | Paystack integration, paid registration, webhooks. Deferred from MVP. |
 | Email (Brevo REST) | 4 templates: registration, QR, staff invite, password reset. Non-blocking. |
-| QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by organizer only. |
+| QR check-in | Staff scan with duplicate detection (Redis distributed lock + DB unique constraint). Undo by owner or scanning staff within 24 hours. |
 | Staff management | Assign/remove staff. Email invitation for new staff users. |
 | Dashboard stats | Registrations, check-ins, no-shows, capacity utilization, ticket breakdown. Real-time via Socket.IO. |
 | CSV export | Attendance and registration lists as downloadable CSV/PDF. |
@@ -104,7 +106,7 @@ Every module under `src/modules/<module>/` follows:
 <module>.schema.js       # Zod validation schemas
 ```
 
-**Rules:** Controllers delegate to services; services never touch `req`/`res`. Services throw `AppError` subclasses; controllers call `next(err)`. Routes apply `validate(schema)` → `requireAuth` → `requireRole(...)` → controller. All responses use `success()`/`created()` helpers. All error messages from `system_messages.js` — never hardcoded. ESM `import/export` with `.js` extensions.
+**Rules:** Controllers delegate to services; services never touch `req`/`res`. Services throw `AppError` subclasses; controllers call `next(err)`. Routes apply `validate(schema)` → `requireAuth` → `requireRole(...)` → controller. All responses use `success()`/`created()` helpers. All error messages from `system_messages.js` - never hardcoded. ESM `import/export` with `.js` extensions.
 
 ### 4.3 Tech Stack
 
@@ -173,37 +175,45 @@ Root files: `.env.example`, `Dockerfile` (multi-stage), `docker-compose.yml` (Po
 
 ## 5. Database Schema
 
-PostgreSQL via Prisma ORM. 12 models, 9 enums. Columns use `snake_case` via `@map`; application code uses `camelCase`.
+PostgreSQL via Prisma ORM. 13 models, 11 enums. Columns use `snake_case` via `@map`; application code uses `camelCase`. See `src/database/schema.prisma` for the live definition; a visual ERD lives in `docs/ERD.dbml` (paste into dbdiagram.io).
 
 ### 5.1 Enums
 
 ```prisma
-enum UserRole       { ATTENDEE  STAFF  ORGANIZER  ADMIN }
-enum UserStatus     { ACTIVE  INACTIVE  SUSPENDED }
-enum EventStatus    { DRAFT  PUBLISHED  ACTIVE  COMPLETED  CANCELLED }
-enum TicketCodeStatus { UNUSED  USED  REVOKED }
-enum RegistrationStatus { PENDING  CONFIRMED  CANCELLED }
-enum CheckInResult  { VALID  DUPLICATE  INVALID }
-enum NotificationStatus { PENDING  SENT  FAILED  READ }
+enum UserRole             { ATTENDEE  STAFF  ORGANIZER  ADMIN }
+enum UserStatus           { ACTIVE  INACTIVE  SUSPENDED }
+enum EventStatus          { DRAFT  PUBLISHED  ACTIVE  COMPLETED  CANCELLED }
+enum TicketCodeStatus     { UNUSED  USED  REVOKED }
+enum RegistrationStatus   { PENDING  CONFIRMED  CANCELLED }
+enum CheckInResult        { VALID  DUPLICATE  INVALID  EXPIRED  WRONG_EVENT  REVOKED  NOT_AUTHORIZED }
+enum PaymentStatus        { PENDING  SUCCESS  FAILED  REFUNDED }
+enum InvoiceStatus        { PENDING  PAID  OVERDUE  CANCELLED }
+enum NotificationStatus   { PENDING  SENT  FAILED  READ }
+enum RegistrationMode     { PUBLIC_LINK  CLOSED_IMPORT  HYBRID }
+enum RegistrationSource   { IMPORT  PUBLIC_LINK }
 ```
 
 ### 5.2 Models
 
 **User** - id (uuid), name, email (unique), passwordHash (bcrypt 12), role (default ATTENDEE, server-side only), status (ACTIVE), createdAt, updatedAt, deletedAt (soft delete). Relations: events, staffAssignments, auditLogs, checkins.
 
-**Event** - id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), capacity?, registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, ticketCodes.
+**Event** - id, title, description?, venue?, startTime, endTime, status (DRAFT), ownerId (FK→User), slug (unique, `{kebab-title}-{6-char-suffix}`), registrationMode (PUBLIC_LINK/CLOSED_IMPORT/HYBRID), isPaid (false), capacity?, currency (NGN), registrationOpensAt?, registrationClosesAt?, publishedAt?, createdAt, updatedAt, deletedAt. Indexes: [ownerId], [status], [slug]. Relations: owner, staffAssignments, ticketTypes, importBatches, registrations, checkins, ticketCodes, payments, invoices, notifications.
 
 **TicketType** - id, eventId (FK→Event), name, description?, price (naira, 0=free), capacity?, quantitySold (0), active (true), sortOrder (0), createdAt, updatedAt. Index: [eventId]. Relations: event, registrations.
 
-**Registration** - id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (CONFIRMED), createdAt, updatedAt. Unique: [eventId, ticketCodeId]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins.
+**Registration** - id, eventId (FK→Event), ticketCodeId (unique, FK→TicketCode), attendeeEmail, attendeeName, phone?, ticketTypeId? (FK→TicketType), paymentStatus (PENDING), source (IMPORT/PUBLIC_LINK), confirmationCode? (unique), metadata? (Json), qrIssued (false), qrIssuedAt?, status (PENDING/CONFIRMED/CANCELLED), createdAt, updatedAt. Unique: [eventId, attendeeEmail]. Indexes: [eventId], [attendeeEmail]. Relations: event, ticketCode, ticketType, qrToken, checkins, payment, notifications.
 
 **TicketCode** - id, eventId (FK→Event), code, status (UNUSED), usedAt?, attendeeEmail?, attendeeName?, createdAt. Unique: [eventId, code]. Indexes: [eventId], [code].
 
 **QrToken** - id, registrationId (unique, FK→Registration), tokenHash (unique, SHA-256), issuedAt, expiresAt (event.endTime + 24h), revokedAt?, scanCount (0). Index: [tokenHash]. Only hash stored; raw token delivered to attendee.
 
-**CheckIn** - id, eventId (FK→Event), registrationId (FK→Registration), staffId (FK→User), scannedAt, result (VALID/DUPLICATE/INVALID), deviceInfo?, ipAddress?. Unique: [eventId, registrationId]. Indexes: [eventId], [registrationId].
+**CheckIn** - id, eventId (FK→Event), registrationId (FK→Registration), staffId (FK→User), scannedAt, result (VALID/DUPLICATE/INVALID/EXPIRED/WRONG_EVENT/REVOKED/NOT_AUTHORIZED), deviceInfo?, ipAddress?, deletedAt? (soft delete on undo). Unique: [eventId, registrationId]. Indexes: [eventId], [registrationId].
 
-**Notification** - id, recipient, channel, template, status (PENDING), userId? (FK→User), eventId? (FK→Event), registrationId? (FK→Registration), providerMessageId?, failureReason?, sentAt?, readAt?, createdAt. Index: [recipient]. Failures never block core actions.
+**Payment** (schema-ready) - id, eventId (FK→Event), userId (FK→User), registrationId? (unique, FK→Registration), paystackReference (unique), amount, currency (NGN), status (PENDING/SUCCESS/FAILED/REFUNDED), gateway (PAYSTACK), metadata? (Json), verifiedAt?, createdAt, paidAt?. Indexes: [eventId], [userId], [paystackReference]. Relations: event, user, registration, invoice. Not wired to any endpoint in the current MVP.
+
+**Invoice** (schema-ready) - id, eventId (FK→Event), paymentId (unique, FK→Payment), invoiceNumber (unique), amount, issueDate, dueDate, status (PENDING/PAID/OVERDUE/CANCELLED). Index: [eventId]. Relations: event, payment. Not wired to any endpoint in the current MVP.
+
+**Notification** - id, recipient, channel, template, subject?, context? (Json), status (PENDING), userId? (FK→User), eventId? (FK→Event), registrationId? (FK→Registration), providerMessageId?, failureReason?, sentAt?, readAt?, createdAt. Index: [recipient]. Failures never block core actions.
 
 **AuditLog** - id, actorId? (FK→User, nullable for webhooks), action, entity, entityId, beforeSnapshot? (Json), afterSnapshot? (Json), createdAt. Indexes: [actorId], [entity, entityId].
 
@@ -238,15 +248,15 @@ enum NotificationStatus { PENDING  SENT  FAILED  READ }
 ### 6.2 Flow B: Public Link Registration
 
 1. Organizer publishes event → slug generated, status → PUBLISHED
-2. Attendee visits `/api/v1/public/events/{slug}` → sees event details + ticket types
-3. Submits: `name`, `email`, `phone?`, `ticketTypeId`, `customFields?`
+2. Attendee visits `GET /api/v1/e/{slug}` → sees event details + ticket types
+3. Submits via `POST /api/v1/registrations/free`: `{ slug, name, email, phone?, ticketTypeId?, metadata? }`
 4. Registration (CONFIRMED) → TicketCode → QR → email → audit
 
 ---
 
 ## 7. API Endpoints
 
-All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`.
+All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 31 paths, 38 operations. Full reference: `docs/QPASS_API_DOC.md`.
 
 ### 7.1 Auth
 
@@ -254,10 +264,10 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 |---|--------|----------|------|------------|---------|
 | 1 | POST | `/auth/register` | Public | authLimiter (5/15min) | `{ name, email, password, role? }`. Default role: ATTENDEE. Optional `role` may be `ATTENDEE`, `ORGANIZER`, or `STAFF`; `ADMIN` is not self-assignable. |
 | 2 | POST | `/auth/login` | Public | authLimiter | `{ email, password }` → `{ user: { id, name, email, role }, accessToken, refreshToken }` |
-| 3 | POST | `/auth/refresh` | Valid refresh token | — | Rotate access token. Verify refresh not blacklisted. |
-| 4 | POST | `/auth/logout` | Authenticated | — | Blacklist refresh token in Redis. |
-| 5 | POST | `/auth/password/forgot` | Public | authLimiter | Send reset email with time-limited token. |
-| 6 | POST | `/auth/password/reset` | Public | — | `{ token, newPassword }`. |
+| 3 | POST | `/auth/refresh` | Valid refresh token | - | Rotate access token. Verify refresh not blacklisted. |
+| 4 | POST | `/auth/logout` | Authenticated | - | Blacklist refresh token in Redis. |
+| 5 | POST | `/auth/forgot-password` | Public | authLimiter | Send reset email with time-limited token (Redis, 15 min TTL). |
+| 6 | POST | `/auth/reset-password` | Public | authLimiter | `{ token, password }`. |
 
 **Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; an optional `role` (`ATTENDEE`/`ORGANIZER`/`STAFF`) may be supplied, and `ADMIN` cannot be self-assigned.
 
@@ -265,61 +275,63 @@ All under `/api/v1`. Zod validation, auth middleware, RBAC, consistent envelopes
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 7 | POST | `/events` | Organizer | Create draft |
+| 7 | POST | `/events` | Organizer/Admin | Create draft |
 | 8 | GET | `/events` | Organizer/Admin | List `?page,limit,status` |
 | 9 | GET | `/events/:eventId` | Owner | Get details |
 | 10 | PATCH | `/events/:eventId` | Owner | Edit |
-| 11 | POST | `/events/:eventId/publish` | Owner | Publish (slug generated) |
-| 12 | POST | `/events/:eventId/cancel` | Owner | Cancel |
+| 11 | DELETE | `/events/:eventId` | Owner | Soft delete (deletedAt) |
+| 12 | POST | `/events/:eventId/publish` | Owner | Publish (slug generated) |
+| 13 | POST | `/events/:eventId/cancel` | Owner | Cancel (draft cannot be cancelled) |
 
 ### 7.3 Ticket Types
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 13 | POST | `/events/:eventId/ticket-types` | Owner | Create `{ name, description?, price, capacity? }` |
-| 14 | GET | `/events/:eventId/ticket-types` | Owner | List |
-| 15 | PATCH | `/events/:eventId/ticket-types/:id` | Owner | Edit |
-| 16 | DELETE | `/events/:eventId/ticket-types/:id` | Owner | Delete (only if no registrations linked) |
+| 14 | POST | `/events/:eventId/ticket-types` | Owner | Create `{ name, description?, price, capacity? }` |
+| 15 | GET | `/events/:eventId/ticket-types` | Owner | List |
+| 16 | PATCH | `/events/:eventId/ticket-types/:id` | Owner | Edit |
+| 17 | DELETE | `/events/:eventId/ticket-types/:id` | Owner | Delete (409 if registrations linked) |
 
 ### 7.4 Attendee Import
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 17 | POST | `/events/:eventId/import` | Owner | Upload CSV/XLSX/PDF/DOCX (Multer, 5MB max) |
-| 18 | GET | `/events/:eventId/import/:batchId` | Owner | Import results + per-row errors |
-| 19 | GET | `/events/:eventId/import-template` | Owner | Download CSV or PDF template (?format=csv\|pdf, default csv) |
+| 18 | POST | `/events/:eventId/import` | Owner | Upload CSV/XLSX/PDF/DOCX (Multer, 5MB max) |
+| 19 | GET | `/events/:eventId/import` | Owner | List import batches |
+| 20 | GET | `/events/:eventId/import/:batchId` | Owner | Import results + per-row errors |
+| 21 | GET | `/events/:eventId/import-template` | Owner | Download CSV or PDF template (?format=csv\|pdf, default csv) |
 
 ### 7.5 Public Registration
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 20 | GET | `/public/events/:slug` | Public | Event details + ticket types |
-| 21 | POST | `/public/events/:slug/register` | Public | Register. No account required. Instant confirmation + QR. |
+| 22 | GET | `/e/:slug` | Public | Event details + ticket types (no ownerId) |
+| 23 | POST | `/registrations/free` | Public | Register for a free event. No account required. Instant confirmation + QR. |
 
 ### 7.6 Tickets
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 22 | GET | `/tickets/:ticketId` | Secure (token) | View ticket + QR |
-| 23 | GET | `/events/:eventId/tickets` | Owner | List `?page,limit,status` |
-| 24 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF |
-| 25 | GET | `/tickets/:ticketId/download` | Secure (token) | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
+| 24 | GET | `/events/:eventId/tickets` | Owner | List `?page,limit,status,paymentStatus` |
+| 25 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF `{ format }` |
+| 26 | GET | `/tickets/:ticketId` | Authenticated | View ticket + QR (attendee or event owner) |
+| 27 | GET | `/tickets/:ticketId/download` | Authenticated | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
 
 ### 7.7 Staff Management
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 26 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. |
-| 27 | GET | `/events/:eventId/staff` | Owner | List |
-| 28 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
+| 28 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. |
+| 29 | GET | `/events/:eventId/staff` | Owner | List |
+| 30 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
 
 ### 7.8 Check-in
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 29 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
-| 30 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List `?page,limit` |
-| 31 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner | Undo |
+| 31 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
+| 32 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List (excludes undone) |
+| 33 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner/scanning staff | Undo within 24h |
 
 Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | NOT_AUTHORIZED`. All HTTP 200 except NOT_AUTHORIZED (403).
 
@@ -327,15 +339,21 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 34 | GET | `/events/:eventId/dashboard` | Owner | Stats: registrations, check-ins, no-shows, capacity, ticket breakdown |
+| 34 | GET | `/events/:eventId/dashboard` | Owner/Admin/Staff | Stats: registrations, check-ins, capacity, ticket breakdown |
 | 35 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
 | 36 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
+
+### 7.10 Admin
+
+| # | Method | Endpoint | Auth | Purpose |
+|---|--------|----------|------|---------|
+| 37 | GET | `/audit-logs` | Admin | Paginated audit trail. Filter by action, entity, actorId, date range. |
 
 ### 7.11 Health
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 37 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
+| 38 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
 
 ---
 
@@ -360,7 +378,7 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 5. Check `CheckIn` unique constraint `(eventId, registrationId)` → exists → `DUPLICATE` (audit log attempt)
 6. All pass → create CheckIn (VALID) → update QrToken (scanCount++, revokedAt=now) → audit log → emit Socket.IO → release lock
 
-**Duplicate detection:** Two-layer — Redis distributed lock (race condition prevention) + PostgreSQL unique constraint `(eventId, registrationId)`.
+**Duplicate detection:** Two-layer - Redis distributed lock (race condition prevention) + PostgreSQL unique constraint `(eventId, registrationId)`.
 
 **Staff authorization:** Check `EventStaffAssignment` before QR validation. Not assigned → 403 `NOT_AUTHORIZED`.
 
@@ -379,9 +397,9 @@ BREVO_SENDER_EMAIL=noreply@qpass.com  |  BREVO_SENDER_NAME=QPass
 
 | Template | Trigger | Subject |
 |----------|---------|---------|
-| `registration-confirmed.html` | Registration confirmed | Registration Confirmed — {eventTitle} |
-| `qr-generated.html` | QR issued | Your QR Ticket — {eventTitle} |
-| `staff-invitation.html` | Staff assigned | You're Invited as Staff — {eventTitle} |
+| `registration-confirmed.html` | Registration confirmed | Registration Confirmed - {eventTitle} |
+| `qr-generated.html` | QR issued | Your QR Ticket - {eventTitle} |
+| `staff-invitation.html` | Staff assigned | You're Invited as Staff - {eventTitle} |
 | `password-reset.html` | Reset requested | Reset Your QPass Password |
 
 **Flow:** Create Notification (PENDING) → render template → Brevo REST send → update SENT/FAILED with `providerMessageId`/`failureReason`. **Non-blocking:** email failures never block core actions. Transient failures (rate limit, 5xx, network/timeout) retry up to 3 times; bad credentials and invalid recipients fail fast without retry. If `BREVO_API_KEY` is missing, sends are skipped with a warning.
@@ -390,7 +408,7 @@ BREVO_SENDER_EMAIL=noreply@qpass.com  |  BREVO_SENDER_NAME=QPass
 
 ## 10. PDF Ticket Downloads
 
-> **Note:** Payment status is not included in MVP — all tickets are confirmed on registration.
+> **Note:** Payment status is not included in MVP - all tickets are confirmed on registration.
 
 `GET /tickets/:ticketId/download`; generated on-demand via `pdfkit`.
 
@@ -441,7 +459,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 ## 14. Implementation Plan
 
-### Phase 1: Foundation (Days 1–3); Auth + Events + Ticket Types
+### Phase 1: Foundation (Days 1-3); Auth + Events + Ticket Types
 
 | Task | Details |
 |------|---------|
@@ -453,7 +471,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 **Exit:** Organizer can register/login, create/publish events, configure tickets. Swagger shows all endpoints.
 
-### Phase 2: Registration & QR (Days 4–7); Both Flows + Import + Email
+### Phase 2: Registration & QR (Days 4-7); Both Flows + Import + Email
 
 | Task | Details |
 |------|---------|
@@ -467,7 +485,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 
 **Exit:** Import works for all 4 formats. Public registration works. QR emailed. Tickets downloadable as PDF. Staff assignable.
 
-### Phase 3: Check-in, Reporting & Release (Days 8–14); Scan + Real-time + Stats + Deploy
+### Phase 3: Check-in, Reporting & Release (Days 8-14); Scan + Real-time + Stats + Deploy
 
 | Task | Details |
 |------|---------|
@@ -518,20 +536,22 @@ npm run lint           # Lint check
 
 ### Docker
 
-Multi-stage `Dockerfile`: builder (`node:22-alpine`, `npm ci`, `prisma generate`) → production (non-root user, copied artifacts). `docker-compose.yml`: `postgres:15-alpine` (port 5433), `redis:7-alpine` (port 6380), named volumes, health checks.
+Multi-stage `Dockerfile`: builder (`node:22-alpine`, `npm ci`, `prisma generate`) → production (non-root user, copied artifacts). `docker-compose.yml`: `postgres:15-alpine` (host port 5433), `redis:7-alpine` (host port 6380), named volumes, health checks.
 
-### Render.com
+### Railway (primary)
 
-Build: `npm install && npx prisma migrate deploy && npx prisma generate`. Start: `node src/server.js`. Region: Frankfurt.
+`railway.json` enables one-click deployment. Build: `npm ci && npx prisma generate`. Start: `node src/server.js`. Set `DATABASE_URL` and `REDIS_*` to managed service URLs, then run `npx prisma migrate deploy` as a post-deploy step.
 
 ### Environment Variables
 
 ```
 NODE_ENV, PORT, LOG_LEVEL, CORS_ORIGIN, SWAGGER_ENABLED,
-DATABASE_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
+DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DATABASE_URL,
+REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DATABASE,
 JWT_SECRET, JWT_EXPIRES_IN, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN,
+PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, PAYSTACK_WEBHOOK_SECRET (optional, Phase 2),
 BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME,
-SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, FRONTEND_BASE_URL, SOCKET_CORS_ORIGIN
+FRONTEND_URL, SENTRY_DSN, SENTRY_TRACES_SAMPLE_RATE, SOCKET_CORS_ORIGIN, UPLOAD_DIR
 ```
 
 ### Post-Deploy

@@ -53,6 +53,10 @@
       "description": "QR scanning and attendance tracking"
     },
     {
+      "name": "Reports",
+      "description": "Dashboard statistics and CSV/PDF data exports"
+    },
+    {
       "name": "Admin",
       "description": "Administrative operations: audit log access"
     }
