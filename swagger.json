@@ -211,6 +211,41 @@
           }
         }
       },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["currentPassword", "newPassword"],
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "format": "password",
+            "description": "Current password (required)"
+          },
+          "newPassword": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "New password - must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, and one number (required)",
+            "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
+          }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Full name (optional)"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9]{7,15}$",
+            "description": "Phone number (optional, empty string allowed to clear it)"
+          }
+        }
+      },
       "AuthUser": {
         "type": "object",
         "properties": {
@@ -231,6 +266,15 @@
           "status": {
             "type": "string",
             "enum": ["ACTIVE", "INACTIVE", "SUSPENDED"]
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number, if set"
+          },
+          "emailVerifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the email was verified, null if not verified"
           },
           "createdAt": {
             "type": "string",

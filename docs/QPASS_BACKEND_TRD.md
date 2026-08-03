@@ -254,18 +254,25 @@ enum RegistrationSource   { IMPORT  PUBLIC_LINK }
 
 ## 7. API Endpoints
 
-All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 31 paths, 38 operations. Full reference: `docs/QPASS_API_DOC.md`.
+All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 37 paths, 45 operations. Full reference: `docs/QPASS_API_DOC.md`.
 
 ### 7.1 Auth
 
 | # | Method | Endpoint | Auth | Rate Limit | Purpose |
 |---|--------|----------|------|------------|---------|
-| 1 | POST | `/auth/register` | Public | authLimiter (5/15min) | `{ name, email, password, role? }`. Default role: ATTENDEE. Optional `role` may be `ATTENDEE`, `ORGANIZER`, or `STAFF`; `ADMIN` is not self-assignable. |
-| 2 | POST | `/auth/login` | Public | authLimiter | `{ email, password }` → `{ user: { id, name, email, role }, accessToken, refreshToken }` |
-| 3 | POST | `/auth/refresh` | Valid refresh token | - | Rotate access token. Verify refresh not blacklisted. |
-| 4 | POST | `/auth/logout` | Authenticated | - | Blacklist refresh token in Redis. |
+| 1 | POST | `/auth/register` | Public | authLimiter (5/15min) | `{ name, email, password, role? }`. Default role: ATTENDEE. Optional `role` may be `ATTENDEE`, `ORGANIZER`, or `STAFF`; `ADMIN` is not self-assignable. Creates a Redis session. |
+| 2 | POST | `/auth/login` | Public | authLimiter | `{ email, password }` → `{ user: { id, name, email, role }, accessToken, refreshToken }`. Creates a Redis session. |
+| 3 | POST | `/auth/refresh` | Valid refresh token + active session | authLimiter | Rotate access token. Verify refresh not blacklisted and session exists; rotate session (delete old, record new). |
+| 4 | POST | `/auth/logout` | Authenticated | - | Blacklist refresh token + delete its Redis session. |
 | 5 | POST | `/auth/forgot-password` | Public | authLimiter | Send reset email with time-limited token (Redis, 15 min TTL). |
 | 6 | POST | `/auth/reset-password` | Public | authLimiter | `{ token, password }`. |
+| 7 | GET | `/auth/me` | Authenticated | - | Get own profile (id, name, email, role, phone, emailVerifiedAt). |
+| 8 | PATCH | `/auth/me` | Authenticated | - | Update `name` / `phone`. |
+| 9 | POST | `/auth/change-password` | Authenticated | authLimiter | `{ currentPassword, newPassword }`; verifies current password. |
+| 10 | POST | `/auth/request-verification` | Authenticated | authLimiter | Send email-verification email (Redis, 15 min TTL); 400 if already verified. |
+| 11 | POST | `/auth/verify-email` | Public | authLimiter | `{ token }`; sets `emailVerifiedAt`. |
+| 12 | GET | `/auth/sessions` | Authenticated | - | List active Redis sessions. |
+| 13 | DELETE | `/auth/sessions/{sessionId}` | Authenticated | - | Revoke a session (id = 64-char refresh-token hash). |
 
 **Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; an optional `role` (`ATTENDEE`/`ORGANIZER`/`STAFF`) may be supplied, and `ADMIN` cannot be self-assigned.
 

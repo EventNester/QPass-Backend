@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
+import { hashToken } from '../../utils/crypto.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   globalLimiter: (_req, _res, next) => next(),
@@ -351,6 +352,147 @@ describe('Auth API Integration Tests', () => {
 
       expect(response.status).toBe(401);
       expect(response.body.status).toBe('error');
+    });
+  });
+
+  describe('Profile, password, verification and sessions', () => {
+    let accessToken;
+    let refreshTokenValue;
+
+    beforeAll(async () => {
+      const registerRes = await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Me Flow',
+          email: 'me-flow@example.com',
+          password: 'SecurePassword123',
+        });
+
+      accessToken = registerRes.body.data.accessToken;
+      refreshTokenValue = registerRes.body.data.refreshToken;
+    });
+
+    it('GET /auth/me returns the authenticated profile', async () => {
+      const response = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.email).toBe('me-flow@example.com');
+      expect(response.body.data.emailVerifiedAt).toBeNull();
+    });
+
+    it('GET /auth/me returns 401 without a token', async () => {
+      const response = await request(app).get('/api/v1/auth/me');
+      expect(response.status).toBe(401);
+    });
+
+    it('PATCH /auth/me updates the profile', async () => {
+      const response = await request(app)
+        .patch('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ name: 'Me Flow Updated', phone: '08012345678' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.name).toBe('Me Flow Updated');
+      expect(response.body.data.phone).toBe('08012345678');
+    });
+
+    it('PATCH /auth/me rejects an invalid phone', async () => {
+      const response = await request(app)
+        .patch('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ phone: 'not-a-phone' });
+
+      expect(response.status).toBe(422);
+    });
+
+    it('POST /auth/change-password changes the password', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ currentPassword: 'SecurePassword123', newPassword: 'BrandNewPassword456' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+    });
+
+    it('login works with the new password', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ email: 'me-flow@example.com', password: 'BrandNewPassword456' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.accessToken).toBeDefined();
+    });
+
+    it('POST /auth/request-verification returns a verify token in test env', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/request-verification')
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.verifyToken).toBeDefined();
+    });
+
+    it('POST /auth/verify-email verifies the email', async () => {
+      const requestRes = await request(app)
+        .post('/api/v1/auth/request-verification')
+        .set('Authorization', `Bearer ${accessToken}`);
+      const verifyToken = requestRes.body.data.verifyToken;
+
+      const response = await request(app)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: verifyToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+
+      const meRes = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(meRes.body.data.emailVerifiedAt).not.toBeNull();
+    });
+
+    it('POST /auth/verify-email rejects an invalid token', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: 'invalid-token' });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('GET /auth/sessions lists active sessions', async () => {
+      const response = await request(app)
+        .get('/api/v1/auth/sessions')
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(Array.isArray(response.body.data.sessions)).toBe(true);
+      expect(response.body.data.sessions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('DELETE /auth/sessions/:id revokes the session for refreshTokenValue', async () => {
+      const sessionId = hashToken(refreshTokenValue);
+
+      const response = await request(app)
+        .delete(`/api/v1/auth/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+    });
+
+    it('refresh is rejected after the session is revoked', async () => {
+      const response = await request(app)
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: refreshTokenValue });
+
+      expect(response.status).toBe(401);
     });
   });
 });

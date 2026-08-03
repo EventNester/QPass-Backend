@@ -51,3 +51,35 @@ export const resetPasswordSchema = z.object({
     .regex(/\d/, v.PASSWORD_NUMBER),
 });
 
+const phoneRegex = /^\+?[0-9]{7,15}$/;
+
+export const updateProfileSchema = z
+  .object({
+    name: z.string().min(1, v.NAME_REQUIRED).max(100, v.NAME_TOO_LONG).optional(),
+    phone: z
+      .union([z.string().regex(phoneRegex, v.PHONE_INVALID), z.literal('')])
+      .optional(),
+  })
+  .strict();
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, v.CURRENT_PASSWORD_REQUIRED),
+  newPassword: z
+    .string()
+    .min(8, v.PASSWORD_MIN)
+    .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
+    .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
+    .regex(/\d/, v.PASSWORD_NUMBER),
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, v.VERIFY_TOKEN_REQUIRED),
+});
+
+export const sessionParamsSchema = z.object({
+  sessionId: z
+    .string()
+    .min(1, v.SESSION_ID_REQUIRED)
+    .regex(/^[a-f0-9]{64}$/, v.SESSION_ID_INVALID),
+});
+

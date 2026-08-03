@@ -6,6 +6,7 @@ import {
 } from "../../utils/error.js";
 import { constants, systemMessages } from "../../config/index.js";
 import { generateSlug } from "../../utils/slug.js";
+import { writeAuditLog } from "../../utils/audit-log.js";
 
 const msg = systemMessages.ERROR;
 const MAX_SLUG_RETRIES = 10;
@@ -44,6 +45,14 @@ export const createEvent = async (eventData, ownerId) => {
           slug,
           ownerId,
         },
+      });
+
+      await writeAuditLog({
+        actorId: ownerId,
+        action: 'EVENT_CREATED',
+        entity: 'Event',
+        entityId: event.id,
+        afterSnapshot: { title: event.title, slug: event.slug, status: event.status },
       });
 
       return event;
@@ -124,6 +133,15 @@ export const updateEvent = async (
 ) => {
   const isAdmin = userRole === constants.ROLES.ADMIN;
 
+  const before = await prisma.event.findFirst({
+    where: {
+      id: eventId,
+      deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
+    },
+    select: { id: true, title: true, slug: true, status: true },
+  });
+
   const updatedEvent = await prisma.event.updateMany({
     where: {
       id: eventId,
@@ -146,6 +164,17 @@ export const updateEvent = async (
     }
 
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+  }
+
+  if (before) {
+    await writeAuditLog({
+      actorId: ownerId,
+      action: 'EVENT_UPDATED',
+      entity: 'Event',
+      entityId: eventId,
+      beforeSnapshot: before,
+      afterSnapshot: eventData,
+    });
   }
 
   return getEvent(eventId, ownerId, userRole);
@@ -184,6 +213,13 @@ export const deleteEvent = async (
 
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
+
+  await writeAuditLog({
+    actorId: ownerId,
+    action: 'EVENT_DELETED',
+    entity: 'Event',
+    entityId: eventId,
+  });
 
   return {
     id: eventId,
@@ -242,6 +278,15 @@ export const publishEvent = async (
       `${msg.EVENT.NOT_DRAFT} (current: ${event.status})`
     );
   }
+
+  await writeAuditLog({
+    actorId: ownerId,
+    action: 'EVENT_PUBLISHED',
+    entity: 'Event',
+    entityId: eventId,
+    beforeSnapshot: { status: event.status },
+    afterSnapshot: { status: constants.EVENT_STATUS.PUBLISHED },
+  });
 
   return getEvent(eventId, ownerId, userRole);
 };
@@ -303,6 +348,15 @@ export const cancelEvent = async (
   if (cancelled.count === 0) {
     throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
   }
+
+  await writeAuditLog({
+    actorId: ownerId,
+    action: 'EVENT_CANCELLED',
+    entity: 'Event',
+    entityId: eventId,
+    beforeSnapshot: { status: event.status },
+    afterSnapshot: { status: constants.EVENT_STATUS.CANCELLED },
+  });
 
   return getEvent(eventId, ownerId, userRole);
 };

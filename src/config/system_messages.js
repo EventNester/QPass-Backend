@@ -1,5 +1,5 @@
 export default {
-  SUCCESS: {
+    SUCCESS: {
     AUTH: {
       REGISTER: "Account created successfully",
       LOGIN: "Login successful",
@@ -7,6 +7,11 @@ export default {
       TOKEN_REFRESHED: "Token refreshed successfully",
       PASSWORD_RESET_SENT: "Password reset instructions sent to your email",
       PASSWORD_RESET_SUCCESS: "Password reset successfully",
+      PASSWORD_CHANGED: "Password changed successfully",
+      PROFILE_UPDATED: "Profile updated successfully",
+      VERIFICATION_SENT: "Verification email sent",
+      EMAIL_VERIFIED: "Email verified successfully",
+      SESSION_REVOKED: "Session revoked successfully",
     },
 
     REGISTRATION: {
@@ -73,6 +78,9 @@ export default {
       ALREADY_EXISTS: "Account already exists with this email",
       TOO_MANY_ATTEMPTS: "Too many authentication attempts, please try again later",
       RESET_TOKEN_INVALID: "Invalid or expired password reset token",
+      CURRENT_PASSWORD_INVALID: "Current password is incorrect",
+      VERIFY_TOKEN_INVALID: "Invalid or expired email verification token",
+      EMAIL_ALREADY_VERIFIED: "Email is already verified",
     },
     EVENT: {
       NOT_FOUND: "Event not found",
@@ -177,6 +185,12 @@ export default {
     PASSWORD_REQUIRED: "Password is required",
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
+    VERIFY_TOKEN_REQUIRED: "Verification token is required",
+    CURRENT_PASSWORD_REQUIRED: "Current password is required",
+    SESSION_ID_REQUIRED: "Session id is required",
+    SESSION_ID_INVALID: "Invalid session id",
+    NAME_TOO_LONG: "Name must be at most 100 characters",
+    PHONE_INVALID: "Invalid phone number format",
     IMPORT: {
       MISSING_NAME: "Name is required",
       CONTACT_REQUIRED: "At least one of email or phone is required",

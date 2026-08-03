@@ -267,7 +267,6 @@ const seed = async () => {
       const registrationsToInsert = [];
       const qrTokensToInsert = [];
       const checkInsToInsert = [];
-      const paymentsToInsert = [];
 
       for (let i = 0; i < numRegistrations; i++) {
         const ticketType = getRandomItem(ticketTypes);
@@ -332,22 +331,6 @@ const seed = async () => {
             result: "VALID",
           });
         }
-
-        if (event.isPaid) {
-          paymentsToInsert.push({
-            id: randomHex(32),
-            eventId: event.id,
-            userId: event.ownerId,
-            registrationId,
-            paystackReference: `PSK-${randomHex(16).toUpperCase()}`,
-            amount: ticketType.price,
-            currency: event.currency,
-            status: "SUCCESS",
-            createdAt: seedTime,
-            verifiedAt: seedTime,
-            paidAt: seedTime,
-          });
-        }
       }
 
       // Batch insert (order matters for foreign keys)
@@ -355,7 +338,6 @@ const seed = async () => {
       await prisma.registration.createMany({ data: registrationsToInsert, skipDuplicates: true });
       await prisma.qrToken.createMany({ data: qrTokensToInsert, skipDuplicates: true });
       await prisma.checkIn.createMany({ data: checkInsToInsert, skipDuplicates: true });
-      await prisma.payment.createMany({ data: paymentsToInsert, skipDuplicates: true });
 
       registrationsProcessed += registrationsToInsert.length;
     } else {

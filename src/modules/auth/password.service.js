@@ -5,6 +5,7 @@ import { UnauthorizedError } from '../../utils/error.js';
 import { logger, systemMessages } from '../../config/index.js';
 import { hashPassword } from './auth.service.js';
 import { sendPasswordResetEmail } from '../../utils/email.js';
+import { writeAuditLog } from '../../utils/audit-log.js';
 
 const RESET_TOKEN_TTL_SECONDS = 900; // 15 minutes
 const REDIS_PREFIX = 'pwd_reset:';
@@ -52,6 +53,13 @@ export async function resetPassword(token, newPassword) {
   await prisma.user.update({
     where: { id: userId },
     data: { passwordHash },
+  });
+
+  await writeAuditLog({
+    actorId: userId,
+    action: 'PASSWORD_RESET',
+    entity: 'User',
+    entityId: userId,
   });
 
   await redis.del(`${REDIS_PREFIX}${token}`);
