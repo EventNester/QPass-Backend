@@ -2,8 +2,10 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import { getConfig, systemMessages, logger } from "./config/index.js";
+import { parseCorsOrigins } from "./config/cors.js";
 import httpLogger from "./middlewares/logging.middleware.js";
 import { globalLimiter } from "./middlewares/rate-limit.middleware.js";
+import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import router from "./routes/index.js";
 import { AppError } from "./utils/error.js";
 
@@ -11,10 +13,11 @@ const config = getConfig();
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
+app.use(cors({ origin: parseCorsOrigins(config.CORS_ORIGIN), credentials: true }));
 app.use(globalLimiter);
 app.use(httpLogger);
 app.use(express.json());
+app.use(sanitizeBody);
 
 app.use(router);
 

@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
 import { parseFile } from '../../utils/parsers/index.js';
 import { sendNotification } from '../../modules/notifications/notification.service.js';
+import { getIO } from '../../realtime/socket.js';
+import { emitRegistrationNew } from '../../realtime/rooms.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254; // RFC 5321 standard maximum length for email addresses
@@ -702,6 +704,7 @@ export async function processImportFile({
   const allErrors = [...parseErrors, ...validationErrors];
   for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
     const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
+    const createdRegistrations = [];
 
     try {
       await prisma.$transaction(async (tx) => {
@@ -745,6 +748,7 @@ export async function processImportFile({
               qrIssuedAt: new Date(),
             },
           });
+          createdRegistrations.push(registration);
 
           const rawToken = crypto.randomBytes(32).toString('hex');
           await tx.qrToken.create({
@@ -758,6 +762,19 @@ export async function processImportFile({
       });
 
       successRows += currentBatch.length;
+
+      for (const registration of createdRegistrations) {
+        try {
+          emitRegistrationNew(getIO(), eventId, {
+            registrationId: registration.id,
+            attendeeName: registration.attendeeName,
+            attendeeEmail: registration.attendeeEmail,
+            ticketTypeId: registration.ticketTypeId || null,
+          });
+        } catch (err) {
+          logger.warn({ err, eventId, registrationId: registration.id }, 'failed to emit registration:new');
+        }
+      }
     } catch (error) {
       logger.error({ err: error, batchStart: i }, 'Import batch transaction failed');
       for (const entry of currentBatch) {

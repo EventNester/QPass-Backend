@@ -1,13 +1,43 @@
 import { Router } from 'express';
-import { generateTokens, refreshToken, registerUser, authenticateUser, blacklistRefreshToken, hashPassword } from './auth.service.js';
+import {
+  generateTokens,
+  refreshToken,
+  registerUser,
+  authenticateUser,
+  blacklistRefreshToken,
+  hashPassword,
+  getProfile,
+  updateProfile,
+  changePassword,
+} from './auth.service.js';
 import { forgotPassword, resetPassword } from './password.service.js';
+import { requestEmailVerification, verifyEmail } from './verification.service.js';
+import {
+  recordSession,
+  hasActiveSession,
+  deleteSession,
+  listSessions,
+  revokeSession,
+} from './session.service.js';
 import { success, created } from '../../utils/response.js';
 import { systemMessages } from '../../config/index.js';
-import { ValidationError } from '../../utils/error.js';
+import { ValidationError, UnauthorizedError } from '../../utils/error.js';
 
-import { registerSchema, loginSchema, refreshSchema, logoutSchema, forgotPasswordSchema, resetPasswordSchema } from './auth.schema.js';
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+  logoutSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  verifyEmailSchema,
+  sessionParamsSchema,
+} from './auth.schema.js';
 import { requireAuth } from './auth.middleware.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
+import { verifyRefreshToken } from '../../utils/jwt.utils.js';
 
 const router = Router();
 
@@ -54,6 +84,8 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const user = await registerUser({ name, email, passwordHash, role });
 
     const tokens = generateTokens(user);
+
+    await recordSession(user.id, tokens.refreshToken, req.headers['user-agent'] || null);
 
     return created(res, { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens }, systemMessages.SUCCESS.AUTH.REGISTER);
   } catch (error) {
@@ -108,6 +140,8 @@ router.post('/login', authLimiter, async (req, res, next) => {
     
     const tokens = generateTokens(user);
 
+    await recordSession(user.id, tokens.refreshToken, req.headers['user-agent'] || null);
+
     return success(res, { user: { id: user.id, name: user.name, email: user.email, role: user.role }, ...tokens }, systemMessages.SUCCESS.AUTH.LOGIN);
   } catch (error) {
     next(error);
@@ -142,8 +176,10 @@ router.post('/login', authLimiter, async (req, res, next) => {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
  */
-router.post('/refresh', async (req, res, next) => {
+router.post('/refresh', authLimiter, async (req, res, next) => {
   try {
     const parsed = refreshSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -151,7 +187,18 @@ router.post('/refresh', async (req, res, next) => {
     }
     const { refreshToken: token } = parsed.data;
 
+    const decoded = verifyRefreshToken(token);
+
+    const active = await hasActiveSession(decoded.sub, token);
+    if (!active) {
+      throw new UnauthorizedError(systemMessages.ERROR.AUTH.SESSION_REVOKED);
+    }
+
     const newTokens = await refreshToken(token);
+
+    await deleteSession(decoded.sub, token);
+    await recordSession(decoded.sub, newTokens.refreshToken, req.headers['user-agent'] || null);
+
     return success(res, newTokens, systemMessages.SUCCESS.AUTH.TOKEN_REFRESHED);
   } catch (error) {
     return next(error);
@@ -196,6 +243,7 @@ router.post('/logout', requireAuth, async (req, res, next) => {
       return next(new ValidationError(parsed.error.issues[0].message));
     }
     await blacklistRefreshToken(parsed.data.refreshToken);
+    await deleteSession(req.user.id, parsed.data.refreshToken);
     return success(res, null, systemMessages.SUCCESS.AUTH.LOGOUT);
   } catch (error) {
     return next(error);
@@ -283,6 +331,286 @@ router.post('/reset-password', authLimiter, async (req, res, next) => {
     }
     await resetPassword(parsed.data.token, parsed.data.password);
     return success(res, null, systemMessages.SUCCESS.AUTH.PASSWORD_RESET_SUCCESS);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/me:
+ *   get:
+ *     summary: Get current user profile
+ *     description: Returns the authenticated user's profile details.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile retrieved successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/me', requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfile(req.user.id);
+    return success(res, profile);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/me:
+ *   patch:
+ *     summary: Update current user profile
+ *     description: Updates the authenticated user's name and/or phone number.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateProfileRequest'
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *       400:
+ *         description: "Validation error. Possible messages: Name is required, Name must be at most 100 characters, Invalid phone number format"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.patch('/me', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = updateProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    const profile = await updateProfile(req.user.id, parsed.data);
+    return success(res, profile, systemMessages.SUCCESS.AUTH.PROFILE_UPDATED);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/change-password:
+ *   post:
+ *     summary: Change current user password
+ *     description: Verifies the current password and sets a new one. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ChangePasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: "Validation error. Possible messages: Current password is required, Password must be at least 8 characters, Password must contain an uppercase letter, Password must contain a lowercase letter, Password must contain a number"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized — missing Bearer token, or current password is incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.post('/change-password', authLimiter, requireAuth, async (req, res, next) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    await changePassword(req.user.id, parsed.data.currentPassword, parsed.data.newPassword);
+    return success(res, null, systemMessages.SUCCESS.AUTH.PASSWORD_CHANGED);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/request-verification:
+ *   post:
+ *     summary: Request an email verification email
+ *     description: Sends a verification email to the authenticated user. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Verification email sent
+ *       400:
+ *         description: Email is already verified
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.post('/request-verification', authLimiter, requireAuth, async (req, res, next) => {
+  try {
+    const profile = await getProfile(req.user.id);
+    if (profile.emailVerifiedAt) {
+      return next(new ValidationError(systemMessages.ERROR.AUTH.EMAIL_ALREADY_VERIFIED));
+    }
+    const result = await requestEmailVerification({ id: profile.id, email: profile.email });
+    return success(res, result, systemMessages.SUCCESS.AUTH.VERIFICATION_SENT);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/verify-email:
+ *   post:
+ *     summary: Verify email with a token
+ *     description: Completes email verification using the token emailed to the user. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Email verification token
+ *             required: [token]
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *       400:
+ *         description: "Validation error. Possible message: Verification token is required"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Invalid or expired verification token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.post('/verify-email', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = verifyEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    await verifyEmail(parsed.data.token);
+    return success(res, null, systemMessages.SUCCESS.AUTH.EMAIL_VERIFIED);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/sessions:
+ *   get:
+ *     summary: List active sessions
+ *     description: Lists all active refresh-token sessions for the authenticated user.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sessions listed successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/sessions', requireAuth, async (req, res, next) => {
+  try {
+    const sessions = await listSessions(req.user.id);
+    return success(res, { sessions });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/sessions/{sessionId}:
+ *   delete:
+ *     summary: Revoke a session
+ *     description: Revokes a specific session by its id, forcing the client to log in again.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           description: Session id (64-char hex refresh-token hash)
+ *     responses:
+ *       200:
+ *         description: Session revoked successfully
+ *       400:
+ *         description: "Validation error. Possible messages: Session id is required, Invalid session id"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.delete('/sessions/:sessionId', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = sessionParamsSchema.safeParse(req.params);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    await revokeSession(req.user.id, parsed.data.sessionId);
+    return success(res, null, systemMessages.SUCCESS.AUTH.SESSION_REVOKED);
   } catch (error) {
     return next(error);
   }

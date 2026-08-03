@@ -8,6 +8,8 @@ import {
 import { constants, systemMessages, logger } from '../../config/index.js';
 import { qrService } from '../tickets/qr.service.js';
 import { sendNotification } from '../notifications/notification.service.js';
+import { getIO } from '../../realtime/socket.js';
+import { emitRegistrationNew } from '../../realtime/rooms.js';
 
 const msg = systemMessages.ERROR;
 const EVENT_OPEN_STATUSES = [
@@ -286,6 +288,17 @@ async function completeRegistration(event, registration, ticketTypeName) {
     ticketTypeName,
   });
   await writeRegistrationAudit(registration, event);
+
+  try {
+    emitRegistrationNew(getIO(), event.id, {
+      registrationId: registration.id,
+      attendeeName: registration.attendeeName,
+      attendeeEmail: registration.attendeeEmail,
+      ticketTypeId: registration.ticketTypeId || null,
+    });
+  } catch (err) {
+    logger.warn({ err, eventId: event.id }, 'failed to emit registration:new');
+  }
 
   return {
     registration: publicRegistrationResponse({

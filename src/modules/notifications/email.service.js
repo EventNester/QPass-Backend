@@ -21,6 +21,7 @@ const TEMPLATE_MAP = {
   staff: 'staff-invite.ejs',
   'staff-invite': 'staff-invite.ejs',
   'password-reset': 'password-reset.ejs',
+  'email-verification': 'email-verification.ejs',
   'import-summary': 'import-summary.ejs',
 };
 
