@@ -21,6 +21,7 @@ const TEMPLATE_MAP = {
   staff: 'staff-invite.ejs',
   'staff-invite': 'staff-invite.ejs',
   'password-reset': 'password-reset.ejs',
+  'email-verification': 'email-verification.ejs',
   'import-summary': 'import-summary.ejs',
 };
 
@@ -109,6 +110,16 @@ export async function sendEmail({ to, subject, template, context = {}, text, htm
   }
 
   const maskedTo = maskRecipient(to);
+
+  if (!isBrevoConfigured()) {
+    logger.warn({ to: maskedTo, subject }, 'Brevo API not configured — email not sent');
+    return {
+      success: true,
+      messageId: null,
+      info: null,
+      previewUrl: null,
+    };
+  }
 
   try {
     let renderedHtml = html;

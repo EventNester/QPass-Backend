@@ -3,6 +3,8 @@ import prisma from '../../database/index.js';
 import { ConflictError, UnauthorizedError } from '../../utils/error.js';
 import { getRedisClient } from '../../config/redis.js';
 import { systemMessages } from '../../config/index.js';
+import { writeAuditLog } from '../../utils/audit-log.js';
+import { revokeAllSessions } from './session.service.js';
 import {
   signAccessToken,
   signRefreshToken,
@@ -79,6 +81,13 @@ export async function registerUser({ name, email, passwordHash, role }) {
         where: { id: existing.id },
         data: { deletedAt: null, name, passwordHash, role },
       });
+      writeAuditLog({
+        actorId: user.id,
+        action: 'USER_REACTIVATED',
+        entity: 'User',
+        entityId: user.id,
+        afterSnapshot: { role: user.role },
+      });
       return user;
     }
     throw new ConflictError(systemMessages.ERROR.AUTH.ALREADY_EXISTS);
@@ -86,6 +95,14 @@ export async function registerUser({ name, email, passwordHash, role }) {
 
   const user = await prisma.user.create({
     data: { name, email, passwordHash, role },
+  });
+
+  writeAuditLog({
+    actorId: user.id,
+    action: 'USER_REGISTERED',
+    entity: 'User',
+    entityId: user.id,
+    afterSnapshot: { role: user.role },
   });
 
   return user;
@@ -101,6 +118,14 @@ export async function authenticateUser(email, plainPassword) {
   if (!isMatch) {
     throw new UnauthorizedError(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
   }
+
+  writeAuditLog({
+    actorId: user.id,
+    action: 'USER_LOGIN',
+    entity: 'User',
+    entityId: user.id,
+    afterSnapshot: { role: user.role },
+  });
 
   return user;
 }
@@ -122,4 +147,92 @@ export async function isTokenBlacklisted(token) {
   const redis = getRedisClient();
   const result = await redis.get(`blacklist:refresh:${token}`);
   return result !== null;
+}
+
+function publicProfile(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    emailVerifiedAt: user.emailVerifiedAt,
+    lastLoginAt: user.lastLoginAt,
+    createdAt: user.createdAt,
+  };
+}
+
+export async function getProfile(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
+  }
+
+  return publicProfile(user);
+}
+
+export async function updateProfile(userId, { name, phone }) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(name !== undefined && name !== user.name ? { name } : {}),
+      ...(phone !== undefined && (phone === '' ? null : phone) !== user.phone
+        ? { phone: phone === '' ? null : phone }
+        : {}),
+    },
+  });
+
+  writeAuditLog({
+    actorId: userId,
+    action: 'USER_PROFILE_UPDATED',
+    entity: 'User',
+    entityId: userId,
+    beforeSnapshot: { name: user.name, phone: user.phone },
+    afterSnapshot: { name: updated.name, phone: updated.phone },
+  });
+
+  return publicProfile(updated);
+}
+export async function changePassword(userId, currentPassword, newPassword) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
+  }
+
+  const isMatch = await comparePassword(currentPassword, user.passwordHash);
+  if (!isMatch) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.CURRENT_PASSWORD_INVALID);
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+
+  await revokeAllSessions(userId);
+
+  writeAuditLog({
+    actorId: userId,
+    action: 'PASSWORD_CHANGED',
+    entity: 'User',
+    entityId: userId,
+  });
+
+  return { success: true };
 }

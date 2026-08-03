@@ -1,6 +1,7 @@
 import prisma from "../../database/index.js";
 import { NotFoundError, ForbiddenError, ConflictError, BadRequestError } from "../../utils/error.js";
 import { systemMessages } from "../../config/index.js";
+import { writeAuditLog } from "../../utils/audit-log.js";
 
 const msg = systemMessages.ERROR;
 
@@ -46,6 +47,14 @@ export async function createTicketType(eventId, userId, data) {
         });
       });
 
+      writeAuditLog({
+        actorId: userId,
+        action: 'TICKET_TYPE_CREATED',
+        entity: 'TicketType',
+        entityId: ticketType.id,
+        afterSnapshot: { eventId, name: ticketType.name, price: ticketType.price, isPaid: ticketType.isPaid },
+      });
+
       return ticketType;
     } catch (err) {
       if (err.code === 'P2002' && attempt < MAX_RETRIES - 1) {
@@ -83,13 +92,22 @@ export async function updateTicketType(eventId, ticketTypeId, userId, data) {
     data,
   });
 
+  writeAuditLog({
+    actorId: userId,
+    action: 'TICKET_TYPE_UPDATED',
+    entity: 'TicketType',
+    entityId: ticketTypeId,
+    beforeSnapshot: { name: ticketType.name, price: ticketType.price, isPaid: ticketType.isPaid, capacity: ticketType.capacity, active: ticketType.active },
+    afterSnapshot: { name: updated.name, price: updated.price, isPaid: updated.isPaid, capacity: updated.capacity, active: updated.active },
+  });
+
   return updated;
 }
 
 export async function deleteTicketType(eventId, ticketTypeId, userId) {
   await checkEventOwnership(eventId, userId);
 
-  await prisma.$transaction(async (tx) => {
+  const deletedTicketType = await prisma.$transaction(async (tx) => {
     const ticketType = await tx.ticketType.findFirst({
       where: { id: ticketTypeId, eventId },
     });
@@ -102,12 +120,21 @@ export async function deleteTicketType(eventId, ticketTypeId, userId) {
       await tx.ticketType.delete({
         where: { id: ticketTypeId },
       });
+      return ticketType;
     } catch (err) {
       if (err.code === 'P2003') {
         throw new ConflictError("Cannot delete ticket type with existing registrations");
       }
       throw err;
     }
+  });
+
+  writeAuditLog({
+    actorId: userId,
+    action: 'TICKET_TYPE_DELETED',
+    entity: 'TicketType',
+    entityId: ticketTypeId,
+    beforeSnapshot: { eventId, name: deletedTicketType.name, price: deletedTicketType.price, isPaid: deletedTicketType.isPaid },
   });
 
   return true;

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { randomBytes } from 'node:crypto';
 import app from '../../app.js';
@@ -64,10 +64,6 @@ describe('Attendee Import API Integration Tests', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ name: 'Standard', price: 0 });
     ticketTypeId = ticketRes.body.data.id;
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   describe('POST /api/v1/events/:eventId/import', () => {

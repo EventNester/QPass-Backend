@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import app from '../../app.js';
@@ -94,9 +94,6 @@ describe('Public Registration API Integration Tests', () => {
       .set('Authorization', `Bearer ${organizerToken}`);
   });
 
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
 
   describe('GET /api/v1/e/:slug', () => {
     it('should return 200 with event and ticket types without auth', async () => {
