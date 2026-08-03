@@ -34,6 +34,7 @@ export async function forgotPassword(email) {
       await redis.del(`${REDIS_PREFIX}${resetToken}`);
     } catch { /* ignore cleanup error */ }
     logger.error({ err: emailResult.error || 'unknown' }, 'Password reset email failed to send');
+    return process.env.NODE_ENV === 'production' ? {} : { success: false, error: emailResult.error || 'Failed to send reset email' };
   }
   return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }
