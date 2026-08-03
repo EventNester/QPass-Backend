@@ -5,7 +5,8 @@ const mRedis = {
   set: vi.fn(),
   get: vi.fn(),
   del: vi.fn(),
-  keys: vi.fn(),
+  getdel: vi.fn(),
+  scan: vi.fn(),
   exists: vi.fn(),
 };
 
@@ -21,9 +22,11 @@ vi.mock('../../../config/redis.js', () => ({
 import {
   recordSession,
   hasActiveSession,
+  consumeSession,
   deleteSession,
   listSessions,
   revokeSession,
+  revokeAllSessions,
 } from '../session.service.js';
 
 describe('Session Service', () => {
@@ -77,6 +80,33 @@ describe('Session Service', () => {
     expect(active).toBe(false);
   });
 
+  it('consumeSession removes the session key atomically and returns true', async () => {
+    mRedis.getdel.mockResolvedValue('{"userAgent":null}');
+
+    const consumed = await consumeSession('user-1', 'refresh-token-abc');
+
+    expect(consumed).toBe(true);
+    expect(mRedis.getdel).toHaveBeenCalledWith(
+      `session:user-1:${hashToken('refresh-token-abc')}`
+    );
+  });
+
+  it('consumeSession returns false when the session is already gone', async () => {
+    mRedis.getdel.mockResolvedValue(null);
+
+    const consumed = await consumeSession('user-1', 'refresh-token-abc');
+
+    expect(consumed).toBe(false);
+  });
+
+  it('consumeSession returns false on Redis error', async () => {
+    mRedis.getdel.mockRejectedValue(new Error('redis down'));
+
+    const consumed = await consumeSession('user-1', 'refresh-token-abc');
+
+    expect(consumed).toBe(false);
+  });
+
   it('deleteSession removes the session key', async () => {
     await deleteSession('user-1', 'refresh-token-abc');
 
@@ -84,7 +114,7 @@ describe('Session Service', () => {
   });
 
   it('listSessions returns parsed sessions newest first', async () => {
-    mRedis.keys.mockResolvedValue(['session:user-1:aaa', 'session:user-1:bbb']);
+    mRedis.scan.mockResolvedValue(['0', ['session:user-1:aaa', 'session:user-1:bbb']]);
     mRedis.get.mockImplementation(async (key) => {
       if (key.endsWith('aaa')) {
         return JSON.stringify({ userAgent: 'a', createdAt: '2026-01-01T00:00:00.000Z', expiresAt: '2026-01-08T00:00:00.000Z' });
@@ -100,7 +130,7 @@ describe('Session Service', () => {
   });
 
   it('listSessions tolerates unparseable metadata', async () => {
-    mRedis.keys.mockResolvedValue(['session:user-1:ccc']);
+    mRedis.scan.mockResolvedValue(['0', ['session:user-1:ccc']]);
     mRedis.get.mockResolvedValue('not-json');
 
     const sessions = await listSessions('user-1');
@@ -110,9 +140,38 @@ describe('Session Service', () => {
     expect(sessions[0].userAgent).toBeNull();
   });
 
+  it('listSessions iterates SCAN until the cursor returns to zero', async () => {
+    mRedis.scan
+      .mockResolvedValueOnce(['17', ['session:user-1:aaa']])
+      .mockResolvedValueOnce(['0', ['session:user-1:bbb']]);
+    mRedis.get.mockResolvedValue(JSON.stringify({}));
+
+    const sessions = await listSessions('user-1');
+
+    expect(sessions).toHaveLength(2);
+    expect(mRedis.scan).toHaveBeenCalledTimes(2);
+  });
+
+  it('listSessions returns an empty list on Redis error', async () => {
+    mRedis.scan.mockRejectedValue(new Error('redis down'));
+
+    const sessions = await listSessions('user-1');
+
+    expect(sessions).toEqual([]);
+  });
+
   it('revokeSession removes the session key', async () => {
     await revokeSession('user-1', 'session-hash-123');
 
     expect(mRedis.del).toHaveBeenCalledWith('session:user-1:session-hash-123');
+  });
+
+  it('revokeAllSessions deletes every session but the excluded one', async () => {
+    mRedis.scan.mockResolvedValue(['0', ['session:user-1:keep', 'session:user-1:drop']]);
+
+    await revokeAllSessions('user-1', 'keep');
+
+    expect(mRedis.del).toHaveBeenCalledWith('session:user-1:drop');
+    expect(mRedis.del).not.toHaveBeenCalledWith('session:user-1:keep');
   });
 });

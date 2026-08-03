@@ -27,8 +27,8 @@ function sanitizeObject(obj) {
  * never altered.
  */
 export function sanitizeBody(req, _res, next) {
-  if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
-    req.body = sanitizeObject(req.body);
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeValue(req.body);
   }
   next();
 }

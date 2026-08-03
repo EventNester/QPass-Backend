@@ -47,7 +47,7 @@ export const createEvent = async (eventData, ownerId) => {
         },
       });
 
-      await writeAuditLog({
+      writeAuditLog({
         actorId: ownerId,
         action: 'EVENT_CREATED',
         entity: 'Event',
@@ -167,7 +167,7 @@ export const updateEvent = async (
   }
 
   if (before) {
-    await writeAuditLog({
+    writeAuditLog({
       actorId: ownerId,
       action: 'EVENT_UPDATED',
       entity: 'Event',
@@ -214,7 +214,7 @@ export const deleteEvent = async (
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: ownerId,
     action: 'EVENT_DELETED',
     entity: 'Event',
@@ -279,7 +279,7 @@ export const publishEvent = async (
     );
   }
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: ownerId,
     action: 'EVENT_PUBLISHED',
     entity: 'Event',
@@ -349,7 +349,7 @@ export const cancelEvent = async (
     throw new ValidationError(msg.EVENT.ALREADY_CANCELLED);
   }
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: ownerId,
     action: 'EVENT_CANCELLED',
     entity: 'Event',

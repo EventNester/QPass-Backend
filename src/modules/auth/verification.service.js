@@ -55,6 +55,11 @@ export async function verifyEmail(token) {
     throw new UnauthorizedError(systemMessages.ERROR.AUTH.VERIFY_TOKEN_INVALID);
   }
 
+  const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+  if (!existingUser || existingUser.deletedAt) {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.VERIFY_TOKEN_INVALID);
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: { emailVerifiedAt: new Date() },

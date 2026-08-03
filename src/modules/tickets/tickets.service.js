@@ -47,7 +47,7 @@ export async function createTicketType(eventId, userId, data) {
         });
       });
 
-      await writeAuditLog({
+      writeAuditLog({
         actorId: userId,
         action: 'TICKET_TYPE_CREATED',
         entity: 'TicketType',
@@ -92,13 +92,13 @@ export async function updateTicketType(eventId, ticketTypeId, userId, data) {
     data,
   });
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: userId,
     action: 'TICKET_TYPE_UPDATED',
     entity: 'TicketType',
     entityId: ticketTypeId,
     beforeSnapshot: { name: ticketType.name, price: ticketType.price, isPaid: ticketType.isPaid, capacity: ticketType.capacity, active: ticketType.active },
-    afterSnapshot: { ...data },
+    afterSnapshot: { name: updated.name, price: updated.price, isPaid: updated.isPaid, capacity: updated.capacity, active: updated.active },
   });
 
   return updated;
@@ -129,7 +129,7 @@ export async function deleteTicketType(eventId, ticketTypeId, userId) {
     }
   });
 
-  await writeAuditLog({
+  writeAuditLog({
     actorId: userId,
     action: 'TICKET_TYPE_DELETED',
     entity: 'TicketType',

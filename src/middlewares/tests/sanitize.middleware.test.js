@@ -29,6 +29,13 @@ describe('sanitizeBody', () => {
     expect(body.password).toBe('  Secret123  ');
   });
 
+  it('sanitizes objects inside a top-level array', () => {
+    const body = run(JSON.parse('[{"ok":true,"__proto__":{"polluted":true}}]'));
+
+    expect(body[0].ok).toBe(true);
+    expect(Object.hasOwn(body[0], '__proto__')).toBe(false);
+  });
+
   it('passes arrays through unchanged', () => {
     const body = run({ tags: ['a', 'b'] });
 

@@ -26,7 +26,7 @@ vi.mock('../../../utils/email.js', () => ({
 
 vi.mock('../../../database/index.js', () => ({
   default: {
-    user: { update: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn() },
   },
 }));
 
@@ -70,6 +70,7 @@ describe('Email Verification Service', () => {
 
   it('verifyEmail sets emailVerifiedAt and consumes the token', async () => {
     mRedis.get.mockResolvedValue('user-1');
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'ada@example.com', deletedAt: null });
     prisma.user.update.mockResolvedValue({ id: 'user-1', emailVerifiedAt: new Date() });
 
     const updated = await verifyEmail('valid-token');

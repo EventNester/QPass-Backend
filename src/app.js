@@ -13,8 +13,8 @@ const config = getConfig();
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: parseCorsOrigins(config.CORS_ORIGIN), credentials: true }));
-app.use(globalLimiter);
+const corsOrigins = parseCorsOrigins(config.CORS_ORIGIN);
+app.use(cors({ origin: corsOrigins, credentials: corsOrigins !== "*" }));app.use(globalLimiter);
 app.use(httpLogger);
 app.use(express.json());
 app.use(sanitizeBody);

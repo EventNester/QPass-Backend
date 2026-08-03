@@ -18,7 +18,12 @@ vi.mock('../../../utils/audit-log.js', () => ({
 }));
 
 vi.mock('../../../config/redis.js', () => ({
-  getRedisClient: vi.fn(() => ({ set: vi.fn(), get: vi.fn() })),
+  getRedisClient: vi.fn(() => ({
+    set: vi.fn(),
+    get: vi.fn(),
+    scan: vi.fn().mockResolvedValue(['0', []]),
+    del: vi.fn(),
+  })),
 }));
 
 vi.mock('bcryptjs', () => ({

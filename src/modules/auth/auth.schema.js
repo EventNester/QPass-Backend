@@ -67,11 +67,11 @@ export const changePasswordSchema = z.object({
   newPassword: z
     .string()
     .min(8, v.PASSWORD_MIN)
+    .max(128, v.PASSWORD_MAX)
     .regex(/[a-z]/, v.PASSWORD_LOWERCASE)
     .regex(/[A-Z]/, v.PASSWORD_UPPERCASE)
     .regex(/\d/, v.PASSWORD_NUMBER),
 });
-
 export const verifyEmailSchema = z.object({
   token: z.string().min(1, v.VERIFY_TOKEN_REQUIRED),
 });
