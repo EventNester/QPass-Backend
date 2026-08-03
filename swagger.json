@@ -1039,6 +1039,47 @@
           }
         }
       },
+      "DashboardStats": {
+        "type": "object",
+        "properties": {
+          "registrations": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "confirmed": { "type": "integer" },
+              "pending": { "type": "integer" },
+              "cancelled": { "type": "integer" }
+            }
+          },
+          "checkins": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "valid": { "type": "integer" },
+              "duplicate": { "type": "integer" }
+            }
+          },
+          "noShows": { "type": "integer" },
+          "capacity": {
+            "type": "object",
+            "properties": {
+              "max": { "type": "integer", "nullable": true },
+              "utilization": { "type": "integer", "nullable": true }
+            }
+          },
+          "ticketBreakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ticketType": { "type": "string" },
+                "sold": { "type": "integer" },
+                "checkedIn": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
       "CheckIn": {
         "type": "object",
         "properties": {
@@ -1181,7 +1222,42 @@
           "entityId": { "type": "string" },
           "beforeSnapshot": { "type": "object" },
           "afterSnapshot": { "type": "object" },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "createdAt": { "type": "string", "format": "date-time" },
+          "actor": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "email": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          }
+        }
+      },
+      "AuditLogListResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "message": { "type": "string" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "auditLogs": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/AuditLog" }
+              },
+              "pagination": {
+                "type": "object",
+                "properties": {
+                  "page": { "type": "integer" },
+                  "limit": { "type": "integer" },
+                  "total": { "type": "integer" },
+                  "totalPages": { "type": "integer" }
+                }
+              }
+            }
+          }
         }
       },
       "EventStaffAssignment": {

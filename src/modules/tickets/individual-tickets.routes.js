@@ -27,12 +27,45 @@ const router = Router({ mergeParams: true });
  *     responses:
  *       200:
  *         description: Ticket details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/TicketDetailResponse'
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden
+ *         description: Forbidden — caller is not the ticket owner or event owner
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Not found
+ *         description: Ticket not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid ticket ID format"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/:ticketId", requireAuth, getTicketController);
 
@@ -62,11 +95,35 @@ router.get("/:ticketId", requireAuth, getTicketController);
  *               type: string
  *               format: binary
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Forbidden
+ *         description: Forbidden — caller is not the ticket owner or event owner
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Not found
+ *         description: Ticket not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid ticket ID format"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/:ticketId/download", requireAuth, downloadTicketPdfController);
 

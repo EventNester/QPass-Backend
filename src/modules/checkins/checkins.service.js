@@ -95,6 +95,20 @@ export async function scanQr(eventId, data, staffId) {
             data: { scanCount: { increment: 1 }, revokedAt: new Date() },
           });
 
+          await tx.auditLog.create({
+            data: {
+              actorId: staffId,
+              action: "CHECKIN_VALID",
+              entity: "CheckIn",
+              entityId: checkin.id,
+              afterSnapshot: {
+                tokenHash,
+                restored: true,
+                scannedAt: new Date().toISOString(),
+              },
+            },
+          });
+
           return checkin;
         });
 
@@ -121,6 +135,19 @@ export async function scanQr(eventId, data, staffId) {
           await tx.qrToken.update({
             where: { id: qrToken.id },
             data: { scanCount: { increment: 1 }, revokedAt: new Date() },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              actorId: staffId,
+              action: "CHECKIN_VALID",
+              entity: "CheckIn",
+              entityId: created.id,
+              afterSnapshot: {
+                tokenHash,
+                scannedAt: new Date().toISOString(),
+              },
+            },
           });
 
           return created;

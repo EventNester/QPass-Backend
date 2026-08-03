@@ -5,7 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 
-  CORS_ORIGIN: z.string().default("*"),
+  CORS_ORIGIN: z.string().default("http://localhost:3000"),
   SWAGGER_ENABLED: z
     .enum(["true", "false"])
     .default("true")
@@ -27,7 +27,7 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 
-  SOCKET_CORS_ORIGIN: z.string().default("*"),
+  SOCKET_CORS_ORIGIN: z.string().default("http://localhost:3000"),
 
   PAYSTACK_SECRET_KEY: z.string().optional().default(""),
   PAYSTACK_PUBLIC_KEY: z.string().optional().default(""),
