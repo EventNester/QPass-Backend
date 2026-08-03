@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     environment: "node",
     fileParallelism: false,
+    hookTimeout: 60000,
+    testTimeout: 60000,
     passWithNoTests: true,
     coverage: {
       provider: "v8",

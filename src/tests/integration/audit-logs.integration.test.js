@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
@@ -98,10 +98,6 @@ describe('Audit Log Trail Integration Tests', () => {
     await request(app)
       .post(`/api/v1/checkins/${eventId}/checkins/${checkinId}/undo`)
       .set('Authorization', `Bearer ${organizerToken}`);
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   describe('audit log entries are written', () => {
