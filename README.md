@@ -154,7 +154,7 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Tag | Operations | Notes |
 |-----|:----------:|-------|
 | Health | 1 | `GET /health` (public) |
-| Auth | 6 | register, login, refresh, logout, forgot-password, reset-password |
+| Auth | 13 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, sessions |
 | Events | 7 | CRUD + publish + cancel |
 | Ticket Types | 4 | per-event CRUD |
 | Tickets | 4 | event ticket list/export + individual ticket/PDF |
@@ -164,7 +164,7 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Checkins | 3 | scan, list, undo |
 | Reports | 3 | dashboard + registrations/attendance exports |
 | Admin | 1 | audit logs |
-| **Total** | **38** | **31 paths** across 11 tags |
+| **Total** | **45** | **37 paths** across 11 tags |
 
 See [docs/QPASS_API_DOC.md](./docs/QPASS_API_DOC.md) for the full reference and [SWAGGER_UI_TESTING.md](./SWAGGER_UI_TESTING.md) for a manual test walkthrough.
 

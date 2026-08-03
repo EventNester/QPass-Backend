@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
-import prisma from '../../database/index.js';
 import { cleanDatabase } from '../helpers/cleanup.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
@@ -100,10 +99,6 @@ describe('Export Endpoints Integration Tests', () => {
       .set('Authorization', `Bearer ${organizerToken}`)
       .send({ token: rawTokenA });
     expect(scanRes.status).toBe(200);
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   describe('GET /api/v1/events/:eventId/exports/registrations', () => {

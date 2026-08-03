@@ -2,7 +2,7 @@
 
 - **Base URL:** `http://localhost:3000`
 - **Version:** v1 (all endpoints under `/api/v1` unless noted)
-- **Counts:** 11 tags, 31 paths, 38 operations
+- **Counts:** 11 tags, 37 paths, 45 operations
 - **Live docs:** Swagger UI at `http://localhost:3000/api-docs` (serves the same OpenAPI 3 spec that this document summarizes)
 
 All responses use the envelope:
@@ -43,7 +43,7 @@ Organizers can only access their own resources unless they have the `ADMIN` role
 ## Rate Limiting
 
 - **Global:** 100 requests / 15 min per IP (applied to all endpoints)
-- **Auth endpoints:** 5 requests / 15 min per IP (`register`, `login`, `forgot-password`, `reset-password`)
+- **Auth endpoints:** 5 requests / 15 min per IP (`register`, `login`, `refresh`, `forgot-password`, `reset-password`, `change-password`, `request-verification`, `verify-email`)
 
 Rate-limited requests receive a `429 Too Many Requests` response.
 
@@ -188,6 +188,91 @@ Reset the password using the token from the reset email. Rate limit: 5 / 15 min.
 **Response `200`:** `{ "status": "success", "message": "Password reset successful", "data": null }`
 
 **Response `401`:** invalid or expired reset token
+
+---
+
+#### `GET /api/v1/auth/me`
+
+Get the authenticated user's profile.
+
+**Auth:** Authenticated
+
+**Response `200`:** `{ "status": "success", "data": { "id": "...", "name": "...", "email": "...", "role": "...", "phone": null, "emailVerifiedAt": null, "createdAt": "..." } }`
+
+---
+
+#### `PATCH /api/v1/auth/me`
+
+Update the authenticated user's profile (`name`, `phone`). Empty `phone` clears it.
+
+**Auth:** Authenticated
+
+**Body:** `{ "name": "John Doe", "phone": "080..." }`
+
+**Response `200`:** `{ "status": "success", "message": "Profile updated successfully", "data": { "id": "...", "name": "...", "email": "...", "role": "...", "phone": "080...", "emailVerifiedAt": null, "createdAt": "..." } }`
+**Response `422`:** invalid phone / name too long
+
+---
+
+#### `POST /api/v1/auth/change-password`
+
+Change the current password. Rate limit: 5 / 15 min.
+
+**Auth:** Authenticated
+
+**Body:** `{ "currentPassword": "...", "newPassword": "NewSecurePass123" }`
+
+**Response `200`:** `{ "status": "success", "message": "Password changed successfully", "data": null }`
+
+**Response `401`:** current password is incorrect
+
+---
+
+#### `POST /api/v1/auth/request-verification`
+
+Send an email verification email to the authenticated user. In non-production environments the raw verify token is returned for local testing. Rate limit: 5 / 15 min.
+
+**Auth:** Authenticated
+
+**Response `200`:** `{ "status": "success", "message": "Verification email sent", "data": { "verifyToken": "<non-production only>" } }`
+
+**Response `400`:** email already verified
+
+---
+
+#### `POST /api/v1/auth/verify-email`
+
+Complete email verification using the token from the verification email. Rate limit: 5 / 15 min.
+
+**Auth:** No
+
+**Body:** `{ "token": "..." }`
+
+**Response `200`:** `{ "status": "success", "message": "Email verified successfully", "data": null }`
+
+**Response `401`:** invalid or expired verification token
+
+---
+
+#### `GET /api/v1/auth/sessions`
+
+List the authenticated user's active sessions.
+
+**Auth:** Authenticated
+
+**Response `200`:** `{ "status": "success", "data": { "sessions": [ { "id": "<64-char session id>", "userAgent": "...", "createdAt": "...", "expiresAt": "..." } ] } }`
+
+---
+
+#### `DELETE /api/v1/auth/sessions/{sessionId}`
+
+Revoke a specific session. The `sessionId` is the 64-char SHA-256 hash of the refresh token.
+
+**Auth:** Authenticated
+
+**Response `200`:** `{ "status": "success", "message": "Session revoked successfully", "data": null }`
+
+**Response `400`:** invalid session id
 
 ---
 

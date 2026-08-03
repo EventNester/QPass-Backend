@@ -46,3 +46,25 @@ export async function sendPasswordResetEmail(email, resetToken) {
     context,
   });
 }
+
+export async function sendEmailVerification(email, verifyToken) {
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl && process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
+    throw new Error('FRONTEND_URL is required in production');
+  }
+  const verifyUrl = `${frontendUrl || 'http://localhost:3000'}/verify-email?token=${verifyToken}`;
+
+  const subject = 'QPass - Verify Your Email';
+  const context = {
+    name: email.split('@')[0],
+    verifyUrl,
+    expiresIn: '15 minutes',
+  };
+
+  return sendNotification({
+    recipient: email,
+    subject,
+    template: 'email-verification',
+    context,
+  });
+}

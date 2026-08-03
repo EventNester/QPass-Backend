@@ -89,11 +89,7 @@ describe('Event Tickets (Registrations) API Integration Tests', () => {
   }, 30000);
 
   afterAll(async () => {
-    try {
-      await cleanDatabase();
-    } finally {
-      await prisma.$disconnect();
-    }
+    await cleanDatabase();
   });
   describe('GET /api/v1/events/:eventId/tickets', () => {
     it('should list event tickets for the owner', async () => {

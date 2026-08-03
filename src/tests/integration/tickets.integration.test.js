@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
-import prisma from '../../database/index.js';
 import { cleanDatabase } from '../helpers/cleanup.js';
 
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
@@ -53,11 +52,7 @@ describe('Tickets API Integration Tests', () => {
   }, 30000);
 
   afterAll(async () => {
-    try {
-      await cleanDatabase();
-    } finally {
-      await prisma.$disconnect();
-    }
+    await cleanDatabase();
   });
 
   describe('POST /api/v1/events/:eventId/ticket-types', () => {

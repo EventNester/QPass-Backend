@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { randomBytes } from 'crypto';
 import app from '../../app.js';
@@ -101,9 +101,6 @@ describe('Checkins API Integration Tests', () => {
     });
   });
 
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
 
   describe('POST /api/v1/checkins/:eventId/scan', () => {
     it('should return 401 without auth', async () => {

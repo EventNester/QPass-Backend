@@ -32,7 +32,6 @@ describe('Notification Service Integration Tests', () => {
     await prisma.notification.deleteMany({
       where: { recipient: testRecipient },
     });
-    await prisma.$disconnect();
   });
 
   it('should send registration notification and track SENT status in database', async () => {
