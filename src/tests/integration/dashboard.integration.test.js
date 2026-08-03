@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { randomBytes } from 'crypto';
 import app from '../../app.js';
@@ -134,10 +134,6 @@ describe('Dashboard Stats API Integration Tests', () => {
     await prisma.eventStaffAssignment.create({
       data: { eventId, userId: staffUserId, permissionScope: 'SCANNER' },
     });
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   describe('GET /api/v1/events/:id/dashboard', () => {

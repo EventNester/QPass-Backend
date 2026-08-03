@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../app.js';
 import prisma from '../../database/index.js';
@@ -33,10 +33,6 @@ describe('Auth API Integration Tests', () => {
     await prisma.eventStaffAssignment.deleteMany();
     await prisma.event.deleteMany();
     await prisma.user.deleteMany();
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   describe('POST /api/v1/auth/register', () => {
