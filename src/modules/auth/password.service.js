@@ -22,12 +22,16 @@ export async function forgotPassword(email) {
 
   await redis.set(`${REDIS_PREFIX}${resetToken}`, user.id, 'EX', RESET_TOKEN_TTL_SECONDS);
 
-  sendPasswordResetEmail(user.email, resetToken).catch(async (err) => {
-    logger.error({ err: err.message }, 'Password reset email send failed');
+  const emailResult = await sendPasswordResetEmail(user.email, resetToken).catch(async (err) => {
     try {
       await redis.del(`${REDIS_PREFIX}${resetToken}`);
     } catch { /* ignore cleanup error */ }
+    return { success: false, error: err.message };
   });
+
+  if (emailResult && emailResult.success === false) {
+    logger.error({ err: emailResult.error || 'unknown' }, 'Password reset email failed to send');
+  }
 
   return process.env.NODE_ENV === 'production' ? {} : { resetToken };
 }

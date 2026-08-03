@@ -11,6 +11,9 @@ import {
   publicEventRouter,
   publicRegistrationRouter,
 } from "../modules/registrations/public.routes.js";
+import reportDashboardRoutes from "../modules/reports/dashboard.routes.js";
+import reportExportRoutes from "../modules/reports/export.routes.js";
+import auditRoutes from "../modules/admin/audit.routes.js";
 
 const router = Router();
 
@@ -20,9 +23,12 @@ router.use("/events/:eventId/tickets", eventTicketsRouter);
 router.use("/tickets", individualTicketsRouter);
 router.use("/events", importRoutes);
 router.use("/events", staffRoutes);
+router.use("/events", reportDashboardRoutes);
+router.use("/events", reportExportRoutes);
 
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);
+router.use("/audit-logs", auditRoutes);
 
 // Public registration flow (no auth): GET /e/:slug, POST /registrations/free
 router.use("/e", publicEventRouter);

@@ -182,6 +182,47 @@ describe('Checkins API Integration Tests', () => {
       expect(response.body.data.result).toBe('INVALID');
     });
 
+    it('should return 200 with EXPIRED result for an expired QR token', async () => {
+      const expiredTicketCode = await prisma.ticketCode.create({
+        data: {
+          eventId,
+          code: `TICKET-${randomBytes(4).toString('hex').toUpperCase()}`,
+          attendeeEmail: 'expired@example.com',
+          attendeeName: 'Expired Attendee',
+        },
+      });
+
+      const expiredReg = await prisma.registration.create({
+        data: {
+          eventId,
+          ticketCodeId: expiredTicketCode.id,
+          attendeeEmail: 'expired@example.com',
+          attendeeName: 'Expired Attendee',
+          source: 'IMPORT',
+          status: 'CONFIRMED',
+        },
+      });
+
+      const expiredRawToken = randomBytes(32).toString('hex');
+
+      await prisma.qrToken.create({
+        data: {
+          registrationId: expiredReg.id,
+          tokenHash: hashToken(expiredRawToken),
+          expiresAt: new Date(Date.now() - 60000),
+        },
+      });
+
+      const response = await request(app)
+        .post(`/api/v1/checkins/${eventId}/scan`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({ token: expiredRawToken });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('success');
+      expect(response.body.data.result).toBe('EXPIRED');
+    });
+
     it('should return 200 with WRONG_EVENT result for wrong event', async () => {
       const wrongEventRes = await request(app)
         .post('/api/v1/events')

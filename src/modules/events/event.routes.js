@@ -73,6 +73,12 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 // Publish Event
 router.post(
@@ -133,6 +139,12 @@ router.post(
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 // Cancel Event
 router.post(
@@ -171,6 +183,12 @@ router.post(
  *         description: Unauthorized
  *       403:
  *         description: Forbidden — caller must be ORGANIZER or ADMIN
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post(
   "/",
@@ -231,6 +249,12 @@ router.post(
  *         description: Forbidden — caller must be ORGANIZER or ADMIN
  *       422:
  *         description: Validation error
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get(
   "/",
@@ -275,6 +299,12 @@ router.get(
  *         description: Event not found
  *       422:
  *         description: Invalid event ID format
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get(
   "/:id",
@@ -323,6 +353,12 @@ router.get(
  *         description: Event not found
  *       422:
  *         description: "Validation error. Possible messages: Invalid event ID format"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.patch(
   "/:id",
@@ -360,6 +396,12 @@ router.patch(
  *         description: Event not found
  *       422:
  *         description: Invalid event ID format
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete(
   "/:id",
