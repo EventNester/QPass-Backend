@@ -2,7 +2,7 @@
 
 > Developer-facing step-by-step plan. Each task lists exact files to create/edit, what goes in them, and dependencies. Follow in order within each phase.
 
-> **Status:** The build is complete. This guide is the historical construction plan; for the current, finished state see `README.md`, `Architecture.md`, and `docs/QPASS_API_DOC.md`. The steps below reflect the plan as executed.
+> **Status:** The build is complete. This guide is the historical construction plan; for the current, finished state see `../README.md`, `../ARCHITECTURE.md`, and `./QPASS_API_DOC.md`. The steps below reflect the plan as executed.
 
 ---
 
@@ -1021,7 +1021,7 @@ Final checklist before release:
 - [ ] Unit tests pass for: auth, QR, import, PDF
 - [ ] Integration tests pass for: auth, events, registrations, check-ins
 - [ ] `npm run lint` clean
-- [ ] Deployed to Render, health check returns 200
+- [ ] Deployed to Railway, health check returns 200
 - [ ] Security pass complete
 
 ---

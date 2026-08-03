@@ -118,7 +118,7 @@ Create a new user account. Default role is `ATTENDEE`. An optional `role` of `AT
 **Response `201`:**
 
 ```json
-{ "user": { "id": "...", "name": "John Doe", "email": "john@example.com", "role": "ORGANIZER" }, "accessToken": "...", "refreshToken": "..." }
+{ "data": { "user": { "id": "...", "name": "John Doe", "email": "john@example.com", "role": "ORGANIZER" }, "accessToken": "...", "refreshToken": "..." } }
 ```
 
 ---
@@ -131,7 +131,7 @@ Authenticate and receive tokens. Rate limit: 5 / 15 min.
 
 **Body:** `{ "email": "john@example.com", "password": "SecurePass123" }`
 
-**Response `200`:** same shape as register (`user` + `accessToken` + `refreshToken`)
+**Response `200`:** same shape as register (`data.user` + `data.accessToken` + `data.refreshToken`)
 
 **Response `401`:** invalid email or password
 
@@ -145,7 +145,7 @@ Exchange a valid refresh token for a new access + refresh pair. The old refresh 
 
 **Body:** `{ "refreshToken": "..." }`
 
-**Response `200`:** `{ "accessToken": "...", "refreshToken": "..." }`
+**Response `200`:** `{ "data": { "accessToken": "...", "refreshToken": "..." } }`
 
 **Response `401`:** invalid or expired refresh token
 
@@ -159,7 +159,7 @@ Blacklist the current refresh token.
 
 **Body:** `{ "refreshToken": "..." }`
 
-**Response `200`:** `{ "message": "Logged out successfully" }`
+**Response `200`:** `{ "status": "success", "message": "Logged out successfully", "data": null }`
 
 ---
 
@@ -171,7 +171,7 @@ Send a password reset email. Returns a generic message regardless of whether the
 
 **Body:** `{ "email": "john@example.com" }`
 
-**Response `200`:** `{ "message": "If an account exists with that email, a reset link has been sent" }`
+**Response `200`:** `{ "status": "success", "message": "If an account exists with that email, a reset link has been sent", "data": { "resetToken": "<non-production only>" } }`
 
 **Note:** The reset token is stored (hashed) in Redis with a 15-minute TTL. In non-production environments the raw token is returned in the payload for local testing; in production the payload is empty.
 
@@ -185,7 +185,7 @@ Reset the password using the token from the reset email. Rate limit: 5 / 15 min.
 
 **Body:** `{ "token": "...", "password": "NewSecurePass123" }`
 
-**Response `200`:** `{ "message": "Password reset successful" }`
+**Response `200`:** `{ "status": "success", "message": "Password reset successful", "data": null }`
 
 **Response `401`:** invalid or expired reset token
 

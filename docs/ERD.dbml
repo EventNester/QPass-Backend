@@ -26,7 +26,7 @@ Table users {
 }
 
 Table events {
-  id                     varchar       [pk, note: 'gen_random_uuid()']
+  id                     uuid          [pk, note: 'gen_random_uuid()']
   title                  varchar
   description            text
   venue                  varchar
@@ -54,7 +54,7 @@ Table events {
 }
 
 Table event_staff_assignments {
-  id               varchar [pk, note: 'gen_random_uuid()']
+  id               uuid    [pk, note: 'gen_random_uuid()']
   event_id         uuid
   user_id          uuid
   permission_scope varchar
@@ -67,7 +67,7 @@ Table event_staff_assignments {
 }
 
 Table ticket_types {
-  id            varchar [pk, note: 'gen_random_uuid()']
+  id            uuid    [pk, note: 'gen_random_uuid()']
   event_id      uuid
   name          varchar
   description   text
@@ -86,7 +86,7 @@ Table ticket_types {
 }
 
 Table ticket_codes {
-  id             varchar [pk, note: 'gen_random_uuid()']
+  id             uuid    [pk, note: 'gen_random_uuid()']
   event_id       uuid
   code           varchar
   status         ticket_code_status [default: 'UNUSED']
@@ -103,7 +103,7 @@ Table ticket_codes {
 }
 
 Table registrations {
-  id                varchar [pk, note: 'gen_random_uuid()']
+  id                uuid    [pk, note: 'gen_random_uuid()']
   event_id          uuid
   ticket_code_id    uuid    [unique]
   attendee_email    varchar
@@ -128,7 +128,7 @@ Table registrations {
 }
 
 Table qr_tokens {
-  id              varchar [pk, note: 'gen_random_uuid()']
+  id              uuid    [pk, note: 'gen_random_uuid()']
   registration_id uuid    [unique]
   token_hash      varchar [unique]
   issued_at       timestamp [default: `now()`]
@@ -142,7 +142,7 @@ Table qr_tokens {
 }
 
 Table check_ins {
-  id              varchar [pk, note: 'gen_random_uuid()']
+  id              uuid    [pk, note: 'gen_random_uuid()']
   event_id        uuid
   registration_id uuid
   staff_id        uuid
@@ -160,7 +160,7 @@ Table check_ins {
 }
 
 Table payments {
-  id                varchar [pk, note: 'gen_random_uuid()']
+  id                uuid    [pk, note: 'gen_random_uuid()']
   event_id          uuid
   user_id           uuid
   registration_id   uuid    [unique]
@@ -182,7 +182,7 @@ Table payments {
 }
 
 Table invoices {
-  id             varchar [pk, note: 'gen_random_uuid()']
+  id             uuid    [pk, note: 'gen_random_uuid()']
   event_id       uuid
   payment_id     uuid    [unique]
   invoice_number varchar [unique]
@@ -197,7 +197,7 @@ Table invoices {
 }
 
 Table notifications {
-  id                  varchar [pk, note: 'gen_random_uuid()']
+  id                  uuid    [pk, note: 'gen_random_uuid()']
   recipient           varchar
   channel             varchar
   template            varchar
@@ -219,7 +219,7 @@ Table notifications {
 }
 
 Table audit_logs {
-  id              varchar [pk, note: 'gen_random_uuid()']
+  id              uuid    [pk, note: 'gen_random_uuid()']
   actor_id        uuid
   action          varchar
   entity          varchar
@@ -235,7 +235,7 @@ Table audit_logs {
 }
 
 Table import_batches {
-  id                varchar [pk, note: 'gen_random_uuid()']
+  id                uuid    [pk, note: 'gen_random_uuid()']
   event_id          uuid
   uploaded_by_id    uuid
   original_filename varchar
