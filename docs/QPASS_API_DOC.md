@@ -2,7 +2,7 @@
 
 - **Base URL:** `http://localhost:3000`
 - **Version:** v1 (all endpoints under `/api/v1` unless noted)
-- **Counts:** 11 tags, 37 paths, 45 operations
+- **Counts:** 11 tags, 39 paths, 47 operations
 - **Live docs:** Swagger UI at `http://localhost:3000/api-docs` (serves the same OpenAPI 3 spec that this document summarizes)
 
 All responses use the envelope:
@@ -43,7 +43,7 @@ Organizers can only access their own resources unless they have the `ADMIN` role
 ## Rate Limiting
 
 - **Global:** 100 requests / 15 min per IP (applied to all endpoints)
-- **Auth endpoints:** 5 requests / 15 min per IP (`register`, `login`, `refresh`, `forgot-password`, `reset-password`, `change-password`, `request-verification`, `verify-email`)
+- **Auth endpoints:** 5 requests / 15 min per IP (`register`, `login`, `refresh`, `forgot-password`, `reset-password`, `change-password`, `request-verification`, `verify-email`, `google`)
 
 Rate-limited requests receive a `429 Too Many Requests` response.
 
@@ -134,6 +134,53 @@ Authenticate and receive tokens. Rate limit: 5 / 15 min.
 **Response `200`:** same shape as register (`data.user` + `data.accessToken` + `data.refreshToken`)
 
 **Response `401`:** invalid email or password
+
+---
+
+#### `GET /api/v1/auth/google`
+
+Start **Sign in with Google**. Redirects the browser to Google's consent screen. Handles both **sign-up** (new Google account) and **sign-in** (email already on file) in one flow. Requires `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` to be configured.
+
+**Auth:** No · Rate limit: 5 / 15 min
+
+**Query params:** `role` (optional) — role to assign when the Google account is created (`ATTENDEE` (default) | `ORGANIZER` | `STAFF`).
+
+**Response `302`:** redirect to Google's consent screen.
+
+#### `GET /api/v1/auth/google/callback`
+
+Google redirects the browser here after consent. The backend exchanges the code, verifies the email is `email_verified`, then either creates the account (**sign-up**, role from the initiating request) or matches the email to an existing one (**sign-in**). Google-created accounts have a random unusable password hash, so they can only sign in with Google, and are created with their email already verified (no verification email needed).
+
+**Auth:** No
+
+**Response `302` on success** → `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with the tokens delivered in the URL **fragment** (never the query string):
+
+```text
+#access_token=...&refresh_token=...&mode=login|signup
+```
+
+`mode` is `signup` for a new account and `login` for an existing one.
+
+**Response `302` on failure** → same redirect URL with:
+
+```text
+?error=<stable_code>&error_description=<message_text>
+```
+
+Stable `error` codes:
+
+- `invalid_request` — the callback was missing the required `code`/`state` query params.
+- `google_oauth_failed` — any other failure (invalid/expired state, Google email not verified, account suspended, or token/profile exchange error).
+
+The user-facing `error_description` carries the exact message text (from `src/config/system_messages.js`):
+
+- `Google sign-in session expired or is invalid, please try again` — invalid/expired `state`
+- `Your Google account email is not verified` — the Google email is not verified
+- `Account has been suspended` — the matching account is suspended
+- `Google OAuth failed` — token/profile exchange failure
+- `Missing authorization code or state` — used with `error=invalid_request`
+
+> **Frontend integration:** read the params with `new URLSearchParams(window.location.hash.slice(1))`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL (`history.replaceState`), then call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
 
 ---
 

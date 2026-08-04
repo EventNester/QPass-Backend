@@ -38,6 +38,10 @@ import {
 import { requireAuth } from './auth.middleware.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 import { verifyRefreshToken } from '../../utils/jwt.utils.js';
+import {
+  initiateGoogleAuth,
+  handleGoogleCallback,
+} from './oauth.controller.js';
 
 const router = Router();
 
@@ -148,6 +152,55 @@ router.post('/login', authLimiter, async (req, res, next) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/v1/auth/google:
+ *   get:
+ *     summary: Sign in / sign up with Google (start)
+ *     description: |
+ *       Redirects the browser to Google's consent screen. After the user approves,
+ *       Google calls back to /api/v1/auth/google/callback which creates the account
+ *       if it is new (sign-up) or signs the existing one in (sign-in), then redirects
+ *       to the configured frontend dashboard URL with `access_token`, `refresh_token`
+ *       and `mode` (signup|login) delivered in the URL fragment (never the query string).
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [ATTENDEE, ORGANIZER, STAFF]
+ *         description: Role to assign when the Google account is created (defaults to ATTENDEE)
+ *     responses:
+ *       302:
+ *         description: Redirect to Google consent screen
+ *       422:
+ *         description: "Validation error. Possible message: Invalid role"
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.get('/google', authLimiter, initiateGoogleAuth);
+
+/**
+ * @openapi
+ * /api/v1/auth/google/callback:
+ *   get:
+ *     summary: Sign in / sign up with Google (callback)
+ *     description: |
+ *       Google redirects the browser here after consent. The code is exchanged for a
+ *       profile, the account is created or matched, QPass tokens are issued, and the
+ *       browser is redirected to `OAUTH_FRONTEND_REDIRECT_URL` (default:
+ *       `FRONTEND_URL/pages/dashboard.html`) with `access_token`, `refresh_token` and
+ *       `mode` in the URL fragment (e.g. `#access_token=...&refresh_token=...&mode=login`)
+ *       so the tokens are not logged or sent to the server again. Failures redirect
+ *       back with `error` and `error_description` query params instead.
+ *     tags: [Auth]
+ *     responses:
+ *       302:
+ *         description: Redirect to the frontend dashboard (or back with an error param)
+ */
+router.get('/google/callback', authLimiter, handleGoogleCallback);
 /**
  * @openapi
  * /api/v1/auth/refresh:
