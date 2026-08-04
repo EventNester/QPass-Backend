@@ -157,7 +157,7 @@ src/
 │   ├── checkins/                       # controller, service, routes, schema, duplicate-detector
 │   ├── staff/                          # controller, service, routes, schema
 │   ├── notifications/                  # email.service, notification.service, templates/*.html
-│   ├── reports/                        # dashboard.service, export.service
+│   ├── reports/                        # dashboard.service, analytics.service, export.service
 │   ├── admin/                          # controller, service, audit.service
 │   └── pdf/                            # ticket-pdf.service (pdfkit)
 ├── integrations/
@@ -255,7 +255,7 @@ enum RegistrationSource   { IMPORT  PUBLIC_LINK }
 
 ## 7. API Endpoints
 
-All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 39 paths, 47 operations. Full reference: `docs/QPASS_API_DOC.md`.
+All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 42 paths, 50 operations. Full reference: `docs/QPASS_API_DOC.md`.
 
 ### 7.1 Auth
 
@@ -324,22 +324,24 @@ All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consist
 | 34 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF `{ format }` |
 | 35 | GET | `/tickets/:ticketId` | Authenticated | View ticket + QR (attendee or event owner) |
 | 36 | GET | `/tickets/:ticketId/download` | Authenticated | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
+| 37 | GET | `/tickets/me` | Authenticated | List the caller's own tickets (history) matched by email. `?page,limit` (max 100). Excludes soft-deleted/cancelled events; cancelled registrations on live events still shown. Includes event, ticket type, ticket code, `checkedIn`. |
 
 ### 7.7 Staff Management
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 37 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. |
-| 38 | GET | `/events/:eventId/staff` | Owner | List |
-| 39 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
+| 38 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. |
+| 39 | GET | `/events/:eventId/staff` | Owner | List |
+| 40 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
 
 ### 7.8 Check-in
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 40 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
-| 41 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List (excludes undone) |
-| 42 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner/scanning staff | Undo within 24h |
+| 41 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
+| 42 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List (excludes undone) |
+| 43 | GET | `/checkins/stats` | Admin / Owner/Staff | Aggregate stats. Without `eventId`: system-wide (ADMIN only). With `eventId`: owner/Admin/active staff. Returns `{ checkins: { total, valid, duplicate }, uniqueAttendeesCheckedIn, eventsWithCheckins }` |
+| 44 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner/scanning staff | Undo within 24h |
 
 Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | NOT_AUTHORIZED`. All HTTP 200 except NOT_AUTHORIZED (403).
 
@@ -347,21 +349,22 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 43 | GET | `/events/:eventId/dashboard` | Owner/Admin/Staff | Stats: registrations, check-ins, capacity, ticket breakdown |
-| 44 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
-| 45 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
+| 45 | GET | `/events/:eventId/dashboard` | Owner/Admin/Staff | Stats: registrations, check-ins, capacity, ticket breakdown |
+| 46 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
+| 47 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
+| 48 | GET | `/analytics/overview` | Authenticated | Overview totals: events, published events, registrations, distinct attendees, registered attendee accounts. `?scope=own\|system` (system is ADMIN only). Non-ADMINs always scoped to own events. |
 
 ### 7.10 Admin
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 46 | GET | `/audit-logs` | Admin | Paginated audit trail. Filter by action, entity, actorId, date range. |
+| 49 | GET | `/audit-logs` | Admin | Paginated audit trail. Filter by action, entity, actorId, date range. |
 
 ### 7.11 Health
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 47 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
+| 50 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
 
 ---
 

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-import { scanQr, getCheckins, undoCheckin } from "../checkins.service.js";
+import { scanQr, getCheckins, undoCheckin, getCheckinStatistics } from "../checkins.service.js";
 import prisma from "../../../database/index.js";
 import { ConflictError, NotFoundError, ForbiddenError, BadRequestError } from "../../../utils/error.js";
 import { constants, systemMessages, logger } from "../../../config/index.js";
@@ -18,6 +18,7 @@ vi.mock("../../../database/index.js", () => ({
   default: {
     event: {
       findFirst: vi.fn(),
+      count: vi.fn(),
     },
     eventStaffAssignment: {
       findUnique: vi.fn(),
@@ -36,9 +37,11 @@ vi.mock("../../../database/index.js", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
       count: vi.fn(),
+      groupBy: vi.fn(),
     },
     auditLog: {
       create: vi.fn(),
+      count: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -615,6 +618,78 @@ describe("Checkin Service Tests", () => {
         .rejects.toThrow(NotFoundError);
       await expect(undoCheckin(mockEventId, mockCheckInId, mockStaffId))
         .rejects.toThrow(errMsg.CHECKIN.NOT_FOUND);
+    });
+  });
+
+  describe("getCheckinStatistics", () => {
+    test("should return system-wide statistics for an ADMIN", async () => {
+      prisma.checkIn.count.mockResolvedValueOnce(10).mockResolvedValueOnce(9);
+      prisma.checkIn.groupBy.mockResolvedValue([
+        { registrationId: "reg_1" },
+        { registrationId: "reg_2" },
+      ]);
+      prisma.auditLog.count.mockResolvedValue(1);
+      prisma.event.count.mockResolvedValue(3);
+
+      const result = await getCheckinStatistics(mockOwnerId, "ADMIN");
+
+      expect(result.checkins).toEqual({ total: 10, valid: 9, duplicate: 1 });
+      expect(result.uniqueAttendeesCheckedIn).toBe(2);
+      expect(result.eventsWithCheckins).toBe(3);
+      expect(prisma.event.findFirst).not.toHaveBeenCalled();
+    });
+
+    test("should throw ForbiddenError for a non-ADMIN without an eventId", async () => {
+      await expect(getCheckinStatistics(mockStaffId, "STAFF")).rejects.toThrow(ForbiddenError);
+      await expect(getCheckinStatistics(mockStaffId, "STAFF")).rejects.toThrow(errMsg.AUTH.FORBIDDEN);
+    });
+
+    test("should scope statistics to an event for an active staff member", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.checkIn.count.mockResolvedValueOnce(4).mockResolvedValueOnce(3);
+      prisma.checkIn.groupBy.mockResolvedValue([{ registrationId: "reg_1" }]);
+      prisma.checkIn.findMany.mockResolvedValue([{ id: "checkin_1" }, { id: "checkin_2" }]);
+      prisma.auditLog.count.mockResolvedValue(2);
+      prisma.event.count.mockResolvedValue(1);
+
+      const result = await getCheckinStatistics(mockStaffId, "STAFF", { eventId: mockEventId });
+
+      expect(result.checkins).toEqual({ total: 4, valid: 3, duplicate: 2 });
+      expect(result.uniqueAttendeesCheckedIn).toBe(1);
+      expect(prisma.checkIn.findMany).toHaveBeenCalledWith({
+        where: { deletedAt: null, eventId: mockEventId },
+        select: { id: true },
+      });
+    });
+
+    test("should throw NotFoundError when the scoped event does not exist", async () => {
+      prisma.event.findFirst.mockResolvedValue(null);
+
+      await expect(
+        getCheckinStatistics(mockStaffId, "STAFF", { eventId: mockEventId })
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    test("should throw ForbiddenError when a staff member is not assigned to the event", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue(null);
+
+      await expect(
+        getCheckinStatistics(mockStaffId, "STAFF", { eventId: mockEventId })
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    test("should allow the event owner to view scoped statistics", async () => {
+      prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
+      prisma.checkIn.count.mockResolvedValueOnce(4).mockResolvedValueOnce(3);
+      prisma.checkIn.groupBy.mockResolvedValue([{ registrationId: "reg_1" }]);
+      prisma.checkIn.findMany.mockResolvedValue([]);
+      prisma.event.count.mockResolvedValue(1);
+
+      const result = await getCheckinStatistics(mockOwnerId, "ORGANIZER", { eventId: mockEventId });
+
+      expect(result.checkins.duplicate).toBe(0);
+      expect(prisma.eventStaffAssignment.findUnique).not.toHaveBeenCalled();
     });
   });
 });

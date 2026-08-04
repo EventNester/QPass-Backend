@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ForbiddenError } from "../../../utils/error.js";
+import { ForbiddenError, NotFoundError } from "../../../utils/error.js";
 
 vi.mock("../../../database/index.js", () => ({
   default: {
@@ -14,6 +14,7 @@ vi.mock("../../../database/index.js", () => ({
     },
     registration: {
       findMany: vi.fn(),
+      count: vi.fn(),
     },
     ticketType: {
       aggregate: vi.fn(),
@@ -455,6 +456,101 @@ describe("TicketType Service (unit)", () => {
       await expect(exportEventTickets(mockEventId, mockUserId, "csv")).rejects.toThrow(
         ForbiddenError
       );
+    });
+  });
+
+  describe("listMyTickets", () => {
+    const baseRegistration = {
+      id: "reg_1",
+      eventId: "event_1",
+      attendeeName: "Jane Doe",
+      attendeeEmail: "jane@example.com",
+      status: "CONFIRMED",
+      paymentStatus: "SUCCESS",
+      confirmationCode: "QP-123",
+      ticketType: { id: "tt_1", name: "VIP", price: 5000 },
+      ticketCode: { code: "TC-1" },
+      event: {
+        id: "event_1",
+        title: "Tech Conference",
+        slug: "tech-conf",
+        venue: "Lagos",
+        startTime: new Date(),
+        endTime: new Date(),
+        status: "PUBLISHED",
+      },
+      createdAt: new Date(),
+    };
+
+    beforeEach(() => {
+      prisma.user.findUnique.mockResolvedValue({ id: mockUserId, email: "jane@example.com" });
+      prisma.registration.count.mockResolvedValue(1);
+    });
+
+    it("returns the caller's tickets with derived check-in status and pagination", async () => {
+      prisma.registration.findMany.mockResolvedValue([
+        {
+          ...baseRegistration,
+          checkins: [{ id: "c1", result: "VALID", scannedAt: new Date() }],
+        },
+      ]);
+
+      const { listMyTickets } = await loadModule();
+      const result = await listMyTickets(mockUserId, 1, 10);
+
+      expect(result.tickets).toHaveLength(1);
+      expect(result.tickets[0].ticketCode).toBe("TC-1");
+      expect(result.tickets[0].checkedIn).toBe(true);
+      expect(result.tickets[0].event.title).toBe("Tech Conference");
+      expect(result.pagination).toEqual({ page: 1, limit: 10, total: 1, totalPages: 1 });
+    });
+
+    it("marks a ticket as not checked in when no valid check-in exists", async () => {
+      prisma.registration.findMany.mockResolvedValue([
+        { ...baseRegistration, checkins: [{ id: "c1", result: "DUPLICATE", scannedAt: new Date() }] },
+      ]);
+
+      const { listMyTickets } = await loadModule();
+      const result = await listMyTickets(mockUserId);
+
+      expect(result.tickets[0].checkedIn).toBe(false);
+    });
+
+    it("filters out soft-deleted and cancelled events", async () => {
+      prisma.registration.findMany.mockResolvedValue([]);
+
+      const { listMyTickets } = await loadModule();
+      await listMyTickets(mockUserId);
+
+      expect(prisma.registration.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            attendeeEmail: { equals: "jane@example.com", mode: "insensitive" },
+            event: expect.objectContaining({
+              deletedAt: null,
+              status: { not: "CANCELLED" },
+            }),
+          }),
+        })
+      );
+    });
+
+    it("returns an empty list when the user has no tickets", async () => {
+      prisma.registration.findMany.mockResolvedValue([]);
+      prisma.registration.count.mockResolvedValue(0);
+
+      const { listMyTickets } = await loadModule();
+      const result = await listMyTickets(mockUserId);
+
+      expect(result.tickets).toEqual([]);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    it("throws NotFoundError when the user does not exist", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      const { listMyTickets } = await loadModule();
+      await expect(listMyTickets(mockUserId)).rejects.toThrow(NotFoundError);
     });
   });
 });

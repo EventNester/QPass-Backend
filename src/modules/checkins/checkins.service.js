@@ -282,3 +282,93 @@ export async function undoCheckin(eventId, checkInId, staffId) {
 
   return { success: true };
 }
+
+/**
+ * Aggregate check-in statistics. Without an `eventId` this is a system-wide
+ * summary (ADMIN only); with an `eventId` the caller must be the event owner,
+ * an ADMIN, or an active assigned staff member (mirrors `getDashboardStats`).
+ *
+ * @param {string} userId - ID of the authenticated caller
+ * @param {string} userRole - Role of the authenticated caller
+ * @param {Object} [options]
+ * @param {string} [options.eventId] - Optional event to scope statistics to
+ * @returns {Promise<{ checkins: { total, valid, duplicate }, uniqueAttendeesCheckedIn: number, eventsWithCheckins: number }>}
+ * @throws {ForbiddenError} If the caller lacks permission
+ * @throws {NotFoundError} If the scoped event does not exist
+ */
+export async function getCheckinStatistics(userId, userRole, { eventId } = {}) {
+  if (eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+      select: { ownerId: true },
+    });
+
+    if (!event) {
+      throw new NotFoundError(errMsg.EVENT.NOT_FOUND);
+    }
+
+    if (event.ownerId !== userId && userRole !== constants.ROLES.ADMIN) {
+      const assignment = await prisma.eventStaffAssignment.findUnique({
+        where: { eventId_userId: { eventId, userId } },
+        select: { active: true },
+      });
+
+      if (!assignment?.active) {
+        throw new ForbiddenError(errMsg.CHECKIN.NOT_AUTHORIZED);
+      }
+    }
+  } else if (userRole !== constants.ROLES.ADMIN) {
+    throw new ForbiddenError(errMsg.AUTH.FORBIDDEN);
+  }
+
+  const checkinWhere = { deletedAt: null, ...(eventId && { eventId }) };
+
+  const [total, valid, uniqueCheckins] = await Promise.all([
+    prisma.checkIn.count({ where: checkinWhere }),
+    prisma.checkIn.count({
+      where: { ...checkinWhere, result: constants.CHECKIN_RESULT.VALID },
+    }),
+    prisma.checkIn.groupBy({ by: ["registrationId"], where: checkinWhere }),
+  ]);
+
+  // Duplicate scans are audit-logged per check-in; a global count is a single
+  // query, but per-event we must scope by the event's check-in ids first.
+  let duplicate = 0;
+  if (eventId) {
+    const rows = await prisma.checkIn.findMany({
+      where: checkinWhere,
+      select: { id: true },
+    });
+    if (rows.length) {
+      duplicate = await prisma.auditLog.count({
+        where: {
+          action: "DUPLICATE_SCAN",
+          entity: "CheckIn",
+          entityId: { in: rows.map((row) => row.id) },
+        },
+      });
+    }
+  } else {
+    duplicate = await prisma.auditLog.count({
+      where: { action: "DUPLICATE_SCAN", entity: "CheckIn" },
+    });
+  }
+
+  const eventsWithCheckins = await prisma.event.count({
+    where: {
+      ...(eventId && { id: eventId }),
+      deletedAt: null,
+      checkins: { some: { deletedAt: null } },
+    },
+  });
+
+  return {
+    checkins: {
+      total,
+      valid,
+      duplicate,
+    },
+    uniqueAttendeesCheckedIn: uniqueCheckins.length,
+    eventsWithCheckins,
+  };
+}
