@@ -4,13 +4,13 @@ QR Code-Based Event Attendance & Ticket Verification System.
 
 QPass lets event organizers create and manage events, register attendees (via public links or bulk file import), issue secure QR tickets, verify attendance with real-time staff scanning, and analyze everything from a live dashboard.
 
-- **API docs:** [Full API Reference](./docs/QPASS_API_DOC.md) · [Swagger UI Testing Guide](./SWAGGER_UI_TESTING.md) · Live Swagger UI at `/api-docs`
+- **API docs:** [Full API Reference](./docs/QPASS_API_DOC.md) · Live Swagger UI at `/api-docs`
 - **Architecture:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Database diagram:** [ERD (DBML)](./docs/ERD.dbml) - paste into [dbdiagram.io](https://dbdiagram.io)
 
 ## Features
 
-- **Authentication & RBAC** - JWT access/refresh token rotation with Redis blacklist; roles `ATTENDEE`, `STAFF`, `ORGANIZER`, `ADMIN`; password reset via email.
+- **Authentication & RBAC** - JWT access/refresh token rotation with Redis blacklist; roles `ATTENDEE`, `STAFF`, `ORGANIZER`, `ADMIN`; password reset via email; **Sign in with Google** (OAuth 2.0 authorization-code flow) that signs users up or in and redirects them to the frontend dashboard.
 - **Events** - full CRUD with `DRAFT → PUBLISHED → ACTIVE → COMPLETED / CANCELLED` lifecycle and slug-based public URLs.
 - **Ticket types** - per-event categories (price in the smallest currency unit, optional capacity, ordering).
 - **Registration flows** - public self-registration (`GET /e/{slug}` + `POST /registrations/free`) and bulk import (CSV / XLSX / PDF / DOCX, 5 MB max) with per-row validation and batch tracking.
@@ -109,6 +109,12 @@ PAYSTACK_WEBHOOK_SECRET=
 # Frontend URL (used in password reset link)
 FRONTEND_URL=http://localhost:3000
 
+# Google OAuth (Sign in with Google)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
+OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3000/pages/dashboard.html
+
 # Email (Brevo REST API)
 BREVO_API_KEY=
 BREVO_SENDER_EMAIL=you@example.com
@@ -154,7 +160,7 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Tag | Operations | Notes |
 |-----|:----------:|-------|
 | Health | 1 | `GET /health` (public) |
-| Auth | 13 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, sessions |
+| Auth | 15 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, sessions, Google OAuth (start + callback) |
 | Events | 7 | CRUD + publish + cancel |
 | Ticket Types | 4 | per-event CRUD |
 | Tickets | 4 | event ticket list/export + individual ticket/PDF |
@@ -164,9 +170,26 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Checkins | 3 | scan, list, undo |
 | Reports | 3 | dashboard + registrations/attendance exports |
 | Admin | 1 | audit logs |
-| **Total** | **45** | **37 paths** across 11 tags |
+| **Total** | **47** | **39 paths** across 11 tags |
 
 See [docs/QPASS_API_DOC.md](./docs/QPASS_API_DOC.md) for the full reference and [SWAGGER_UI_TESTING.md](./SWAGGER_UI_TESTING.md) for a manual test walkthrough.
+
+### Google OAuth (Sign in with Google)
+
+Server-side authorization-code flow — the frontend only needs a button/link pointing at the backend:
+
+1. `GET /api/v1/auth/google` (optional `?role=ORGANIZER|STAFF`) → 302 to Google's consent screen.
+2. Google redirects to `GET /api/v1/auth/google/callback?code=...&state=...`.
+3. The backend exchanges the code, verifies the email, and **creates the account if new (sign-up)** or **matches the email to an existing one (sign-in)**. New accounts are created as `ATTENDEE` by default with their Google email pre-verified; the account is immediately usable (no password email required).
+4. On success the browser is redirected to `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with the QPass tokens delivered in the URL **fragment** (never the query string, so tokens do not leak to server logs or the referrer):
+
+   ```
+   http://localhost:3000/pages/dashboard.html#access_token=...&refresh_token=...&mode=login
+   ```
+
+   `mode` is `signup` for new accounts and `login` for returning ones. On failure it redirects back with `error` and `error_description` query params instead.
+
+**Frontend integration:** after the redirect, read the params with `new URLSearchParams(window.location.hash.slice(1))`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL with `history.replaceState`, and call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
 
 ## Project Structure
 
@@ -250,6 +273,21 @@ Tests live alongside source files (`src/modules/**/tests/`, `src/utils/tests/`) 
 3. Start with `npm start` (or `docker compose` / Railway).
 
 Post-deploy checks: `GET /health` → 200 · `/api-docs` loads · register → login → create event → publish.
+
+### Production Google OAuth values
+
+In production the OAuth URLs must point at the deployed hosts, not `localhost`. Register these exact URLs as the **Authorized redirect URI** in Google Cloud Console, and set the matching environment variables:
+
+```env
+# Backend (deployed) callback — must match the Google Cloud Console redirect URI exactly
+GOOGLE_CALLBACK_URL=https://api.yourdomain.com/api/v1/auth/google/callback
+# Frontend page that receives the access/refresh tokens (in the URL fragment)
+OAUTH_FRONTEND_REDIRECT_URL=https://app.yourdomain.com/pages/dashboard.html
+# Frontend origin for the password-reset link and default redirect
+FRONTEND_URL=https://app.yourdomain.com
+```
+
+> Production uses HTTPS, so the OAuth binding cookie is sent with the `Secure` flag (forced automatically when `NODE_ENV=production`). Local development uses `http://localhost` and a non-`Secure` cookie, so you can still test on plain HTTP. Keep the local (`http://localhost:3000/...`) and production (`https://...`) values clearly separate — never run the production frontend URL against a local backend.
 
 ## Contributing
 
