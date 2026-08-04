@@ -87,14 +87,14 @@ src/modules/<module>/
 | Module | Responsibility |
 |--------|----------------|
 | `auth` | register, login, refresh, logout, JWT middleware, password reset (Redis-backed tokens), Google OAuth (`oauth.service`) |
-| `events` | event CRUD, publish (slug generation), cancel; ownership enforcement |
+| `events` | event CRUD, publish (slug generation), unpublish, cancel; ownership enforcement |
 | `tickets` | ticket types, per-event ticket list/export, individual ticket view + PDF, QR generation, attendee ticket history (`GET /tickets/me`) |
 | `registrations` | public event view (`GET /e/:slug`), free registration, bulk file import (CSV/XLSX/PDF/DOCX) |
 | `checkins` | QR scan with duplicate detection, check-in list, undo (soft delete + audit), check-in statistics |
 | `staff` | assign / list / remove staff, auto-create pending staff users |
 | `notifications` | Brevo email service, `Notification` records, EJS templates |
 | `reports` | dashboard statistics, CSV/PDF exports (registrations + attendance), overview analytics |
-| `admin` | audit log queries (ADMIN only) |
+| `admin` | audit log queries, admin invitations via email (invitee sets own password), promote users to admin |
 
 Supporting layers:
 

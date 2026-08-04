@@ -2,7 +2,7 @@
 
 - **Base URL:** `http://localhost:3000`
 - **Version:** v1 (all endpoints under `/api/v1` unless noted)
-- **Counts:** 11 tags, 42 paths, 50 operations
+- **Counts:** 11 tags, 47 paths, 56 operations
 - **Live docs:** Swagger UI at `http://localhost:3000/api-docs` (serves the same OpenAPI 3 spec that this document summarizes)
 
 All responses use the envelope:
@@ -301,6 +301,35 @@ Complete email verification using the token from the verification email. Rate li
 
 ---
 
+#### `POST /api/v1/auth/otp/send`
+
+Send a 6-digit email verification code to the given address. Always responds with success so callers cannot tell whether an account exists, is verified, or whether a code was actually sent. Rate limit: 5 / 15 min.
+
+**Auth:** No
+
+**Body:** `{ "email": "attendee@example.com" }`
+
+**Response `200`:** `{ "status": "success", "message": "Verification code sent to your email", "data": { "code": "<non-production only>" } }`
+
+**Response `400`:** invalid email address
+
+---
+
+#### `POST /api/v1/auth/otp/verify`
+
+Complete email verification using the 6-digit code from the email. Codes are single-use and expire after 10 minutes. Rate limit: 5 / 15 min.
+
+**Auth:** No
+
+**Body:** `{ "email": "attendee@example.com", "code": "123456" }`
+
+**Response `200`:** `{ "status": "success", "message": "Email verified successfully", "data": null }`
+
+**Response `400`:** invalid email or code format (code must be 6 digits)
+**Response `401`:** invalid or expired verification code
+
+---
+
 #### `GET /api/v1/auth/sessions`
 
 List the authenticated user's active sessions.
@@ -416,6 +445,18 @@ Publish a draft event. Generates a unique public slug.
 **Constraints:** event must currently be in `DRAFT`.
 
 **Response `200`:** `{ "data": { "id": "...", "status": "PUBLISHED", "slug": "tech-conference-2026-a1b2c3" } }`
+
+---
+
+#### `POST /api/v1/events/{id}/unpublish`
+
+Unpublish a published or active event. Transitions a `PUBLISHED` or `ACTIVE` event back to `DRAFT` (e.g. if there is an issue with the event). The unique public slug is **preserved**.
+
+**Auth:** ORGANIZER / ADMIN (owner)
+
+**Constraints:** event must currently be `PUBLISHED` or `ACTIVE`. Unpublishing a `DRAFT`, `COMPLETED`, or `CANCELLED` event returns `422`.
+
+**Response `200`:** `{ "data": { "id": "...", "status": "DRAFT", "slug": "tech-conference-2026-a1b2c3" } }`
 
 ---
 
@@ -658,7 +699,7 @@ Assign staff to an event. If no account exists for the email, a pending `STAFF` 
 
 **Body:** `{ "email": "staff@example.com", "permissionScope": "check-in-only" }`
 
-**Response `201`:** `{ "data": { "id", "eventId", "userId", "permissionScope", "active": true } }`
+**Response `201`:** `{ "data": { "event": { "id", "title", "venue", "startTime", "endTime" }, "staff": { "id", "eventId", "userId", "permissionScope", "active", "assignedAt", "user": { "id", "name", "email", "role", "status" } } } }`
 
 **Response `409`:** user is already assigned as staff for this event
 **Response `403`:** cannot assign a privileged user (ORGANIZER / ADMIN) as staff
@@ -667,11 +708,11 @@ Assign staff to an event. If no account exists for the email, a pending `STAFF` 
 
 #### `GET /api/v1/events/{eventId}/staff`
 
-List active staff assignments for an event, newest first.
+List active staff assignments for an event, newest first. The response also includes the event's name, venue, and start/end time.
 
 **Auth:** ORGANIZER (owner)
 
-**Response `200`:** `{ "data": [{ "id", "eventId", "userId", "name", "email", "permissionScope", "active", "assignedAt" }] }`
+**Response `200`:** `{ "data": { "event": { "id", "title", "venue", "startTime", "endTime" }, "staff": [{ "id", "eventId", "userId", "name", "email", "permissionScope", "active", "assignedAt" }] } }`
 
 ---
 
@@ -858,6 +899,50 @@ List the audit trail, newest first. Filterable by action, entity, actor ID, and 
 | `to` | date-time | Only entries created at or before this timestamp |
 
 **Response `200`:** `{ "data": { "logs": [{ "id", "actorId", "action", "entity", "entityId", "beforeSnapshot", "afterSnapshot", "createdAt" }], "pagination": { ... } } }`
+
+---
+
+#### `POST /api/v1/admin/invites`
+
+Invite someone to become an ADMIN by email. A single-use invite link (7-day expiry) is emailed; the invitee sets their own password when they accept, so the inviting admin never sees it. Cannot be used for an email that already belongs to a non-admin account — use `PATCH /admin/users/{userId}/promote` for those. ADMIN role only.
+
+**Auth:** ADMIN only
+
+**Body:** `{ "email": "ops@example.com" }`
+
+**Response `201`:** `{ "status": "success", "message": "Admin invitation sent successfully", "data": { "inviteToken": "<non-production only>" } }`
+
+**Response `409`:** a non-deleted (active) user with this email already exists (or is already an admin)
+
+---
+
+#### `POST /api/v1/admin/invites/{token}/accept`
+
+Accept an admin invitation by setting the invitee's own name and password. Creates an ADMIN account (or reactivates a previously deleted account with that email as an ADMIN). Invite tokens are single-use. Rate limit: 5 / 15 min.
+
+**Auth:** No
+
+**Path:** `token` = the invite token from the invitation email
+
+**Body:** `{ "name": "Ops Admin", "password": "StrongPass123" }`
+
+**Response `200`:** `{ "status": "success", "message": "Admin invitation accepted successfully", "data": { "id", "name", "email", "role": "ADMIN", "status", "createdAt" } }`
+
+**Response `401`:** invalid or expired invitation token
+**Response `409`:** a non-deleted (active) user already exists with this email (or is already an admin). Previously deleted accounts with this email are reactivated instead of returning 409.
+
+---
+
+#### `PATCH /api/v1/admin/users/{userId}/promote`
+
+Change an existing user's role to ADMIN. Idempotent — promoting an existing ADMIN succeeds without changes. Cannot be used on your own account. ADMIN role only.
+
+**Auth:** ADMIN only
+
+**Response `200`:** `{ "status": "success", "message": "User promoted to admin successfully", "data": { "id", "name", "email", "role": "ADMIN", "status" } }`
+
+**Response `403`:** caller is not an ADMIN, or you cannot change your own role
+**Response `404`:** user not found
 
 ---
 

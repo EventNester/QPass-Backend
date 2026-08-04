@@ -15,6 +15,7 @@
     "migrate:prod": "prisma migrate deploy --schema=./src/database/schema.prisma",
     "migrate:reset": "prisma migrate reset --schema=./src/database/schema.prisma",
     "seed": "node src/database/seed.js",
+    "create-admin": "node src/scripts/create-admin.js",
     "studio": "prisma studio --schema=./src/database/schema.prisma",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",

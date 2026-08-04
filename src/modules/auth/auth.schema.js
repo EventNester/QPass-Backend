@@ -76,6 +76,15 @@ export const verifyEmailSchema = z.object({
   token: z.string().min(1, v.VERIFY_TOKEN_REQUIRED),
 });
 
+export const sendOtpSchema = z.object({
+  email: z.string().email(v.INVALID_EMAIL),
+});
+
+export const verifyOtpSchema = z.object({
+  email: z.string().email(v.INVALID_EMAIL),
+  code: z.string().regex(/^\d{6}$/, v.OTP_CODE_INVALID),
+});
+
 export const sessionParamsSchema = z.object({
   sessionId: z
     .string()

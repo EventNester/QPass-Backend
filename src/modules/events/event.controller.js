@@ -5,6 +5,7 @@ import {
   updateEvent,
   deleteEvent,
   publishEvent,
+  unpublishEvent,
   cancelEvent,
 } from "./event.service.js";
 
@@ -125,6 +126,24 @@ export const publishEventController = async (req, res, next) => {
   }
 };
 
+
+// Unpublish event
+export const unpublishEventController = async (req, res, next) => {
+  try {
+    const eventId = parseEventIdOrNext(req.params.id, next);
+    if (!eventId) return;
+
+    const event = await unpublishEvent(eventId, req.user.sub, req.user.role);
+
+    return success(
+      res,
+      event,
+      systemMessages.SUCCESS.EVENT.UNPUBLISHED
+    );
+  } catch (error) {
+    next(error);
+  }
+};
 
 // Cancel event
 export const cancelEventController = async (req, res, next) => {

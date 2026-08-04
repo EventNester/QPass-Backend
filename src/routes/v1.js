@@ -15,6 +15,7 @@ import reportDashboardRoutes from "../modules/reports/dashboard.routes.js";
 import reportExportRoutes from "../modules/reports/export.routes.js";
 import analyticsRoutes from "../modules/reports/analytics.routes.js";
 import auditRoutes from "../modules/admin/audit.routes.js";
+import adminUsersRoutes from "../modules/admin/admin-users.routes.js";
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use("/analytics", analyticsRoutes);
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);
 router.use("/audit-logs", auditRoutes);
+router.use("/admin", adminUsersRoutes);
 
 // Public registration flow (no auth): GET /e/:slug, POST /registrations/free
 router.use("/e", publicEventRouter);
