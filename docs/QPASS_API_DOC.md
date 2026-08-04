@@ -153,10 +153,10 @@ Google redirects the browser here after consent. The backend exchanges the code,
 
 **Auth:** No
 
-**Response `302` on success** → `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with:
+**Response `302` on success** → `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with the tokens delivered in the URL **fragment** (never the query string):
 
 ```text
-?access_token=...&refresh_token=...&mode=login|signup
+#access_token=...&refresh_token=...&mode=login|signup
 ```
 
 `mode` is `signup` for a new account and `login` for an existing one.
@@ -164,12 +164,23 @@ Google redirects the browser here after consent. The backend exchanges the code,
 **Response `302` on failure** → same redirect URL with:
 
 ```text
-?error=<code>&error_description=<message>
+?error=<stable_code>&error_description=<message_text>
 ```
 
-Common error codes: `invalid_request`, `google_oauth_failed`, `email_not_verified`/`Google sign-in session expired or is invalid, please try again`.
+Stable `error` codes:
 
-> **Frontend integration:** read the params with `new URLSearchParams(window.location.search)`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL (`history.replaceState`), then call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
+- `invalid_request` — the callback was missing the required `code`/`state` query params.
+- `google_oauth_failed` — any other failure (invalid/expired state, Google email not verified, account suspended, or token/profile exchange error).
+
+The user-facing `error_description` carries the exact message text (from `src/config/system_messages.js`):
+
+- `Google sign-in session expired or is invalid, please try again` — invalid/expired `state`
+- `Your Google account email is not verified` — the Google email is not verified
+- `Account has been suspended` — the matching account is suspended
+- `Google OAuth failed` — token/profile exchange failure
+- `Missing authorization code or state` — used with `error=invalid_request`
+
+> **Frontend integration:** read the params with `new URLSearchParams(window.location.hash.slice(1))`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL (`history.replaceState`), then call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
 
 ---
 

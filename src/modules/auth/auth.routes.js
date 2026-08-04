@@ -162,7 +162,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
  *       Google calls back to /api/v1/auth/google/callback which creates the account
  *       if it is new (sign-up) or signs the existing one in (sign-in), then redirects
  *       to the configured frontend dashboard URL with `access_token`, `refresh_token`
- *       and `mode` (signup|login) as query parameters.
+ *       and `mode` (signup|login) delivered in the URL fragment (never the query string).
  *     tags: [Auth]
  *     parameters:
  *       - in: query
@@ -192,15 +192,15 @@ router.get('/google', authLimiter, initiateGoogleAuth);
  *       profile, the account is created or matched, QPass tokens are issued, and the
  *       browser is redirected to `OAUTH_FRONTEND_REDIRECT_URL` (default:
  *       `FRONTEND_URL/pages/dashboard.html`) with `access_token`, `refresh_token` and
- *       `mode` query parameters. Failures redirect back with `error` and
- *       `error_description` instead.
+ *       `mode` in the URL fragment (e.g. `#access_token=...&refresh_token=...&mode=login`)
+ *       so the tokens are not logged or sent to the server again. Failures redirect
+ *       back with `error` and `error_description` query params instead.
  *     tags: [Auth]
  *     responses:
  *       302:
  *         description: Redirect to the frontend dashboard (or back with an error param)
  */
-router.get('/google/callback', handleGoogleCallback);
-
+router.get('/google/callback', authLimiter, handleGoogleCallback);
 /**
  * @openapi
  * /api/v1/auth/refresh:

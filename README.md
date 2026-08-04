@@ -113,7 +113,7 @@ FRONTEND_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_CALLBACK_URL=http://localhost:3000/api/v1/auth/google/callback
-OAUTH_FRONTEND_REDIRECT_URL=https://qpasss.netlify.app/pages/dashboard.html
+OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3000/pages/dashboard.html
 
 # Email (Brevo REST API)
 BREVO_API_KEY=
@@ -181,15 +181,15 @@ Server-side authorization-code flow — the frontend only needs a button/link po
 1. `GET /api/v1/auth/google` (optional `?role=ORGANIZER|STAFF`) → 302 to Google's consent screen.
 2. Google redirects to `GET /api/v1/auth/google/callback?code=...&state=...`.
 3. The backend exchanges the code, verifies the email, and **creates the account if new (sign-up)** or **matches the email to an existing one (sign-in)**. New accounts are created as `ATTENDEE` by default with their Google email pre-verified; the account is immediately usable (no password email required).
-4. On success the browser is redirected to `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with the QPass tokens in the query string:
+4. On success the browser is redirected to `OAUTH_FRONTEND_REDIRECT_URL` (default: `FRONTEND_URL/pages/dashboard.html`) with the QPass tokens delivered in the URL **fragment** (never the query string, so tokens do not leak to server logs or the referrer):
 
    ```
-   https://qpasss.netlify.app/pages/dashboard.html?access_token=...&refresh_token=...&mode=login
+   http://localhost:3000/pages/dashboard.html#access_token=...&refresh_token=...&mode=login
    ```
 
    `mode` is `signup` for new accounts and `login` for returning ones. On failure it redirects back with `error` and `error_description` query params instead.
 
-**Frontend integration:** after the redirect, read the params with `new URLSearchParams(window.location.search)`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL with `history.replaceState`, and call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
+**Frontend integration:** after the redirect, read the params with `new URLSearchParams(window.location.hash.slice(1))`, store `access_token`/`refresh_token` (e.g. in `localStorage`), strip them from the URL with `history.replaceState`, and call `GET /api/v1/auth/me` with `Authorization: Bearer <access_token>` for the full profile.
 
 ## Project Structure
 
@@ -273,6 +273,21 @@ Tests live alongside source files (`src/modules/**/tests/`, `src/utils/tests/`) 
 3. Start with `npm start` (or `docker compose` / Railway).
 
 Post-deploy checks: `GET /health` → 200 · `/api-docs` loads · register → login → create event → publish.
+
+### Production Google OAuth values
+
+In production the OAuth URLs must point at the deployed hosts, not `localhost`. Register these exact URLs as the **Authorized redirect URI** in Google Cloud Console, and set the matching environment variables:
+
+```env
+# Backend (deployed) callback — must match the Google Cloud Console redirect URI exactly
+GOOGLE_CALLBACK_URL=https://api.yourdomain.com/api/v1/auth/google/callback
+# Frontend page that receives the access/refresh tokens (in the URL fragment)
+OAUTH_FRONTEND_REDIRECT_URL=https://app.yourdomain.com/pages/dashboard.html
+# Frontend origin for the password-reset link and default redirect
+FRONTEND_URL=https://app.yourdomain.com
+```
+
+> Production uses HTTPS, so the OAuth binding cookie is sent with the `Secure` flag (forced automatically when `NODE_ENV=production`). Local development uses `http://localhost` and a non-`Secure` cookie, so you can still test on plain HTTP. Keep the local (`http://localhost:3000/...`) and production (`https://...`) values clearly separate — never run the production frontend URL against a local backend.
 
 ## Contributing
 
