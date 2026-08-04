@@ -39,6 +39,12 @@ const envSchema = z.object({
 
   FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
+  // Google OAuth (Sign in with Google)
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
+  GOOGLE_CALLBACK_URL: z.string().optional().default(""),
+  OAUTH_FRONTEND_REDIRECT_URL: z.string().optional().default(""),
+
   SENTRY_DSN: z.string().optional().default(""),
 }).superRefine((env, ctx) => {
   if (env.BREVO_API_KEY) {

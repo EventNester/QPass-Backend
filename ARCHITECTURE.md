@@ -86,7 +86,7 @@ src/modules/<module>/
 
 | Module | Responsibility |
 |--------|----------------|
-| `auth` | register, login, refresh, logout, JWT middleware, password reset (Redis-backed tokens) |
+| `auth` | register, login, refresh, logout, JWT middleware, password reset (Redis-backed tokens), Google OAuth (`oauth.service`) |
 | `events` | event CRUD, publish (slug generation), cancel; ownership enforcement |
 | `tickets` | ticket types, per-event ticket list/export, individual ticket view + PDF, QR generation |
 | `registrations` | public event view (`GET /e/:slug`), free registration, bulk file import (CSV/XLSX/PDF/DOCX) |
@@ -113,7 +113,7 @@ Supporting layers:
   - `CheckIn` is unique on `[eventId, registrationId]` (duplicate scan protection at the DB level).
   - `QrToken` stores only `tokenHash` (SHA-256) - the raw token is never persisted.
   - `EventStaffAssignment` is unique on `[eventId, userId]`.
-- **Redis** is used for: refresh-token blacklist, password-reset tokens (15 min TTL), and a distributed lock (`SETNX lock:checkin:{eventId}:{tokenHash}`, 10 s TTL) during QR scans.
+- **Redis** is used for: refresh-token blacklist, password-reset tokens (15 min TTL), single-use Google OAuth `state` (10 min TTL), and a distributed lock (`SETNX lock:checkin:{eventId}:{tokenHash}`, 10 s TTL) during QR scans.
 
 See [docs/ERD.dbml](./docs/ERD.dbml) for the full entity-relationship model (paste it into dbdiagram.io to render).
 
@@ -124,6 +124,7 @@ See [docs/ERD.dbml](./docs/ERD.dbml) for the full entity-relationship model (pas
 3. **Requests** - `requireAuth` verifies the bearer access token and attaches `req.user` (`id`, `email`, `role`, `name`).
 4. **RBAC** - `requireRole("ORGANIZER", "ADMIN", ...)` gates routes; ownership checks in services scope data to the caller; `ADMIN` bypasses ownership.
 5. **Password reset** - `forgot-password` writes a hashed reset token to Redis (15 min TTL) and emails the attendee. The token is deleted on use or send failure, and generic responses prevent account enumeration.
+6. **Google OAuth** - `GET /auth/google` redirects the browser to Google's consent screen with a random `state` (stored in Redis, single-use, 10 min TTL). `GET /auth/google/callback` validates the state, exchanges the code server-side, requires a verified Google email, then creates (`signup`) or matches (`login`) the user and 302-redirects to `OAUTH_FRONTEND_REDIRECT_URL` with access/refresh tokens. Google-created accounts get a random unusable password hash and pre-verified email; suspended accounts are rejected.
 
 ## 6. QR Tickets & Check-in
 

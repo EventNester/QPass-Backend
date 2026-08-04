@@ -14,6 +14,7 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         URL: "readonly",
+        URLSearchParams: "readonly",
         Buffer: "readonly",
         __dirname: "readonly",
         __filename: "readonly",
