@@ -1,4 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
 import axios from 'axios';
 import {
   getOAuthConfig,
@@ -84,6 +85,14 @@ describe('OAuth Service Tests', () => {
     vi.clearAllMocks();
   });
 
+  const BINDING = 'test-binding-123';
+  const bindingHash = crypto.createHash('sha256').update(BINDING).digest('hex');
+  const PKCE_VERIFIER = 'test-pkce-verifier';
+
+  const cookieReq = () => ({ headers: { cookie: `oauth_binding=${BINDING}; session=abc` } });
+  const storedRecord = (role, overrides = {}) =>
+    JSON.stringify({ role, bindingHash, pkceVerifier: PKCE_VERIFIER, ...overrides });
+
   const profile = {
     sub: 'google-sub-123',
     name: 'Jane Doe',
@@ -129,22 +138,39 @@ describe('OAuth Service Tests', () => {
       expect(url).toContain('response_type=code');
       expect(url).toContain('scope=openid+email+profile');
       expect(url).toContain('state=');
+      expect(url).toContain('code_challenge_method=S256');
+      expect(url).toContain('code_challenge=');
 
-      expect(mRedisClient.set).toHaveBeenCalledWith(
-        expect.stringMatching(/^oauth_state:[a-f0-9]{64}$/),
-        JSON.stringify({ role: 'ORGANIZER' }),
-        'EX',
-        600
-      );
+      const setCall = mRedisClient.set.mock.calls[0];
+      expect(setCall[0]).toMatch(/^oauth_state:[a-f0-9]{64}$/);
+      const stored = JSON.parse(setCall[1]);
+      expect(stored.role).toBe('ORGANIZER');
+      expect(stored.bindingHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(stored.pkceVerifier).toEqual(expect.any(String));
+      expect(setCall[2]).toBe('EX');
+      expect(setCall[3]).toBe(600);
     });
 
     test('should default the sign-up role to ATTENDEE', async () => {
       await initiateGoogleOAuth({ role: 'ADMIN' });
-      expect(mRedisClient.set).toHaveBeenCalledWith(
-        expect.stringMatching(/^oauth_state:/),
-        JSON.stringify({ role: 'ATTENDEE' }),
-        'EX',
-        600
+      const stored = JSON.parse(mRedisClient.set.mock.calls[0][1]);
+      expect(stored.role).toBe('ATTENDEE');
+      expect(mRedisClient.set.mock.calls[0][2]).toBe('EX');
+    });
+
+    test('should set the browser-binding cookie when a response is provided', async () => {
+      const res = { cookie: vi.fn() };
+      await initiateGoogleOAuth({ role: 'ATTENDEE' }, res);
+
+      expect(res.cookie).toHaveBeenCalledWith(
+        'oauth_binding',
+        expect.any(String),
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 600 * 1000,
+        })
       );
     });
   });
@@ -159,7 +185,19 @@ describe('OAuth Service Tests', () => {
       expect(axios.post).toHaveBeenCalledWith(
         'https://oauth2.googleapis.com/token',
         expect.stringContaining('code=auth-code'),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
+      );
+    });
+
+    test('should include the PKCE code_verifier when provided', async () => {
+      axios.post.mockResolvedValue({ data: googleTokenResponse });
+
+      await exchangeCodeForTokens('auth-code', PKCE_VERIFIER);
+
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://oauth2.googleapis.com/token',
+        expect.stringContaining(`code_verifier=${PKCE_VERIFIER}`),
+        expect.anything()
       );
     });
   });
@@ -173,6 +211,7 @@ describe('OAuth Service Tests', () => {
       expect(result).toEqual(profile);
       expect(axios.get).toHaveBeenCalledWith('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: 'Bearer google-access-token' },
+        timeout: 10000,
       });
     });
   });
@@ -206,10 +245,36 @@ describe('OAuth Service Tests', () => {
       });
     });
 
-    test('should sign in an existing active user (login)', async () => {
+    test('should sign in an existing active user, preserving the stored name', async () => {
       const existing = {
         id: 'user-1',
-        name: 'Old Name',
+        name: 'Original Name',
+        email: 'jane@example.com',
+        role: 'ATTENDEE',
+        status: 'ACTIVE',
+        deletedAt: null,
+        emailVerifiedAt: new Date(),
+      };
+      prisma.user.findUnique.mockResolvedValue(existing);
+      prisma.user.update.mockResolvedValue({ ...existing, lastLoginAt: new Date() });
+
+      const result = await findOrCreateGoogleUser(profile, 'ATTENDEE');
+
+      expect(result.isNewUser).toBe(false);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: expect.objectContaining({
+          name: 'Original Name',
+          lastLoginAt: expect.any(Date),
+        }),
+      });
+    });
+
+    test('should apply the Google name only when the existing account has no stored name', async () => {
+      const existing = {
+        id: 'user-1',
+        name: '',
         email: 'jane@example.com',
         role: 'ATTENDEE',
         status: 'ACTIVE',
@@ -219,38 +284,37 @@ describe('OAuth Service Tests', () => {
       prisma.user.findUnique.mockResolvedValue(existing);
       prisma.user.update.mockResolvedValue({ ...existing, name: 'Jane Doe' });
 
-      const result = await findOrCreateGoogleUser(profile, 'ATTENDEE');
+      await findOrCreateGoogleUser(profile, 'ATTENDEE');
 
-      expect(result.isNewUser).toBe(false);
-      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        data: expect.objectContaining({
-          name: 'Jane Doe',
-          lastLoginAt: expect.any(Date),
-        }),
+        data: expect.objectContaining({ name: 'Jane Doe' }),
       });
     });
 
-    test('should reactivate a soft-deleted account', async () => {
+    test('should reactivate a soft-deleted account, preserving name and setting status to ACTIVE', async () => {
       const deleted = {
         id: 'user-1',
-        name: 'Jane Doe',
+        name: 'Original Name',
         email: 'jane@example.com',
         role: 'ATTENDEE',
-        status: 'ACTIVE',
+        status: 'INACTIVE',
         deletedAt: new Date(),
         emailVerifiedAt: null,
       };
       prisma.user.findUnique.mockResolvedValue(deleted);
-      prisma.user.update.mockResolvedValue({ ...deleted, deletedAt: null });
+      prisma.user.update.mockResolvedValue({ ...deleted, deletedAt: null, status: 'ACTIVE' });
 
       const result = await findOrCreateGoogleUser(profile, 'ATTENDEE');
 
       expect(result.isNewUser).toBe(true);
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        data: expect.objectContaining({ deletedAt: null }),
+        data: expect.objectContaining({
+          deletedAt: null,
+          status: 'ACTIVE',
+          name: 'Original Name',
+        }),
       });
     });
 
@@ -275,19 +339,55 @@ describe('OAuth Service Tests', () => {
         UnauthorizedError
       );
     });
+
+    test('should reject a suspended account even when soft-deleted', async () => {
+      const suspendedDeleted = {
+        id: 'user-1',
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        role: 'ATTENDEE',
+        status: 'SUSPENDED',
+        deletedAt: new Date(),
+        emailVerifiedAt: null,
+      };
+      prisma.user.findUnique.mockResolvedValue(suspendedDeleted);
+
+      await expect(findOrCreateGoogleUser(profile, 'ATTENDEE')).rejects.toBeInstanceOf(
+        UnauthorizedError
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('completeGoogleOAuth', () => {
+    test('should throw BadRequestError when the binding cookie is missing', async () => {
+      await expect(
+        completeGoogleOAuth({ code: 'code', state: 'state-1', userAgent: null }, { headers: {} })
+      ).rejects.toThrow(systemMessages.ERROR.AUTH.GOOGLE_STATE_INVALID);
+      expect(mRedisClient.getdel).not.toHaveBeenCalled();
+    });
+
+    test('should throw BadRequestError when the binding hash does not match', async () => {
+      mRedisClient.getdel.mockResolvedValue(
+        storedRecord('ATTENDEE', { bindingHash: 'a'.repeat(64) })
+      );
+
+      await expect(
+        completeGoogleOAuth({ code: 'code', state: 'state-1', userAgent: null }, cookieReq())
+      ).rejects.toThrow(systemMessages.ERROR.AUTH.GOOGLE_STATE_INVALID);
+    });
+
     test('should throw BadRequestError for an invalid or expired state', async () => {
       mRedisClient.getdel.mockResolvedValue(null);
 
       await expect(
-        completeGoogleOAuth({ code: 'code', state: 'bogus', userAgent: null })
+        completeGoogleOAuth({ code: 'code', state: 'bogus', userAgent: null }, cookieReq())
       ).rejects.toThrow(systemMessages.ERROR.AUTH.GOOGLE_STATE_INVALID);
     });
 
     test('should sign up a new user and issue QPass tokens', async () => {
-      mRedisClient.getdel.mockResolvedValue(JSON.stringify({ role: 'ORGANIZER' }));
+      mRedisClient.getdel.mockResolvedValue(storedRecord('ORGANIZER'));
       axios.post.mockResolvedValue({ data: googleTokenResponse });
       axios.get.mockResolvedValue({ data: profile });
       prisma.user.findUnique.mockResolvedValue(null);
@@ -299,7 +399,10 @@ describe('OAuth Service Tests', () => {
       };
       prisma.user.create.mockResolvedValue(created);
 
-      const result = await completeGoogleOAuth({ code: 'code', state: 'state-1', userAgent: null });
+      const result = await completeGoogleOAuth(
+        { code: 'code', state: 'state-1', userAgent: null },
+        cookieReq()
+      );
 
       expect(result.isNewUser).toBe(true);
       expect(result.accessToken).toBe('access-token-123');
@@ -307,13 +410,18 @@ describe('OAuth Service Tests', () => {
       expect(result.user).toEqual(created);
       expect(generateTokens).toHaveBeenCalledWith(created);
       expect(recordSession).toHaveBeenCalledWith('user-1', 'refresh-token-123', null);
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://oauth2.googleapis.com/token',
+        expect.stringContaining(`code_verifier=${PKCE_VERIFIER}`),
+        expect.anything()
+      );
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ role: 'ORGANIZER' }),
       });
     });
 
     test('should sign in an existing user and mark it as login', async () => {
-      mRedisClient.getdel.mockResolvedValue(JSON.stringify({ role: 'ATTENDEE' }));
+      mRedisClient.getdel.mockResolvedValue(storedRecord('ATTENDEE'));
       axios.post.mockResolvedValue({ data: googleTokenResponse });
       axios.get.mockResolvedValue({ data: profile });
       const existing = {
@@ -328,7 +436,10 @@ describe('OAuth Service Tests', () => {
       prisma.user.findUnique.mockResolvedValue(existing);
       prisma.user.update.mockResolvedValue({ ...existing, lastLoginAt: new Date() });
 
-      const result = await completeGoogleOAuth({ code: 'code', state: 'state-2', userAgent: 'ua' });
+      const result = await completeGoogleOAuth(
+        { code: 'code', state: 'state-2', userAgent: 'ua' },
+        cookieReq()
+      );
 
       expect(result.isNewUser).toBe(false);
       expect(result.accessToken).toBe('access-token-123');

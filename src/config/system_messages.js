@@ -81,6 +81,7 @@ export default {
       CURRENT_PASSWORD_INVALID: "Current password is incorrect",
       VERIFY_TOKEN_INVALID: "Invalid or expired email verification token",
       EMAIL_ALREADY_VERIFIED: "Email is already verified",
+      GOOGLE_OAUTH_FAILED: "Google OAuth failed",
       GOOGLE_NOT_CONFIGURED: "Google OAuth is not configured on the server",
       GOOGLE_STATE_INVALID: "Google sign-in session expired or is invalid, please try again",
       GOOGLE_EMAIL_NOT_VERIFIED: "Your Google account email is not verified",
