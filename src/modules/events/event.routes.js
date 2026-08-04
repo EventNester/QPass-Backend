@@ -94,7 +94,7 @@ router.post(
  * @openapi
  * /api/v1/events/{id}/unpublish:
  *   post:
- *     summary: Unpublish a published event
+ *     summary: Unpublish a published or active event
  *     description: |
  *       Transitions a PUBLISHED or ACTIVE event back to DRAFT status.
  *       The unique slug is preserved. Only the event owner or an ADMIN can

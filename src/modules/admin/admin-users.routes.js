@@ -58,7 +58,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: A user with this email already exists (or is already an admin)
+ *         description: A non-deleted (active) user with this email already exists (or is already an admin)
  *         content:
  *           application/json:
  *             schema:
@@ -116,7 +116,7 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: A user with this email already exists (or is already an admin)
+ *         description: A non-deleted (active) user already exists with this email (or is already an admin). Previously deleted accounts with this email are reactivated instead of returning 409.
  *         content:
  *           application/json:
  *             schema:

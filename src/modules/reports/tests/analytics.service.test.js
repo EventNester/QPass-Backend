@@ -101,6 +101,11 @@ describe("Analytics Service Tests", () => {
     expect(result.totalAttendees).toBe(340);
     expect(result.registeredUsers).toBe(42);
     expect(prisma.user.count).not.toHaveBeenCalled();
+
+    // The registeredUsers raw query must stay scoped to the caller's own events.
+    const registeredUsersSql = prisma.$queryRaw.mock.calls[1][0].join("?");
+    expect(registeredUsersSql).toContain("e.owner_id");
+    expect(prisma.$queryRaw.mock.calls[1][1]).toBe(mockOrganizerId);
   });
 
   test("counts distinct attendee emails via the raw query result", async () => {

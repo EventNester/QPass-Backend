@@ -94,7 +94,7 @@ src/modules/<module>/
 | `staff` | assign / list / remove staff, auto-create pending staff users |
 | `notifications` | Brevo email service, `Notification` records, EJS templates |
 | `reports` | dashboard statistics, CSV/PDF exports (registrations + attendance), overview analytics |
-| `admin` | audit log queries (ADMIN only) |
+| `admin` | audit log queries, admin invitations via email (invitee sets own password), promote users to admin |
 
 Supporting layers:
 
