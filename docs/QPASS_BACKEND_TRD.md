@@ -60,7 +60,7 @@ Become Africa's most trusted attendance verification & ticket management platfor
 |---------|-------|
 | Auth (register, login, refresh, password reset) | RBAC: Organizer, Staff, Attendee, Admin. JWT 30min access / 7d refresh. |
 | Google OAuth (Sign in with Google) | OAuth 2.0 authorization-code flow for sign-up and sign-in. New accounts get a random unusable password + pre-verified email. Redirects to frontend dashboard with tokens. |
-| Event CRUD + publish | Owner-only. Slug-based public URLs. DRAFT → PUBLISHED → ACTIVE → COMPLETED/CANCELLED. |
+| Event CRUD + publish | Owner-only. Slug-based public URLs. DRAFT → PUBLISHED → ACTIVE → COMPLETED/CANCELLED. Publish and unpublish (PUBLISHED/ACTIVE → DRAFT, slug preserved). |
 | TicketType management | Per-event categories (VIP, Regular, Student). Price in naira, optional capacity. |
 | Attendee import (CSV/XLSX/PDF/DOCX) | Row validation, batch tracking, per-row error reporting. 5MB max. Synchronous (<1000 rows). |
 | Public registration | Slug-based link. Instant confirmation + QR. |
@@ -255,7 +255,7 @@ enum RegistrationSource   { IMPORT  PUBLIC_LINK }
 
 ## 7. API Endpoints
 
-All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 42 paths, 50 operations. Full reference: `docs/QPASS_API_DOC.md`.
+All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consistent envelopes: `{ status: "success"|"error", message, data? }`. Current totals: 11 tags, 47 paths, 56 operations. Full reference: `docs/QPASS_API_DOC.md`.
 
 ### 7.1 Auth
 
@@ -272,10 +272,12 @@ All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consist
 | 9 | POST | `/auth/change-password` | Authenticated | authLimiter | `{ currentPassword, newPassword }`; verifies current password. |
 | 10 | POST | `/auth/request-verification` | Authenticated | authLimiter | Send email-verification email (Redis, 15 min TTL); 400 if already verified. |
 | 11 | POST | `/auth/verify-email` | Public | authLimiter | `{ token }`; sets `emailVerifiedAt`. |
-| 12 | GET | `/auth/sessions` | Authenticated | - | List active Redis sessions. |
-| 13 | DELETE | `/auth/sessions/{sessionId}` | Authenticated | - | Revoke a session (id = 64-char refresh-token hash). |
-| 14 | GET | `/auth/google` | Public | authLimiter | Start "Sign in with Google". 302 to Google consent screen. Optional `?role=ATTENDEE\|ORGANIZER\|STAFF` (default ATTENDEE); 422 for invalid role. |
-| 15 | GET | `/auth/google/callback` | Public | - | Google redirect target. Exchanges code → verifies `email_verified` → creates (signup) or matches (login) the user → 302 to `OAUTH_FRONTEND_REDIRECT_URL` with `?access_token&refresh_token&mode=signup\|login` (or `?error&error_description`). |
+| 12 | POST | `/auth/otp/send` | Public | authLimiter | `{ email }`. Sends a 6-digit email-verification code (Redis, 10 min TTL). Always responds 200 to avoid leaking account existence. Non-production returns the code. |
+| 13 | POST | `/auth/otp/verify` | Public | authLimiter | `{ email, code }`; sets `emailVerifiedAt`. Single-use; 401 on invalid/expired code. |
+| 14 | GET | `/auth/sessions` | Authenticated | - | List active Redis sessions. |
+| 15 | DELETE | `/auth/sessions/{sessionId}` | Authenticated | - | Revoke a session (id = 64-char refresh-token hash). |
+| 16 | GET | `/auth/google` | Public | authLimiter | Start "Sign in with Google". 302 to Google consent screen. Optional `?role=ATTENDEE\|ORGANIZER\|STAFF` (default ATTENDEE); 422 for invalid role. |
+| 17 | GET | `/auth/google/callback` | Public | - | Google redirect target. Exchanges code → verifies `email_verified` → creates (signup) or matches (login) the user → 302 to `OAUTH_FRONTEND_REDIRECT_URL` with `?access_token&refresh_token&mode=signup\|login` (or `?error&error_description`). |
 
 **Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; an optional `role` (`ATTENDEE`/`ORGANIZER`/`STAFF`) may be supplied, and `ADMIN` cannot be self-assigned.
 
@@ -283,65 +285,66 @@ All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consist
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 16 | POST | `/events` | Organizer/Admin | Create draft |
-| 17 | GET | `/events` | Organizer/Admin | List `?page,limit,status` |
-| 18 | GET | `/events/:eventId` | Owner | Get details |
-| 19 | PATCH | `/events/:eventId` | Owner | Edit |
-| 20 | DELETE | `/events/:eventId` | Owner | Soft delete (deletedAt) |
-| 21 | POST | `/events/:eventId/publish` | Owner | Publish (slug generated) |
-| 22 | POST | `/events/:eventId/cancel` | Owner | Cancel (draft cannot be cancelled) |
+| 18 | POST | `/events` | Organizer/Admin | Create draft |
+| 19 | GET | `/events` | Organizer/Admin | List `?page,limit,status` |
+| 20 | GET | `/events/:eventId` | Owner | Get details |
+| 21 | PATCH | `/events/:eventId` | Owner | Edit |
+| 22 | DELETE | `/events/:eventId` | Owner | Soft delete (deletedAt) |
+| 23 | POST | `/events/:eventId/publish` | Owner | Publish (slug generated) |
+| 24 | POST | `/events/:eventId/unpublish` | Owner | Unpublish (PUBLISHED/ACTIVE back to DRAFT; slug preserved) |
+| 25 | POST | `/events/:eventId/cancel` | Owner | Cancel (draft cannot be cancelled) |
 
 ### 7.3 Ticket Types
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 23 | POST | `/events/:eventId/ticket-types` | Owner | Create `{ name, description?, price, capacity? }` |
-| 24 | GET | `/events/:eventId/ticket-types` | Owner | List |
-| 25 | PATCH | `/events/:eventId/ticket-types/:id` | Owner | Edit |
-| 26 | DELETE | `/events/:eventId/ticket-types/:id` | Owner | Delete (409 if registrations linked) |
+| 26 | POST | `/events/:eventId/ticket-types` | Owner | Create `{ name, description?, price, capacity? }` |
+| 27 | GET | `/events/:eventId/ticket-types` | Owner | List |
+| 28 | PATCH | `/events/:eventId/ticket-types/:id` | Owner | Edit |
+| 29 | DELETE | `/events/:eventId/ticket-types/:id` | Owner | Delete (409 if registrations linked) |
 
 ### 7.4 Attendee Import
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 27 | POST | `/events/:eventId/import` | Owner | Upload CSV/XLSX/PDF/DOCX (Multer, 5MB max) |
-| 28 | GET | `/events/:eventId/import` | Owner | List import batches |
-| 29 | GET | `/events/:eventId/import/:batchId` | Owner | Import results + per-row errors |
-| 30 | GET | `/events/:eventId/import-template` | Owner | Download CSV or PDF template (?format=csv\|pdf, default csv) |
+| 30 | POST | `/events/:eventId/import` | Owner | Upload CSV/XLSX/PDF/DOCX (Multer, 5MB max) |
+| 31 | GET | `/events/:eventId/import` | Owner | List import batches |
+| 32 | GET | `/events/:eventId/import/:batchId` | Owner | Import results + per-row errors |
+| 33 | GET | `/events/:eventId/import-template` | Owner | Download CSV or PDF template (?format=csv\|pdf, default csv) |
 
 ### 7.5 Public Registration
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 31 | GET | `/e/:slug` | Public | Event details + ticket types (no ownerId) |
-| 32 | POST | `/registrations/free` | Public | Register for a free event. No account required. Instant confirmation + QR. |
+| 34 | GET | `/e/:slug` | Public | Event details + ticket types (no ownerId) |
+| 35 | POST | `/registrations/free` | Public | Register for a free event. No account required. Instant confirmation + QR. |
 
 ### 7.6 Tickets
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 33 | GET | `/events/:eventId/tickets` | Owner | List `?page,limit,status,paymentStatus` |
-| 34 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF `{ format }` |
-| 35 | GET | `/tickets/:ticketId` | Authenticated | View ticket + QR (attendee or event owner) |
-| 36 | GET | `/tickets/:ticketId/download` | Authenticated | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
-| 37 | GET | `/tickets/me` | Authenticated | List the caller's own tickets (history) matched by email. `?page,limit` (max 100). Excludes soft-deleted/cancelled events; cancelled registrations on live events still shown. Includes event, ticket type, ticket code, `checkedIn`. |
+| 36 | GET | `/events/:eventId/tickets` | Owner | List `?page,limit,status,paymentStatus` |
+| 37 | POST | `/events/:eventId/tickets/export` | Owner | Export CSV/PDF `{ format }` |
+| 38 | GET | `/tickets/:ticketId` | Authenticated | View ticket + QR (attendee or event owner) |
+| 39 | GET | `/tickets/:ticketId/download` | Authenticated | Download PDF (pdfkit). Event details, attendee info, QR code, confirmation code. Filename: `{event-slug}-ticket.pdf` |
+| 40 | GET | `/tickets/me` | Authenticated | List the caller's own tickets (history) matched by email. `?page,limit` (max 100). Excludes soft-deleted/cancelled events; cancelled registrations on live events still shown. Includes event, ticket type, ticket code, `checkedIn`. |
 
 ### 7.7 Staff Management
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 38 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. |
-| 39 | GET | `/events/:eventId/staff` | Owner | List |
-| 40 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
+| 41 | POST | `/events/:eventId/staff` | Owner | Invite/assign `{ email, permissionScope? }`. Creates pending user if not exists + invite email. Response includes event summary (title, venue, startTime, endTime). |
+| 42 | GET | `/events/:eventId/staff` | Owner | List active staff. Response includes event summary (title, venue, startTime, endTime). |
+| 43 | DELETE | `/events/:eventId/staff/:staffId` | Owner | Remove |
 
 ### 7.8 Check-in
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 41 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
-| 42 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List (excludes undone) |
-| 43 | GET | `/checkins/stats` | Admin / Owner/Staff | Aggregate stats. Without `eventId`: system-wide (ADMIN only). With `eventId`: owner/Admin/active staff. Returns `{ checkins: { total, valid, duplicate }, uniqueAttendeesCheckedIn, eventsWithCheckins }` |
-| 44 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner/scanning staff | Undo within 24h |
+| 44 | POST | `/checkins/:eventId/scan` | Staff (assigned) | Scan `{ token, deviceInfo? }` |
+| 45 | GET | `/checkins/:eventId/checkins` | Organizer/Staff | List (excludes undone) |
+| 46 | GET | `/checkins/stats` | Admin / Owner/Staff | Aggregate stats. Without `eventId`: system-wide (ADMIN only). With `eventId`: owner/Admin/active staff. Returns `{ checkins: { total, valid, duplicate }, uniqueAttendeesCheckedIn, eventsWithCheckins }` |
+| 47 | POST | `/checkins/:eventId/checkins/:checkInId/undo` | Owner/scanning staff | Undo within 24h |
 
 Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | NOT_AUTHORIZED`. All HTTP 200 except NOT_AUTHORIZED (403).
 
@@ -349,22 +352,25 @@ Scan results: `VALID | DUPLICATE | INVALID | EXPIRED | WRONG_EVENT | REVOKED | N
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 45 | GET | `/events/:eventId/dashboard` | Owner/Admin/Staff | Stats: registrations, check-ins, capacity, ticket breakdown |
-| 46 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
-| 47 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
-| 48 | GET | `/analytics/overview` | Authenticated | Overview totals: events, published events, registrations, distinct attendees, registered attendee accounts. `?scope=own\|system` (system is ADMIN only). Non-ADMINs always scoped to own events. |
+| 48 | GET | `/events/:eventId/dashboard` | Owner/Admin/Staff | Stats: registrations, check-ins, capacity, ticket breakdown |
+| 49 | GET | `/events/:eventId/exports/attendance` | Owner | Export attendance CSV/PDF |
+| 50 | GET | `/events/:eventId/exports/registrations` | Owner | Export registrations CSV/PDF |
+| 51 | GET | `/analytics/overview` | Authenticated | Overview totals: events, published events, registrations, distinct attendees, registered attendee accounts. `?scope=own\|system` (system is ADMIN only). Non-ADMINs always scoped to own events. |
 
 ### 7.10 Admin
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 49 | GET | `/audit-logs` | Admin | Paginated audit trail. Filter by action, entity, actorId, date range. |
+| 52 | GET | `/audit-logs` | Admin | Paginated audit trail. Filter by action, entity, actorId, date range. |
+| 53 | POST | `/admin/invites` | Admin | Invite `{ email }` to become an ADMIN. Emails a single-use invite link (7-day Redis TTL); invitee sets their own password. 409 if the email belongs to an existing non-admin account (use promote instead). |
+| 54 | POST | `/admin/invites/:token/accept` | Public (authLimiter) | `{ name, password }` — accept the invite, set own password, create the ADMIN account (or reactivate a soft-deleted user with that email). Single-use. 401 invalid/expired, 409 existing account. |
+| 55 | PATCH | `/admin/users/:userId/promote` | Admin | Promote a user to ADMIN (idempotent; cannot target your own account). |
 
 ### 7.11 Health
 
 | # | Method | Endpoint | Auth | Purpose |
 |---|--------|----------|------|---------|
-| 50 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
+| 56 | GET | `/health` | Public | DB + Redis status. 200 or 503. |
 
 ---
 
@@ -477,7 +483,7 @@ Client auth: JWT in handshake auth header, validated server-side.
 |------|---------|
 | Schema migration | New enums (RegistrationMode, RegistrationSource), new fields on User/Event/Registration/Notification/AuditLog, new models (TicketType, ImportBatch) |
 | Auth module | Register, login, refresh, logout, password reset, Google OAuth (authorization-code, sign-up + sign-in). JWT + bcrypt + Redis blacklist. `requireAuth` middleware. Optional `role` at registration (default ATTENDEE; ADMIN not self-assignable), rate limit, generic errors. |
-| Event CRUD | Create (DRAFT), list (paginated, filter by status), get, edit, publish (slug), cancel. Ownership enforcement. |
+| Event CRUD | Create (DRAFT), list (paginated, filter by status), get, edit, publish (slug), unpublish (slug preserved), cancel. Ownership enforcement. |
 | TicketType CRUD | Create, list, edit, delete (only if no registrations). Per-event scoped. |
 | Validate + routes | Zod middleware wrapper. Wire all routes in `v1.js`. Initialize Socket.IO. |
 

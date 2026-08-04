@@ -87,7 +87,7 @@ src/modules/<module>/
 | Module | Responsibility |
 |--------|----------------|
 | `auth` | register, login, refresh, logout, JWT middleware, password reset (Redis-backed tokens), Google OAuth (`oauth.service`) |
-| `events` | event CRUD, publish (slug generation), cancel; ownership enforcement |
+| `events` | event CRUD, publish (slug generation), unpublish, cancel; ownership enforcement |
 | `tickets` | ticket types, per-event ticket list/export, individual ticket view + PDF, QR generation, attendee ticket history (`GET /tickets/me`) |
 | `registrations` | public event view (`GET /e/:slug`), free registration, bulk file import (CSV/XLSX/PDF/DOCX) |
 | `checkins` | QR scan with duplicate detection, check-in list, undo (soft delete + audit), check-in statistics |

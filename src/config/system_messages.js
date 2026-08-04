@@ -11,6 +11,7 @@ export default {
       PROFILE_UPDATED: "Profile updated successfully",
       VERIFICATION_SENT: "Verification email sent",
       EMAIL_VERIFIED: "Email verified successfully",
+      OTP_SENT: "Verification code sent to your email",
       SESSION_REVOKED: "Session revoked successfully",
     },
 
@@ -37,6 +38,7 @@ export default {
       UPDATED: "Event updated successfully",
       DELETED: "Event deleted successfully",
       PUBLISHED: "Event published successfully",
+      UNPUBLISHED: "Event unpublished successfully",
       CANCELLED: "Event cancelled successfully",
     },
     TICKET: {
@@ -56,6 +58,11 @@ export default {
       ASSIGNED: "Staff assigned successfully",
       LISTED: "Staff list retrieved successfully",
       REMOVED: "Staff removed successfully",
+    },
+    ADMIN: {
+      INVITE_SENT: "Admin invitation sent successfully",
+      INVITE_ACCEPTED: "Admin invitation accepted successfully",
+      USER_PROMOTED: "User promoted to admin successfully",
     },
     REPORT: {
       GENERATED: "Report generated successfully",
@@ -85,6 +92,7 @@ export default {
       GOOGLE_NOT_CONFIGURED: "Google OAuth is not configured on the server",
       GOOGLE_STATE_INVALID: "Google sign-in session expired or is invalid, please try again",
       GOOGLE_EMAIL_NOT_VERIFIED: "Your Google account email is not verified",
+      OTP_INVALID: "Invalid or expired verification code",
     },
     EVENT: {
       NOT_FOUND: "Event not found",
@@ -92,6 +100,7 @@ export default {
       UNAUTHORIZED: "You are not the owner of this event",
       CANNOT_DELETE: "Cannot delete event with active registrations",
       NOT_DRAFT: "Event is not in draft status",
+      NOT_PUBLISHED: "Event is not in published status",
       CANNOT_CANCEL_DRAFT: "Cannot cancel a draft event",
       ALREADY_CANCELLED: "Event is already cancelled",
     },
@@ -138,6 +147,13 @@ export default {
     STAFF: {
       ALREADY_ASSIGNED: "Staff member is already assigned to this event",
       NOT_FOUND: "Staff assignment not found",
+    },
+    ADMIN: {
+      USER_NOT_FOUND: "User not found",
+      USER_ALREADY_EXISTS: "A user with this email already exists",
+      CANNOT_MODIFY_SELF: "You cannot change your own account role",
+      INVITE_INVALID: "Invalid or expired admin invitation",
+      INVITE_ALREADY_ADMIN: "This user is already an admin",
     },
     GENERAL: {
       NOT_FOUND: "Resource not found",
@@ -190,6 +206,8 @@ export default {
     TOKEN_REQUIRED: "Refresh token is required",
     RESET_TOKEN_REQUIRED: "Reset token is required",
     VERIFY_TOKEN_REQUIRED: "Verification token is required",
+    INVITE_TOKEN_REQUIRED: "Invitation token is required",
+    OTP_CODE_INVALID: "Verification code must be 6 digits",
     CURRENT_PASSWORD_REQUIRED: "Current password is required",
     SESSION_ID_REQUIRED: "Session id is required",
     SESSION_ID_INVALID: "Invalid session id",

@@ -6,6 +6,7 @@ import {
   updateEvent,
   deleteEvent,
   publishEvent,
+  unpublishEvent,
   cancelEvent,
 } from "../event.service.js";
 import prisma from "../../../database/index.js";
@@ -430,6 +431,131 @@ describe("Event Service Tests", () => {
         },
       });
       expect(result).toEqual(publishedEvent);
+    });
+  });
+
+  describe("unpublishEvent", () => {
+    test("should unpublish a published event back to DRAFT", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+      };
+      const draftEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.DRAFT,
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(publishedEvent)
+        .mockResolvedValueOnce(draftEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await unpublishEvent("event_1", mockOwnerId);
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          ownerId: mockOwnerId,
+          deletedAt: null,
+          status: {
+            in: [
+              constants.EVENT_STATUS.PUBLISHED,
+              constants.EVENT_STATUS.ACTIVE,
+            ],
+          },
+        },
+        data: {
+          status: constants.EVENT_STATUS.DRAFT,
+        },
+      });
+      expect(result).toEqual(draftEvent);
+    });
+
+    test("should unpublish an active event back to DRAFT", async () => {
+      const activeEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.ACTIVE,
+      };
+      const draftEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.DRAFT,
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(activeEvent)
+        .mockResolvedValueOnce(draftEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await unpublishEvent("event_1", mockOwnerId);
+
+      expect(result).toEqual(draftEvent);
+    });
+
+    test.each([
+      constants.EVENT_STATUS.DRAFT,
+      constants.EVENT_STATUS.COMPLETED,
+      constants.EVENT_STATUS.CANCELLED,
+    ])("should reject unpublish when status is %s", async (status) => {
+      prisma.event.findFirst.mockResolvedValueOnce({ ...mockEvent, status });
+
+      await expect(unpublishEvent("event_1", mockOwnerId)).rejects.toThrow(
+        /Event is not in published status \(current: /
+      );
+    });
+
+    test("should throw NotFoundError when event does not exist", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      await expect(unpublishEvent("nonexistent", mockOwnerId)).rejects.toThrow(
+        NotFoundError
+      );
+    });
+
+    test("should throw ForbiddenError when caller is not the owner", async () => {
+      prisma.event.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockEvent);
+
+      await expect(
+        unpublishEvent("event_1", "attacker_user")
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    test("should allow an ADMIN to unpublish any event", async () => {
+      const publishedEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.PUBLISHED,
+      };
+      const draftEvent = {
+        ...mockEvent,
+        status: constants.EVENT_STATUS.DRAFT,
+      };
+
+      prisma.event.findFirst
+        .mockResolvedValueOnce(publishedEvent)
+        .mockResolvedValueOnce(draftEvent);
+      prisma.event.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await unpublishEvent("event_1", "admin_1", "ADMIN");
+
+      expect(prisma.event.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "event_1",
+          deletedAt: null,
+          status: {
+            in: [
+              constants.EVENT_STATUS.PUBLISHED,
+              constants.EVENT_STATUS.ACTIVE,
+            ],
+          },
+        },
+        data: {
+          status: constants.EVENT_STATUS.DRAFT,
+        },
+      });
+      expect(result).toEqual(draftEvent);
     });
   });
 

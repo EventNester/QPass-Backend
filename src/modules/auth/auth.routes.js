@@ -12,6 +12,7 @@ import {
 } from './auth.service.js';
 import { forgotPassword, resetPassword } from './password.service.js';
 import { requestEmailVerification, verifyEmail } from './verification.service.js';
+import { sendOtp, verifyOtp } from './otp.service.js';
 import {
   recordSession,
   consumeSession,
@@ -33,6 +34,8 @@ import {
   updateProfileSchema,
   changePasswordSchema,
   verifyEmailSchema,
+  sendOtpSchema,
+  verifyOtpSchema,
   sessionParamsSchema,
 } from './auth.schema.js';
 import { requireAuth } from './auth.middleware.js';
@@ -604,6 +607,105 @@ router.post('/verify-email', authLimiter, async (req, res, next) => {
       return next(new ValidationError(parsed.error.issues[0].message));
     }
     await verifyEmail(parsed.data.token);
+    return success(res, null, systemMessages.SUCCESS.AUTH.EMAIL_VERIFIED);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/otp/send:
+ *   post:
+ *     summary: Send an email verification code
+ *     description: |
+ *       Sends a 6-digit verification code to the given email if it belongs to
+ *       an unverified account. Always responds with success to avoid leaking
+ *       whether an account exists. Rate limited to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SendOtpRequest'
+ *     responses:
+ *       200:
+ *         description: Verification code sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: "Validation error. Possible message: Invalid email address"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.post('/otp/send', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = sendOtpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    const result = await sendOtp(parsed.data);
+    if (result && result.success === false) {
+      return next(new Error(systemMessages.ERROR.EMAIL.FAILED));
+    }
+    return success(res, result, systemMessages.SUCCESS.AUTH.OTP_SENT);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/auth/otp/verify:
+ *   post:
+ *     summary: Verify email with a code
+ *     description: |
+ *       Completes email verification using the 6-digit code emailed to the
+ *       user. Codes are single-use and expire after 10 minutes. Rate limited
+ *       to 5 requests per 15 minutes.
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VerifyOtpRequest'
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: "Validation error. Possible messages: Invalid email address, Verification code must be 6 digits"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Invalid or expired verification code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests (5 per 15 min)
+ */
+router.post('/otp/verify', authLimiter, async (req, res, next) => {
+  try {
+    const parsed = verifyOtpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(new ValidationError(parsed.error.issues[0].message));
+    }
+    await verifyOtp(parsed.data);
     return success(res, null, systemMessages.SUCCESS.AUTH.EMAIL_VERIFIED);
   } catch (error) {
     return next(error);
