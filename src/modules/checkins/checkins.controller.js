@@ -27,3 +27,16 @@ export async function undoCheckin(req, res, next) {
     next(err);
   }
 }
+
+export async function getCheckinStatistics(req, res, next) {
+  try {
+    const result = await checkinService.getCheckinStatistics(
+      req.user.id,
+      req.user.role,
+      { eventId: req.query.eventId }
+    );
+    return success(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
