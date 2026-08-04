@@ -210,7 +210,7 @@ src/
 │   ├── staff/              # staff assignment management
 │   ├── notifications/      # Brevo email service, notification records, templates
 │   ├── reports/            # dashboard stats, CSV/PDF exports, overview analytics, PDF generation
-│   └── admin/              # audit log queries
+│   └── admin/              # audit log queries + admin invitations (email) + user promotion
 ├── integrations/           # external services (email/Brevo)
 ├── realtime/               # Socket.IO init, rooms, event emitters
 ├── routes/                 # root router (/health, /api/v1, /api-docs)

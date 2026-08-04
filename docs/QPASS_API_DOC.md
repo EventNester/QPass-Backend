@@ -450,7 +450,7 @@ Publish a draft event. Generates a unique public slug.
 
 #### `POST /api/v1/events/{id}/unpublish`
 
-Unpublish a published event. Transitions a `PUBLISHED` or `ACTIVE` event back to `DRAFT` (e.g. if there is an issue with the event). The unique public slug is **preserved**.
+Unpublish a published or active event. Transitions a `PUBLISHED` or `ACTIVE` event back to `DRAFT` (e.g. if there is an issue with the event). The unique public slug is **preserved**.
 
 **Auth:** ORGANIZER / ADMIN (owner)
 
@@ -912,7 +912,7 @@ Invite someone to become an ADMIN by email. A single-use invite link (7-day expi
 
 **Response `201`:** `{ "status": "success", "message": "Admin invitation sent successfully", "data": { "inviteToken": "<non-production only>" } }`
 
-**Response `409`:** a user with this email already exists (or is already an admin)
+**Response `409`:** a non-deleted (active) user with this email already exists (or is already an admin)
 
 ---
 
@@ -929,7 +929,7 @@ Accept an admin invitation by setting the invitee's own name and password. Creat
 **Response `200`:** `{ "status": "success", "message": "Admin invitation accepted successfully", "data": { "id", "name", "email", "role": "ADMIN", "status", "createdAt" } }`
 
 **Response `401`:** invalid or expired invitation token
-**Response `409`:** a user with this email already exists (or is already an admin)
+**Response `409`:** a non-deleted (active) user already exists with this email (or is already an admin). Previously deleted accounts with this email are reactivated instead of returning 409.
 
 ---
 

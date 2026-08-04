@@ -17,7 +17,7 @@ QPass is an event registration, ticketing, and attendance intelligence platform 
 
 **MVP ships:** Auth (RBAC: Organizer, Staff, Attendee, Admin), Event CRUD with slug-based public URLs, TicketType management, attendee import (CSV/XLSX/PDF/DOCX), public registration, QR code generation/scanning with duplicate detection, Brevo REST email delivery, staff management, dashboard statistics, CSV/PDF export, PDF ticket downloads, and audit logging.
 
-**Deferred (Phase 2):** Payment processing (Paystack integration, paid registration, webhooks), full KYC, OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
+**Deferred (Phase 2):** Payment processing (Paystack integration, paid registration, webhooks), full KYC, SMS (email OTP is shipped), offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event marketplace, AI analytics, push notifications, multi-language support.
 
 ---
 
@@ -77,7 +77,7 @@ Become Africa's most trusted attendance verification & ticket management platfor
 
 ### 3.2 Deferred (Post-MVP)
 
-OTP/SMS, offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event branding, custom registration fields, marketplace, AI analytics, push notifications, multi-gate sync, seat allocation, white-label, public APIs.
+SMS (email OTP is shipped), offline scanning, rotating QR, ticket transfer/resale, refunds, promo codes, event branding, custom registration fields, marketplace, AI analytics, push notifications, multi-gate sync, seat allocation, white-label, public APIs.
 
 ---
 
@@ -277,7 +277,7 @@ All under `/api/v1` unless noted. Zod validation, auth middleware, RBAC, consist
 | 14 | GET | `/auth/sessions` | Authenticated | - | List active Redis sessions. |
 | 15 | DELETE | `/auth/sessions/{sessionId}` | Authenticated | - | Revoke a session (id = 64-char refresh-token hash). |
 | 16 | GET | `/auth/google` | Public | authLimiter | Start "Sign in with Google". 302 to Google consent screen. Optional `?role=ATTENDEE\|ORGANIZER\|STAFF` (default ATTENDEE); 422 for invalid role. |
-| 17 | GET | `/auth/google/callback` | Public | - | Google redirect target. Exchanges code → verifies `email_verified` → creates (signup) or matches (login) the user → 302 to `OAUTH_FRONTEND_REDIRECT_URL` with `?access_token&refresh_token&mode=signup\|login` (or `?error&error_description`). |
+| 17 | GET | `/auth/google/callback` | Public | - | Google redirect target. Exchanges code → verifies `email_verified` → creates (signup) or matches (login) the user → 302 to `OAUTH_FRONTEND_REDIRECT_URL` with the tokens in the URL **fragment** (`#access_token&refresh_token&mode=signup\|login`; never the query string). Failures redirect with `?error&error_description` query params instead. |
 
 **Token specs:** Access: 30min. Refresh: 7d. Registration defaults to ATTENDEE; an optional `role` (`ATTENDEE`/`ORGANIZER`/`STAFF`) may be supplied, and `ADMIN` cannot be self-assigned.
 
