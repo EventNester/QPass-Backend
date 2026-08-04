@@ -163,14 +163,14 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Auth | 15 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, sessions, Google OAuth (start + callback) |
 | Events | 7 | CRUD + publish + cancel |
 | Ticket Types | 4 | per-event CRUD |
-| Tickets | 4 | event ticket list/export + individual ticket/PDF |
+| Tickets | 5 | event ticket list/export + individual ticket/PDF + my tickets (history) |
 | Registrations | 2 | public event view + free registration (no auth) |
 | Import | 4 | upload, list, batch detail, template |
 | Staff | 3 | assign / list / remove |
-| Checkins | 3 | scan, list, undo |
-| Reports | 3 | dashboard + registrations/attendance exports |
+| Checkins | 4 | scan, list, undo, statistics |
+| Reports | 4 | dashboard + registrations/attendance exports + overview analytics |
 | Admin | 1 | audit logs |
-| **Total** | **47** | **39 paths** across 11 tags |
+| **Total** | **50** | **42 paths** across 11 tags |
 
 See [docs/QPASS_API_DOC.md](./docs/QPASS_API_DOC.md) for the full reference and [SWAGGER_UI_TESTING.md](./SWAGGER_UI_TESTING.md) for a manual test walkthrough.
 
@@ -203,12 +203,12 @@ src/
 ├── modules/                # Domain modules (controller → service → routes → schema)
 │   ├── auth/               # register/login/refresh/logout, JWT middleware, password reset
 │   ├── events/             # event CRUD, publish, cancel
-│   ├── tickets/            # ticket types, event tickets, individual tickets, QR + PDF services
+│   ├── tickets/            # ticket types, event tickets, individual tickets, my tickets, QR + PDF services
 │   ├── registrations/      # public registration, attendee import (CSV/XLSX/PDF/DOCX)
-│   ├── checkins/           # QR scan with duplicate detection, list, undo
+│   ├── checkins/           # QR scan with duplicate detection, list, undo, statistics
 │   ├── staff/              # staff assignment management
 │   ├── notifications/      # Brevo email service, notification records, templates
-│   ├── reports/            # dashboard stats, CSV/PDF exports, PDF generation
+│   ├── reports/            # dashboard stats, CSV/PDF exports, overview analytics, PDF generation
 │   └── admin/              # audit log queries
 ├── integrations/           # external services (email/Brevo)
 ├── realtime/               # Socket.IO init, rooms, event emitters

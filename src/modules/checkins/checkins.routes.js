@@ -2,8 +2,8 @@ import { Router } from "express";
 import * as checkinController from "./checkins.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { requireRole } from "../../middlewares/rbac.middleware.js";
-import { validate } from "../../middlewares/validate.middleware.js";
-import { scanQrSchema } from "./checkins.schema.js";
+import { validate, validateQuery } from "../../middlewares/validate.middleware.js";
+import { scanQrSchema, checkinStatsQuerySchema } from "./checkins.schema.js";
 
 const router = Router();
 
@@ -12,6 +12,74 @@ const router = Router();
 // Some endpoints below include an additional /checkins namespace segment
 // (e.g., /:eventId/checkins/:checkInId/undo). This is intentional to prevent
 // ambiguous route parameters and ensure the paths remain self-documenting.
+
+/**
+ * @openapi
+ * /api/v1/checkins/stats:
+ *   get:
+ *     summary: Get check-in statistics
+ *     description: |
+ *       Returns aggregate check-in statistics. Without an `eventId` this is a
+ *       system-wide summary (ADMIN only). With an `eventId` the caller must be
+ *       the event owner, an ADMIN, or an active assigned staff member.
+ *     tags: [Checkins]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: eventId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Optional event ID to scope statistics to
+ *     responses:
+ *       200:
+ *         description: Check-in statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         checkins:
+ *                           type: object
+ *                           properties:
+ *                             total: { type: integer }
+ *                             valid: { type: integer }
+ *                             duplicate: { type: integer }
+ *                         uniqueAttendeesCheckedIn: { type: integer }
+ *                         eventsWithCheckins: { type: integer }
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — requires ADMIN (global) or event owner/staff (scoped)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid event ID format"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get("/stats", requireAuth, validateQuery(checkinStatsQuerySchema), checkinController.getCheckinStatistics);
 
 /**
  * @openapi

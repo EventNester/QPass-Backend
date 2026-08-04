@@ -1,4 +1,5 @@
 import prisma from "../../database/index.js";
+import { Prisma } from "@prisma/client";
 import { getRedisClient } from "../../config/redis.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from "../../utils/error.js";
@@ -281,4 +282,119 @@ export async function undoCheckin(eventId, checkInId, staffId) {
   });
 
   return { success: true };
+}
+
+/**
+ * Count distinct registrations that have at least one active check-in,
+ * computed in the database so no identifier arrays are materialized.
+ *
+ * @param {string} [eventId] - Optional event to scope the count to
+ * @returns {Promise<number>}
+ */
+async function countDistinctCheckedInRegistrations(eventId) {
+  const scope = eventId ? Prisma.sql`AND event_id = ${eventId}` : Prisma.empty;
+
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(DISTINCT registration_id)::int AS count
+    FROM check_ins
+    WHERE deleted_at IS NULL ${scope}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Count `DUPLICATE_SCAN` audit-log entries for check-ins. Scoped to an event
+ * via a database-side join (no per-check-in id collection) when `eventId` is
+ * given; otherwise returns the system-wide audit-log count.
+ *
+ * @param {string} [eventId] - Optional event to scope the count to
+ * @returns {Promise<number>}
+ */
+async function countDuplicateScans(eventId) {
+  if (!eventId) {
+    return prisma.auditLog.count({
+      where: { action: "DUPLICATE_SCAN", entity: "CheckIn" },
+    });
+  }
+
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS count
+    FROM audit_logs a
+    INNER JOIN check_ins c ON c.id = a.entity_id
+    WHERE a.action = 'DUPLICATE_SCAN'
+      AND a.entity = 'CheckIn'
+      AND c.deleted_at IS NULL
+      AND c.event_id = ${eventId}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Aggregate check-in statistics. Without an `eventId` this is a system-wide
+ * summary (ADMIN only); with an `eventId` the caller must be the event owner,
+ * an ADMIN, or an active assigned staff member (mirrors `getDashboardStats`).
+ *
+ * @param {string} userId - ID of the authenticated caller
+ * @param {string} userRole - Role of the authenticated caller
+ * @param {Object} [options]
+ * @param {string} [options.eventId] - Optional event to scope statistics to
+ * @returns {Promise<{ checkins: { total, valid, duplicate }, uniqueAttendeesCheckedIn: number, eventsWithCheckins: number }>}
+ * @throws {ForbiddenError} If the caller lacks permission
+ * @throws {NotFoundError} If the scoped event does not exist
+ */
+export async function getCheckinStatistics(userId, userRole, { eventId } = {}) {
+  if (eventId) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+      select: { ownerId: true },
+    });
+
+    if (!event) {
+      throw new NotFoundError(errMsg.EVENT.NOT_FOUND);
+    }
+
+    if (event.ownerId !== userId && userRole !== constants.ROLES.ADMIN) {
+      const assignment = await prisma.eventStaffAssignment.findUnique({
+        where: { eventId_userId: { eventId, userId } },
+        select: { active: true },
+      });
+
+      if (!assignment?.active) {
+        throw new ForbiddenError(errMsg.CHECKIN.NOT_AUTHORIZED);
+      }
+    }
+  } else if (userRole !== constants.ROLES.ADMIN) {
+    throw new ForbiddenError(errMsg.AUTH.FORBIDDEN);
+  }
+
+  const checkinWhere = { deletedAt: null, ...(eventId && { eventId }) };
+
+  const [total, valid, uniqueAttendeesCheckedIn, duplicate] = await Promise.all([
+    prisma.checkIn.count({ where: checkinWhere }),
+    prisma.checkIn.count({
+      where: { ...checkinWhere, result: constants.CHECKIN_RESULT.VALID },
+    }),
+    countDistinctCheckedInRegistrations(eventId),
+    countDuplicateScans(eventId),
+  ]);
+
+  const eventsWithCheckins = await prisma.event.count({
+    where: {
+      ...(eventId && { id: eventId }),
+      deletedAt: null,
+      checkins: { some: { deletedAt: null } },
+    },
+  });
+
+  return {
+    checkins: {
+      total,
+      valid,
+      duplicate,
+    },
+    uniqueAttendeesCheckedIn,
+    eventsWithCheckins,
+  };
 }

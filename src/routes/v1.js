@@ -13,6 +13,7 @@ import {
 } from "../modules/registrations/public.routes.js";
 import reportDashboardRoutes from "../modules/reports/dashboard.routes.js";
 import reportExportRoutes from "../modules/reports/export.routes.js";
+import analyticsRoutes from "../modules/reports/analytics.routes.js";
 import auditRoutes from "../modules/admin/audit.routes.js";
 
 const router = Router();
@@ -25,6 +26,7 @@ router.use("/events", importRoutes);
 router.use("/events", staffRoutes);
 router.use("/events", reportDashboardRoutes);
 router.use("/events", reportExportRoutes);
+router.use("/analytics", analyticsRoutes);
 
 router.use("/auth", authRoutes);
 router.use("/checkins", checkinsRouter);

@@ -27,3 +27,8 @@ export const ticketQuerySchema = z.object({
 export const exportTicketSchema = z.object({
   format: z.enum(["csv", "pdf"]),
 });
+
+export const myTicketsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});

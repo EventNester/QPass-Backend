@@ -5,7 +5,8 @@ import {
   deleteTicketType,
   getTicketDetails,
   listEventTickets,
-  exportEventTickets
+  exportEventTickets,
+  listMyTickets
 } from "./tickets.service.js";
 import { generateTicketPdf } from "./ticket-pdf.service.js";
 import { success, created } from "../../utils/response.js";
@@ -70,6 +71,16 @@ export const listTicketsController = async (req, res, next) => {
     const { eventId } = req.params;
     const userId = req.user.sub;
     const result = await listEventTickets(eventId, userId, req.query);
+    return success(res, result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listMyTicketsController = async (req, res, next) => {
+  try {
+    const userId = req.user.sub;
+    const result = await listMyTickets(userId, req.query.page, req.query.limit);
     return success(res, result);
   } catch (error) {
     next(error);
