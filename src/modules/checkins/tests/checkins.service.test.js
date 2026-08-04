@@ -44,6 +44,7 @@ vi.mock("../../../database/index.js", () => ({
       count: vi.fn(),
     },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -624,10 +625,7 @@ describe("Checkin Service Tests", () => {
   describe("getCheckinStatistics", () => {
     test("should return system-wide statistics for an ADMIN", async () => {
       prisma.checkIn.count.mockResolvedValueOnce(10).mockResolvedValueOnce(9);
-      prisma.checkIn.groupBy.mockResolvedValue([
-        { registrationId: "reg_1" },
-        { registrationId: "reg_2" },
-      ]);
+      prisma.$queryRaw.mockResolvedValue([{ count: 2 }]);
       prisma.auditLog.count.mockResolvedValue(1);
       prisma.event.count.mockResolvedValue(3);
 
@@ -647,19 +645,17 @@ describe("Checkin Service Tests", () => {
     test("should scope statistics to an event for an active staff member", async () => {
       prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
       prisma.checkIn.count.mockResolvedValueOnce(4).mockResolvedValueOnce(3);
-      prisma.checkIn.groupBy.mockResolvedValue([{ registrationId: "reg_1" }]);
-      prisma.checkIn.findMany.mockResolvedValue([{ id: "checkin_1" }, { id: "checkin_2" }]);
-      prisma.auditLog.count.mockResolvedValue(2);
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ count: 1 }])
+        .mockResolvedValueOnce([{ count: 2 }]);
       prisma.event.count.mockResolvedValue(1);
 
       const result = await getCheckinStatistics(mockStaffId, "STAFF", { eventId: mockEventId });
 
       expect(result.checkins).toEqual({ total: 4, valid: 3, duplicate: 2 });
       expect(result.uniqueAttendeesCheckedIn).toBe(1);
-      expect(prisma.checkIn.findMany).toHaveBeenCalledWith({
-        where: { deletedAt: null, eventId: mockEventId },
-        select: { id: true },
-      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+      expect(prisma.checkIn.findMany).not.toHaveBeenCalled();
     });
 
     test("should throw NotFoundError when the scoped event does not exist", async () => {
@@ -682,13 +678,15 @@ describe("Checkin Service Tests", () => {
     test("should allow the event owner to view scoped statistics", async () => {
       prisma.event.findFirst.mockResolvedValue({ ownerId: mockOwnerId });
       prisma.checkIn.count.mockResolvedValueOnce(4).mockResolvedValueOnce(3);
-      prisma.checkIn.groupBy.mockResolvedValue([{ registrationId: "reg_1" }]);
-      prisma.checkIn.findMany.mockResolvedValue([]);
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ count: 1 }])
+        .mockResolvedValueOnce([{ count: 0 }]);
       prisma.event.count.mockResolvedValue(1);
 
       const result = await getCheckinStatistics(mockOwnerId, "ORGANIZER", { eventId: mockEventId });
 
       expect(result.checkins.duplicate).toBe(0);
+      expect(result.uniqueAttendeesCheckedIn).toBe(1);
       expect(prisma.eventStaffAssignment.findUnique).not.toHaveBeenCalled();
     });
   });

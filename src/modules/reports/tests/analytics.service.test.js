@@ -49,8 +49,11 @@ describe("Analytics Service Tests", () => {
 
   test("restricts a non-ADMIN to their own events by default", async () => {
     prisma.event.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ count: 7 }])
+      .mockResolvedValueOnce([{ count: 5 }]);
 
-    await getOverviewStats(mockOrganizerId, constants.ROLES.ORGANIZER, {});
+    const result = await getOverviewStats(mockOrganizerId, constants.ROLES.ORGANIZER, {});
 
     expect(prisma.event.count).toHaveBeenCalledWith({
       where: { deletedAt: null, ownerId: mockOrganizerId },
@@ -58,6 +61,9 @@ describe("Analytics Service Tests", () => {
     expect(prisma.registration.count).toHaveBeenCalledWith({
       where: { event: { deletedAt: null, ownerId: mockOrganizerId } },
     });
+    expect(result.totalAttendees).toBe(7);
+    expect(result.registeredUsers).toBe(5);
+    expect(prisma.user.count).not.toHaveBeenCalled();
   });
 
   test("throws ForbiddenError when a non-ADMIN requests the system scope", async () => {
@@ -71,12 +77,30 @@ describe("Analytics Service Tests", () => {
 
   test("allows an ADMIN to force the organizer-scoped view", async () => {
     prisma.event.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ count: 7 }])
+      .mockResolvedValueOnce([{ count: 5 }]);
 
-    await getOverviewStats(mockAdminId, constants.ROLES.ADMIN, { scope: "own" });
+    const result = await getOverviewStats(mockAdminId, constants.ROLES.ADMIN, { scope: "own" });
 
     expect(prisma.event.count).toHaveBeenCalledWith({
       where: { deletedAt: null, ownerId: mockAdminId },
     });
+    expect(result.registeredUsers).toBe(5);
+    expect(prisma.user.count).not.toHaveBeenCalled();
+  });
+
+  test("scopes registeredUsers to the organizer's events for a non-ADMIN", async () => {
+    prisma.event.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([{ count: 340 }])
+      .mockResolvedValueOnce([{ count: 42 }]);
+
+    const result = await getOverviewStats(mockOrganizerId, constants.ROLES.ORGANIZER, {});
+
+    expect(result.totalAttendees).toBe(340);
+    expect(result.registeredUsers).toBe(42);
+    expect(prisma.user.count).not.toHaveBeenCalled();
   });
 
   test("counts distinct attendee emails via the raw query result", async () => {
