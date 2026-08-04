@@ -27,6 +27,37 @@ function countDistinctAttendees(ownScope, userId) {
 }
 
 /**
+ * Count ATTENDEE-role user accounts. System-wide (no `ownScope`) this is the
+ * total of all non-deleted attendee accounts; organizer-scoped it counts
+ * distinct non-deleted attendee accounts that hold at least one registration
+ * for the organizer's events, matched through `registrations.attendee_email`.
+ *
+ * @param {boolean} ownScope - Restrict to a single organizer's events
+ * @param {string} userId - Organizer id to restrict to when `ownScope`
+ * @returns {Promise<number>}
+ */
+async function countRegisteredUsers(ownScope, userId) {
+  if (!ownScope) {
+    return prisma.user.count({
+      where: { role: constants.ROLES.ATTENDEE, deletedAt: null },
+    });
+  }
+
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(DISTINCT u.id)::int AS count
+    FROM users u
+    INNER JOIN registrations r ON LOWER(r.attendee_email) = LOWER(u.email)
+    INNER JOIN events e ON e.id = r.event_id
+    WHERE u.role = 'ATTENDEE'
+      AND u.deleted_at IS NULL
+      AND e.deleted_at IS NULL
+      AND e.owner_id = ${userId}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
  * System-wide (or organizer-scoped) overview totals: event count, published
  * event count, total registrations, distinct attendee count, and registered
  * attendee accounts. ADMIN sees every event by default; a non-ADMIN caller is
@@ -56,7 +87,7 @@ export async function getOverviewStats(userId, userRole, { scope } = {}) {
       prisma.event.count({ where: { ...eventWhere, status: constants.EVENT_STATUS.PUBLISHED } }),
       prisma.registration.count({ where: { event: eventWhere } }),
       countDistinctAttendees(ownScope, userId),
-      prisma.user.count({ where: { role: constants.ROLES.ATTENDEE, deletedAt: null } }),
+      countRegisteredUsers(ownScope, userId),
     ]);
 
   return {

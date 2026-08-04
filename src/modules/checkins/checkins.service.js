@@ -1,4 +1,5 @@
 import prisma from "../../database/index.js";
+import { Prisma } from "@prisma/client";
 import { getRedisClient } from "../../config/redis.js";
 import { hashToken } from "../../utils/crypto.js";
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from "../../utils/error.js";
@@ -284,6 +285,53 @@ export async function undoCheckin(eventId, checkInId, staffId) {
 }
 
 /**
+ * Count distinct registrations that have at least one active check-in,
+ * computed in the database so no identifier arrays are materialized.
+ *
+ * @param {string} [eventId] - Optional event to scope the count to
+ * @returns {Promise<number>}
+ */
+async function countDistinctCheckedInRegistrations(eventId) {
+  const scope = eventId ? Prisma.sql`AND event_id = ${eventId}` : Prisma.empty;
+
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(DISTINCT registration_id)::int AS count
+    FROM check_ins
+    WHERE deleted_at IS NULL ${scope}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * Count `DUPLICATE_SCAN` audit-log entries for check-ins. Scoped to an event
+ * via a database-side join (no per-check-in id collection) when `eventId` is
+ * given; otherwise returns the system-wide audit-log count.
+ *
+ * @param {string} [eventId] - Optional event to scope the count to
+ * @returns {Promise<number>}
+ */
+async function countDuplicateScans(eventId) {
+  if (!eventId) {
+    return prisma.auditLog.count({
+      where: { action: "DUPLICATE_SCAN", entity: "CheckIn" },
+    });
+  }
+
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS count
+    FROM audit_logs a
+    INNER JOIN check_ins c ON c.id = a.entity_id
+    WHERE a.action = 'DUPLICATE_SCAN'
+      AND a.entity = 'CheckIn'
+      AND c.deleted_at IS NULL
+      AND c.event_id = ${eventId}
+  `;
+
+  return Number(rows[0]?.count ?? 0);
+}
+
+/**
  * Aggregate check-in statistics. Without an `eventId` this is a system-wide
  * summary (ADMIN only); with an `eventId` the caller must be the event owner,
  * an ADMIN, or an active assigned staff member (mirrors `getDashboardStats`).
@@ -323,36 +371,14 @@ export async function getCheckinStatistics(userId, userRole, { eventId } = {}) {
 
   const checkinWhere = { deletedAt: null, ...(eventId && { eventId }) };
 
-  const [total, valid, uniqueCheckins] = await Promise.all([
+  const [total, valid, uniqueAttendeesCheckedIn, duplicate] = await Promise.all([
     prisma.checkIn.count({ where: checkinWhere }),
     prisma.checkIn.count({
       where: { ...checkinWhere, result: constants.CHECKIN_RESULT.VALID },
     }),
-    prisma.checkIn.groupBy({ by: ["registrationId"], where: checkinWhere }),
+    countDistinctCheckedInRegistrations(eventId),
+    countDuplicateScans(eventId),
   ]);
-
-  // Duplicate scans are audit-logged per check-in; a global count is a single
-  // query, but per-event we must scope by the event's check-in ids first.
-  let duplicate = 0;
-  if (eventId) {
-    const rows = await prisma.checkIn.findMany({
-      where: checkinWhere,
-      select: { id: true },
-    });
-    if (rows.length) {
-      duplicate = await prisma.auditLog.count({
-        where: {
-          action: "DUPLICATE_SCAN",
-          entity: "CheckIn",
-          entityId: { in: rows.map((row) => row.id) },
-        },
-      });
-    }
-  } else {
-    duplicate = await prisma.auditLog.count({
-      where: { action: "DUPLICATE_SCAN", entity: "CheckIn" },
-    });
-  }
 
   const eventsWithCheckins = await prisma.event.count({
     where: {
@@ -368,7 +394,7 @@ export async function getCheckinStatistics(userId, userRole, { eventId } = {}) {
       valid,
       duplicate,
     },
-    uniqueAttendeesCheckedIn: uniqueCheckins.length,
+    uniqueAttendeesCheckedIn,
     eventsWithCheckins,
   };
 }
