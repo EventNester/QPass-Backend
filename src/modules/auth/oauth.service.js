@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import prisma from '../../database/index.js';
-import { getConfig, systemMessages } from '../../config/index.js';
+import { getConfig, systemMessages, logger } from '../../config/index.js';
 import { getRedisClient } from '../../config/redis.js';
 import { BadRequestError, UnauthorizedError } from '../../utils/error.js';
 import { writeAuditLog } from '../../utils/audit-log.js';
