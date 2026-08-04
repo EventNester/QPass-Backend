@@ -1,11 +1,78 @@
 import { Router } from "express";
 import { 
   getTicketController,
-  downloadTicketPdfController 
+  downloadTicketPdfController,
+  listMyTicketsController
 } from "./tickets.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
+import { validateQuery } from "../../middlewares/validate.middleware.js";
+import { myTicketsQuerySchema } from "./tickets.schema.js";
 
 const router = Router({ mergeParams: true });
+
+/**
+ * @openapi
+ * /api/v1/tickets/me:
+ *   get:
+ *     summary: List my tickets (ticket history)
+ *     description: |
+ *       Returns a paginated list of tickets belonging to the authenticated user,
+ *       matched by their email. Includes event details, ticket type, ticket code,
+ *       and whether the ticket has been checked in. Always scoped to the caller,
+ *       so no role is required.
+ *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page
+ *     responses:
+ *       200:
+ *         description: Paginated list of the caller's tickets
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         tickets:
+ *                           type: array
+ *                           items: { type: object }
+ *                         pagination:
+ *                           type: object
+ *                           properties:
+ *                             page: { type: integer }
+ *                             limit: { type: integer }
+ *                             total: { type: integer }
+ *                             totalPages: { type: integer }
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get("/me", requireAuth, validateQuery(myTicketsQuerySchema), listMyTicketsController);
 
 /**
  * @openapi

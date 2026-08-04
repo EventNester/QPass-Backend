@@ -2,7 +2,7 @@
 
 - **Base URL:** `http://localhost:3000`
 - **Version:** v1 (all endpoints under `/api/v1` unless noted)
-- **Counts:** 11 tags, 39 paths, 47 operations
+- **Counts:** 11 tags, 42 paths, 50 operations
 - **Live docs:** Swagger UI at `http://localhost:3000/api-docs` (serves the same OpenAPI 3 spec that this document summarizes)
 
 All responses use the envelope:
@@ -536,6 +536,27 @@ Download a ticket as a printable PDF (includes event details and QR code).
 
 ---
 
+#### `GET /api/v1/tickets/me`
+
+List all tickets belonging to the authenticated user (ticket history), matched by the caller's email. Soft-deleted and cancelled events are excluded; cancelled registrations on live events are still shown. Returns event details, ticket type, ticket code, and whether the ticket has been checked in.
+
+**Auth:** Authenticated (any role; always scoped to the caller)
+
+**Query:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `page` | number | Page number (default: 1) |
+| `limit` | number | Items per page (default: 20, max 100) |
+
+**Response `200`:**
+
+```json
+{ "data": { "tickets": [{ "id", "attendeeName", "attendeeEmail", "status", "paymentStatus", "confirmationCode", "ticketType": { "id", "name", "price" }, "ticketCode", "checkedIn", "event": { "id", "title", "slug", "venue", "startTime", "endTime", "status" }, "createdAt" }], "pagination": { "page", "limit", "total", "totalPages" } } }
+```
+
+---
+
 ### 6. Registrations (Public)
 
 ---
@@ -727,6 +748,29 @@ Undo a check-in. Soft-deletes the `CheckIn` row (`deletedAt`), reverts the regis
 
 ---
 
+#### `GET /api/v1/checkins/stats`
+
+Get check-in statistics. Without an `eventId` this returns system-wide totals (ADMIN only); with an `eventId` the caller must be the event owner, an ADMIN, or an active assigned staff member.
+
+**Auth:** ADMIN (global) / ADMIN, ORGANIZER, or active STAFF (scoped to an event)
+
+**Query:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `eventId` | string (uuid) | Optional event ID to scope statistics to |
+
+**Response `200`:**
+
+```json
+{ "data": { "checkins": { "total", "valid", "duplicate" }, "uniqueAttendeesCheckedIn", "eventsWithCheckins" } }
+```
+
+**Response `403`:** caller lacks permission for the requested scope
+**Response `404`:** scoped event not found
+
+---
+
 ### 10. Reports & Dashboard
 
 ---
@@ -766,6 +810,28 @@ Export check-in records (attendance) with attendee info as CSV or PDF.
 **Query:** `?format=csv` (default) or `?format=pdf`
 
 **Response `200`:** file download (`Content-Type: text/csv` or `application/pdf`)
+
+---
+
+#### `GET /api/v1/analytics/overview`
+
+Get overview totals: event count, published event count, total registrations, distinct attendee count, and registered attendee accounts.
+
+**Auth:** Authenticated. ADMIN callers see every event by default; all other roles are always restricted to their own events. Pass `?scope=own` to force the organizer-scoped view. `?scope=system` is ADMIN only.
+
+**Query:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `scope` | string | `own` or `system` (optional; default is system for ADMIN, own for others) |
+
+**Response `200`:**
+
+```json
+{ "data": { "totalEvents", "publishedEvents", "totalAttendees", "totalRegistrations", "registeredUsers" } }
+```
+
+**Response `403`:** a non-ADMIN requested `?scope=system`
 
 ---
 
