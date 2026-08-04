@@ -10,15 +10,15 @@ QPass lets event organizers create and manage events, register attendees (via pu
 
 ## Features
 
-- **Authentication & RBAC** - JWT access/refresh token rotation with Redis blacklist; roles `ATTENDEE`, `STAFF`, `ORGANIZER`, `ADMIN`; password reset via email; **Sign in with Google** (OAuth 2.0 authorization-code flow) that signs users up or in and redirects them to the frontend dashboard.
-- **Events** - full CRUD with `DRAFT → PUBLISHED → ACTIVE → COMPLETED / CANCELLED` lifecycle and slug-based public URLs.
+- **Authentication & RBAC** - JWT access/refresh token rotation with Redis blacklist; roles `ATTENDEE`, `STAFF`, `ORGANIZER`, `ADMIN`; password reset via email; email verification via token link **or** 6-digit OTP; **Sign in with Google** (OAuth 2.0 authorization-code flow) that signs users up or in and redirects them to the frontend dashboard.
+- **Events** - full CRUD with `DRAFT → PUBLISHED → ACTIVE → COMPLETED / CANCELLED` lifecycle (publish, unpublish, cancel), slug-based public URLs.
 - **Ticket types** - per-event categories (price in the smallest currency unit, optional capacity, ordering).
 - **Registration flows** - public self-registration (`GET /e/{slug}` + `POST /registrations/free`) and bulk import (CSV / XLSX / PDF / DOCX, 5 MB max) with per-row validation and batch tracking.
 - **QR tickets** - opaque 64-char random tokens, SHA-256 hashed server-side (raw token never stored), embedded in emails and downloadable PDF tickets.
 - **Check-in** - staff/organizer scanning with 7 result states (`VALID`, `DUPLICATE`, `INVALID`, `EXPIRED`, `WRONG_EVENT`, `REVOKED`, `NOT_AUTHORIZED`), Redis distributed locking + Postgres unique constraint to block duplicates, and 24-hour undo.
 - **Staff management** - assign/remove staff per event (auto-creates pending staff accounts + invite email).
 - **Reports** - event dashboard stats and CSV/PDF exports for registrations and attendance.
-- **Admin** - paginated, filterable audit log of every key action.
+- **Admin** - paginated, filterable audit log of every key action; ADMINs invite new admins via email (invitee sets their own password) and can promote existing users to admin; first admin bootstrapped with `npm run create-admin`.
 - **Real-time** - Socket.IO live dashboard & scan-feedback rooms backed by a Redis adapter.
 - **Email** - Brevo REST API (no SMTP), non-blocking, with retry logic and a `Notification` audit record per send.
 - **Ops** - Zod-validated environment config, structured Pino logging, Helmet + CORS + rate limiting, health checks, graceful shutdown, Swagger auto-docs, Vitest unit + integration suites.
@@ -143,7 +143,8 @@ The default Docker Compose maps Postgres to host port `5433` and Redis to `6380`
 | `npm run migrate` | Run/apply dev migrations |
 | `npm run migrate:prod` | Deploy migrations (production) |
 | `npm run migrate:reset` | Reset the database |
-| `npm run seed` | Seed the database with sample data |
+| `npm run seed` | Seed the database with sample data (dev/test only) |
+| `npm run create-admin` | Bootstrap the first ADMIN account (works in any environment) |
 | `npm run studio` | Open Prisma Studio |
 | `npm test` | Run tests (watch mode) |
 | `npm run test:run` | Run all tests once |
@@ -160,8 +161,8 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Tag | Operations | Notes |
 |-----|:----------:|-------|
 | Health | 1 | `GET /health` (public) |
-| Auth | 15 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, sessions, Google OAuth (start + callback) |
-| Events | 7 | CRUD + publish + cancel |
+| Auth | 17 | register, login, refresh, logout, forgot/reset password, me, update profile, change password, request/verify email, verify-email OTP (send + verify), sessions, Google OAuth (start + callback) |
+| Events | 8 | CRUD + publish + unpublish + cancel |
 | Ticket Types | 4 | per-event CRUD |
 | Tickets | 5 | event ticket list/export + individual ticket/PDF + my tickets (history) |
 | Registrations | 2 | public event view + free registration (no auth) |
@@ -169,8 +170,8 @@ Base URL: `http://localhost:3000` · all endpoints under `/api/v1` (except `/hea
 | Staff | 3 | assign / list / remove |
 | Checkins | 4 | scan, list, undo, statistics |
 | Reports | 4 | dashboard + registrations/attendance exports + overview analytics |
-| Admin | 1 | audit logs |
-| **Total** | **50** | **42 paths** across 11 tags |
+| Admin | 4 | audit logs + invite admin + accept invite + promote user to admin |
+| **Total** | **56** | **47 paths** across 11 tags |
 
 See [docs/QPASS_API_DOC.md](./docs/QPASS_API_DOC.md) for the full reference and [SWAGGER_UI_TESTING.md](./SWAGGER_UI_TESTING.md) for a manual test walkthrough.
 
@@ -202,14 +203,14 @@ src/
 ├── middlewares/            # logging, rate-limit, RBAC, upload (multer), Zod validate
 ├── modules/                # Domain modules (controller → service → routes → schema)
 │   ├── auth/               # register/login/refresh/logout, JWT middleware, password reset
-│   ├── events/             # event CRUD, publish, cancel
+│   ├── events/             # event CRUD, publish, unpublish, cancel
 │   ├── tickets/            # ticket types, event tickets, individual tickets, my tickets, QR + PDF services
 │   ├── registrations/      # public registration, attendee import (CSV/XLSX/PDF/DOCX)
 │   ├── checkins/           # QR scan with duplicate detection, list, undo, statistics
 │   ├── staff/              # staff assignment management
 │   ├── notifications/      # Brevo email service, notification records, templates
 │   ├── reports/            # dashboard stats, CSV/PDF exports, overview analytics, PDF generation
-│   └── admin/              # audit log queries
+│   └── admin/              # audit log queries + admin invitations (email) + user promotion
 ├── integrations/           # external services (email/Brevo)
 ├── realtime/               # Socket.IO init, rooms, event emitters
 ├── routes/                 # root router (/health, /api/v1, /api-docs)
@@ -226,7 +227,8 @@ npm run generate       # generate Prisma client
 npm run migrate        # create/apply a dev migration
 npm run migrate:prod   # deploy migrations (production)
 npm run migrate:reset  # reset database
-npm run seed           # seed sample data
+npm run seed           # seed sample data (dev/test only)
+npm run create-admin   # bootstrap the first ADMIN account (any environment)
 npm run studio         # open Prisma Studio
 ```
 

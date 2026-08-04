@@ -68,3 +68,41 @@ export async function sendEmailVerification(email, verifyToken) {
     context,
   });
 }
+
+export async function sendOtpEmail(email, otpCode) {
+  const subject = 'QPass - Your Email Verification Code';
+  const context = {
+    name: email.split('@')[0],
+    otpCode,
+    expiresIn: '10 minutes',
+  };
+
+  return sendNotification({
+    recipient: email,
+    subject,
+    template: 'otp-code',
+    context,
+  });
+}
+
+export async function sendAdminInviteEmail(email, inviteToken) {
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl && process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
+    throw new Error('FRONTEND_URL is required in production');
+  }
+  const inviteUrl = `${frontendUrl || 'http://localhost:3000'}/accept-admin-invite?token=${inviteToken}`;
+
+  const subject = 'QPass - You are invited as an Admin';
+  const context = {
+    name: email.split('@')[0],
+    inviteUrl,
+    expiresIn: '7 days',
+  };
+
+  return sendNotification({
+    recipient: email,
+    subject,
+    template: 'admin-invite',
+    context,
+  });
+}

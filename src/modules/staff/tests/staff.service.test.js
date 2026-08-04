@@ -64,9 +64,20 @@ describe("Staff Service", () => {
   const mockEvent = {
     id: eventId,
     title: "Test Event",
+    venue: "Lagos Convention Centre",
+    startTime: new Date("2025-01-10T10:00:00.000Z"),
+    endTime: new Date("2025-01-10T18:00:00.000Z"),
     ownerId,
     status: "PUBLISHED",
     deletedAt: null,
+  };
+
+  const mockEventSummary = {
+    id: eventId,
+    title: "Test Event",
+    venue: "Lagos Convention Centre",
+    startTime: mockEvent.startTime,
+    endTime: mockEvent.endTime,
   };
 
   const mockExistingUser = {
@@ -109,7 +120,7 @@ describe("Staff Service", () => {
         email: "existing@example.com",
       });
 
-      expect(result).toEqual(mockAssignment);
+      expect(result).toEqual({ event: mockEventSummary, staff: mockAssignment });
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: staffUserId },
         data: { role: "STAFF" },
@@ -171,7 +182,7 @@ describe("Staff Service", () => {
         permissionScope: "SCANNER",
       });
 
-      expect(result).toEqual(newAssignment);
+      expect(result).toEqual({ event: mockEventSummary, staff: newAssignment });
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
           name: "newuser",
@@ -263,8 +274,8 @@ describe("Staff Service", () => {
 
       const result = await listStaff(eventId, ownerId);
 
-      expect(result).toEqual(mockAssignments);
-      expect(result).toHaveLength(2);
+      expect(result).toEqual({ event: mockEventSummary, staff: mockAssignments });
+      expect(result.staff).toHaveLength(2);
       expect(prisma.eventStaffAssignment.findMany).toHaveBeenCalledWith({
         where: { eventId, active: true },
         include: {
@@ -280,7 +291,7 @@ describe("Staff Service", () => {
 
       const result = await listStaff(eventId, ownerId);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ event: mockEventSummary, staff: [] });
     });
 
     test("should throw NotFoundError if event does not exist", async () => {

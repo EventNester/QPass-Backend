@@ -7,6 +7,7 @@ import {
   updateEventController,
   deleteEventController,
   publishEventController,
+  unpublishEventController,
   cancelEventController,
 } from "./event.controller.js";
 
@@ -87,6 +88,73 @@ router.post(
   requireRole("ORGANIZER", "ADMIN"),
   validateParams(eventIdParamsSchema),
   publishEventController
+);
+
+/**
+ * @openapi
+ * /api/v1/events/{id}/unpublish:
+ *   post:
+ *     summary: Unpublish a published or active event
+ *     description: |
+ *       Transitions a PUBLISHED or ACTIVE event back to DRAFT status.
+ *       The unique slug is preserved. Only the event owner or an ADMIN can
+ *       unpublish, and only while the event is in PUBLISHED or ACTIVE status.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event unpublished successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden — caller is neither the event owner nor an ADMIN
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Event not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       422:
+ *         description: "Validation error. Possible messages: Invalid event ID format, Event is not in published status"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// Unpublish Event
+router.post(
+  "/:id/unpublish",
+  requireAuth,
+  requireRole("ORGANIZER", "ADMIN"),
+  validateParams(eventIdParamsSchema),
+  unpublishEventController
 );
 
 /**

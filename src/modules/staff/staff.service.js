@@ -23,6 +23,16 @@ async function verifyEventOwnership(eventId, ownerId) {
   return event;
 }
 
+function toEventSummary(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    venue: event.venue ?? null,
+    startTime: event.startTime,
+    endTime: event.endTime,
+  };
+}
+
 export async function assignStaff(eventId, ownerId, data) {
   const event = await verifyEventOwnership(eventId, ownerId);
   const email = data.email.trim().toLowerCase();
@@ -116,13 +126,13 @@ export async function assignStaff(eventId, ownerId, data) {
     logger.error({ err: err.message, email, eventId }, 'Staff invite email send failed');
   });
 
-  return assignment;
+  return { event: toEventSummary(event), staff: assignment };
 }
 
 export async function listStaff(eventId, ownerId) {
-  await verifyEventOwnership(eventId, ownerId);
+  const event = await verifyEventOwnership(eventId, ownerId);
 
-  const assignments = await prisma.eventStaffAssignment.findMany({
+  const staff = await prisma.eventStaffAssignment.findMany({
     where: { eventId, active: true },
     include: {
       user: {
@@ -138,7 +148,7 @@ export async function listStaff(eventId, ownerId) {
     orderBy: { assignedAt: 'desc' },
   });
 
-  return assignments;
+  return { event: toEventSummary(event), staff };
 }
 
 export async function removeStaff(eventId, staffId, ownerId) {

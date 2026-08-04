@@ -291,6 +291,79 @@ export const publishEvent = async (
   return getEvent(eventId, ownerId, userRole);
 };
 
+// Unpublish an event (atomic ownership check; ADMIN may unpublish any event).
+// A PUBLISHED or ACTIVE event returns to DRAFT; the slug is preserved.
+export const unpublishEvent = async (
+  eventId,
+  ownerId,
+  userRole = constants.ROLES.ORGANIZER
+) => {
+  const isAdmin = userRole === constants.ROLES.ADMIN;
+
+  const event = await prisma.event.findFirst({
+    where: {
+      id: eventId,
+      deletedAt: null,
+      ...(isAdmin ? {} : { ownerId }),
+    },
+  });
+
+  if (!event) {
+    const exists = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+    });
+
+    if (!exists) {
+      throw new NotFoundError(msg.EVENT.NOT_FOUND);
+    }
+
+    throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
+  }
+
+  if (
+    event.status !== constants.EVENT_STATUS.PUBLISHED &&
+    event.status !== constants.EVENT_STATUS.ACTIVE
+  ) {
+    throw new ValidationError(
+      `${msg.EVENT.NOT_PUBLISHED} (current: ${event.status})`
+    );
+  }
+
+  const unpublished = await prisma.event.updateMany({
+    where: {
+      id: eventId,
+      deletedAt: null,
+      status: {
+        in: [
+          constants.EVENT_STATUS.PUBLISHED,
+          constants.EVENT_STATUS.ACTIVE,
+        ],
+      },
+      ...(isAdmin ? {} : { ownerId }),
+    },
+    data: {
+      status: constants.EVENT_STATUS.DRAFT,
+    },
+  });
+
+  if (unpublished.count === 0) {
+    throw new ValidationError(
+      `${msg.EVENT.NOT_PUBLISHED} (current: ${event.status})`
+    );
+  }
+
+  writeAuditLog({
+    actorId: ownerId,
+    action: 'EVENT_UNPUBLISHED',
+    entity: 'Event',
+    entityId: eventId,
+    beforeSnapshot: { status: event.status },
+    afterSnapshot: { status: constants.EVENT_STATUS.DRAFT },
+  });
+
+  return getEvent(eventId, ownerId, userRole);
+};
+
 // Cancel an event (atomic ownership check; ADMIN may cancel any event)
 export const cancelEvent = async (
   eventId,

@@ -1012,6 +1012,31 @@
           }
         }
       },
+      "EventSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Event name"
+          },
+          "venue": {
+            "type": "string",
+            "nullable": true
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "StaffAssignment": {
         "type": "object",
         "properties": {
@@ -1044,7 +1069,13 @@
         "properties": {
           "status": { "type": "string", "example": "success" },
           "message": { "type": "string" },
-          "data": { "$ref": "#/components/schemas/StaffAssignment" }
+          "data": {
+            "type": "object",
+            "properties": {
+              "event": { "$ref": "#/components/schemas/EventSummary" },
+              "staff": { "$ref": "#/components/schemas/StaffAssignment" }
+            }
+          }
         }
       },
       "StaffListResponse": {
@@ -1053,8 +1084,76 @@
           "status": { "type": "string", "example": "success" },
           "message": { "type": "string" },
           "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/StaffAssignment" }
+            "type": "object",
+            "properties": {
+              "event": { "$ref": "#/components/schemas/EventSummary" },
+              "staff": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/StaffAssignment" }
+              }
+            }
+          }
+        }
+      },
+
+      "AdminInviteRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email of the person to invite as an admin"
+          }
+        }
+      },
+      "AcceptAdminInviteRequest": {
+        "type": "object",
+        "required": ["name", "password"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The invitee's full name"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "At least 8 characters, with an uppercase letter, lowercase letter, and a number"
+          }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "message": { "type": "string" },
+          "data": {
+            "$ref": "#/components/schemas/AuthUser"
+          }
+        }
+      },
+      "SendOtpRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "VerifyOtpRequest": {
+        "type": "object",
+        "required": ["email", "code"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "code": {
+            "type": "string",
+            "description": "6-digit verification code",
+            "pattern": "^[0-9]{6}$"
           }
         }
       },
