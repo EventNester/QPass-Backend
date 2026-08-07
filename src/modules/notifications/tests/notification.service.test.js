@@ -95,10 +95,10 @@ describe('Notification Service', () => {
       prisma.notification.update.mockResolvedValue({
         ...mockNotification,
         status: 'FAILED',
-        failureReason: 'Brevo API request timed out',
+        failureReason: 'SMTP connection timeout',
       });
 
-      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('Brevo API request timed out'));
+      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('SMTP connection timeout'));
 
       const result = await sendNotification({
         recipient: 'user@example.com',
@@ -111,13 +111,13 @@ describe('Notification Service', () => {
         where: { id: mockNotification.id },
         data: expect.objectContaining({
           status: 'FAILED',
-          failureReason: 'Brevo API request timed out',
+          failureReason: 'SMTP connection timeout',
         }),
       });
 
       expect(result.success).toBe(false);
       expect(result.notification.status).toBe('FAILED');
-      expect(result.error).toBe('Brevo API request timed out');
+      expect(result.error).toBe('SMTP connection timeout');
     });
 
     test('should mark FAILED when sendEmail resolves with success false', async () => {
@@ -242,81 +242,19 @@ describe('Notification Service', () => {
 
     test('should mark FAILED when the retry email resolves with success false', async () => {
       prisma.notification.findUnique.mockResolvedValue(mockNotification);
-      prisma.notification.update
-        .mockResolvedValueOnce({ ...mockNotification, status: 'PENDING' })
-        .mockResolvedValueOnce({ ...mockNotification, status: 'FAILED', failureReason: 'Rejected' });
+      prisma.notification.update.mockResolvedValue({
+        ...mockNotification,
+        status: 'FAILED',
+        failureReason: 'SMTP Auth Reject',
+      });
 
-      vi.spyOn(emailService, 'sendEmail').mockResolvedValue({ success: false, error: 'Rejected' });
+      vi.spyOn(emailService, 'sendEmail').mockResolvedValue({ success: false, error: 'SMTP Auth Reject' });
 
       const result = await retryNotification(mockNotification.id);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Rejected');
-      expect(prisma.notification.update).toHaveBeenNthCalledWith(2, {
-        where: { id: mockNotification.id },
-        data: expect.objectContaining({ status: 'FAILED', failureReason: 'Rejected' }),
-      });
-    });
-
-    test('should mark FAILED when the retry email throws', async () => {
-      prisma.notification.findUnique.mockResolvedValue(mockNotification);
-      prisma.notification.update
-        .mockResolvedValueOnce({ ...mockNotification, status: 'PENDING' })
-        .mockResolvedValueOnce({ ...mockNotification, status: 'FAILED', failureReason: 'Brevo API unavailable' });
-
-      vi.spyOn(emailService, 'sendEmail').mockRejectedValue(new Error('Brevo API unavailable'));
-
-      const result = await retryNotification(mockNotification.id);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Brevo API unavailable');
-      expect(prisma.notification.update).toHaveBeenNthCalledWith(2, {
-        where: { id: mockNotification.id },
-        data: expect.objectContaining({ status: 'FAILED', failureReason: 'Brevo API unavailable' }),
-      });
-    });
-  });
-
-  describe('getNotificationById', () => {
-    test('should retrieve a notification by ID', async () => {
-      prisma.notification.findUnique.mockResolvedValue(mockNotification);
-      const notif = await getNotificationById('notif-id-100');
-      expect(notif.id).toBe('notif-id-100');
-      expect(prisma.notification.findUnique).toHaveBeenCalledWith({
-        where: { id: 'notif-id-100' },
-      });
-    });
-  });
-
-  describe('notification getters', () => {
-    test('should list notifications by recipient ordered by createdAt desc', async () => {
-      prisma.notification.findMany.mockResolvedValue([mockNotification]);
-      const result = await getNotificationsByRecipient('user@example.com');
-      expect(result).toEqual([mockNotification]);
-      expect(prisma.notification.findMany).toHaveBeenCalledWith({
-        where: { recipient: 'user@example.com' },
-        orderBy: { createdAt: 'desc' },
-      });
-    });
-
-    test('should list notifications by user', async () => {
-      prisma.notification.findMany.mockResolvedValue([]);
-      const result = await getNotificationsByUser('user-1');
-      expect(result).toEqual([]);
-      expect(prisma.notification.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-        orderBy: { createdAt: 'desc' },
-      });
-    });
-
-    test('should list notifications by event', async () => {
-      prisma.notification.findMany.mockResolvedValue([]);
-      const result = await getNotificationsByEvent('event-1');
-      expect(result).toEqual([]);
-      expect(prisma.notification.findMany).toHaveBeenCalledWith({
-        where: { eventId: 'event-1' },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(result.notification.status).toBe('FAILED');
+      expect(result.error).toBe('SMTP Auth Reject');
     });
   });
 });

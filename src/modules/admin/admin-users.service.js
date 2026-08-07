@@ -65,9 +65,7 @@ export async function sendAdminInvite({ email }, actorId) {
       await redis.del(`${REDIS_PREFIX}${inviteToken}`);
     } catch { /* ignore cleanup error */ }
     logger.error({ err: emailResult.error || "unknown", email: normalizedEmail }, "Admin invite email failed to send");
-    return process.env.NODE_ENV === "production"
-      ? { success: false }
-      : { success: false, error: emailResult.error || "Failed to send admin invitation" };
+    return { success: false, error: emailResult.error || "Failed to send admin invitation" };
   }
 
   writeAuditLog({
@@ -78,7 +76,7 @@ export async function sendAdminInvite({ email }, actorId) {
     afterSnapshot: { email: normalizedEmail, invitedRole: constants.ROLES.ADMIN },
   });
 
-  return process.env.NODE_ENV === "production" ? { success: true } : { success: true, inviteToken };
+  return { success: true, inviteToken };
 }
 
 /**

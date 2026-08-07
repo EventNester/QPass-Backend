@@ -1,12 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import ejs from 'ejs';
-import { logger } from '../../config/index.js';
-import {
-  sendTransactionalEmail,
-  isBrevoConfigured,
-  BrevoApiError,
-} from '../../integrations/email/brevo.js';
+import { logger, getConfig } from '../../config/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,10 +23,12 @@ const TEMPLATE_MAP = {
 };
 
 /**
- * @returns {boolean} True when the Brevo REST API is configured
+ * @returns {boolean} True when SMTP credentials are configured. Email delivery is
+ * disabled for the MVP, so this only reflects whether stage-two config exists.
  */
 export function isEmailConfigured() {
-  return isBrevoConfigured();
+  const config = getConfig();
+  return Boolean(config.EMAIL_HOST_USER && config.EMAIL_HOST_PASSWORD);
 }
 
 export async function renderTemplate(templateName, variables = {}) {
@@ -40,122 +37,44 @@ export async function renderTemplate(templateName, variables = {}) {
   const templatePath = path.join(templatesDir, fileName);
 
   const html = await ejs.renderFile(templatePath, {
-    appName: process.env.BREVO_SENDER_NAME || 'QPass',
+    appName: 'QPass',
     year: new Date().getFullYear(),
     ...variables,
   });
   return html;
 }
 
-// Only transient failures (rate limit, 5xx, network/timeout) warrant a retry.
-// Invalid recipients and bad credentials would fail again identically.
-function isRetryableError(error) {
-  if (error instanceof BrevoApiError) {
-    return error.retryable;
-  }
-  return true;
-}
-
-async function sendWithRetry(payload, maxAttempts = 3) {
-  let lastError;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const info = await sendTransactionalEmail(payload);
-      return info;
-    } catch (error) {
-      lastError = error;
-      logger.warn({ attempt, maxAttempts, err: error.message }, `Email send attempt ${attempt} failed`);
-      if (!isRetryableError(error) || attempt >= maxAttempts) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
-    }
-  }
-  throw lastError;
-}
-
 /**
- * Send an email with optional template rendering and retry logic.
- * Does not throw on failure — returns { success: false, error } instead.
- *
- * @param {Object} options - Email options
- * @param {string} options.to - Recipient email address
- * @param {string} options.subject - Email subject line
- * @param {string} [options.template] - Template name (key in TEMPLATE_MAP)
- * @param {Object} [options.context] - Template variables
- * @param {string} [options.text] - Plain text body
- * @param {string} [options.html] - HTML body (overrides template)
- * @param {number} [options.maxAttempts=3] - Max send retry attempts
- * @returns {Promise<{success: boolean, messageId: string|null, info: Object|null, previewUrl: string|null, error?: string}>} Send result
- */
-function htmlToPlainText(html) {
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Mask a recipient email for safe logging (e.g. `john.doe@example.com` → `j*******@example.com`).
- * @param {string} to - Recipient email address
- * @returns {string} Masked recipient
+ * Mask a recipient email for safe logging (e.g. john.doe@example.com -> j*******@example.com).
  */
 export function maskRecipient(to) {
   return to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`);
 }
 
-export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
+/**
+ * Email delivery is deferred to stage two for the MVP. This is a simulated no-op
+ * that always reports success so the product flow (endpoints and UI) can complete
+ * without sending verification emails. Notification records are still created and
+ * marked as SENT by the notification service.
+ */
+export async function sendEmail({ to, subject, template, text, html }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
   }
 
   const maskedTo = maskRecipient(to);
 
-  if (!isBrevoConfigured()) {
-    logger.warn({ to: maskedTo, subject }, 'Brevo API not configured — email not sent');
-    return {
-      success: true,
-      messageId: null,
-      info: null,
-      previewUrl: null,
-    };
-  }
+  logger.info(
+    { to: maskedTo, subject, template },
+    'Email delivery disabled in MVP — simulated successful send'
+  );
 
-  try {
-    let renderedHtml = html;
-    if (template && !renderedHtml) {
-      renderedHtml = await renderTemplate(template, { ...context, subject });
-    }
-
-    const plainText = text || (renderedHtml ? htmlToPlainText(renderedHtml) : undefined);
-
-    const info = await sendWithRetry({ to, subject, html: renderedHtml, text: plainText }, maxAttempts);
-
-    logger.info(
-      {
-        to: maskedTo,
-        subject,
-        messageId: info.messageId,
-      },
-      'Email sent successfully'
-    );
-
-    return {
-      success: true,
-      messageId: info.messageId,
-      info,
-      previewUrl: null,
-    };
-  } catch (error) {
-    logger.error({ err: error, to: maskedTo, subject }, 'Email send failed (non-blocking)');
-    return {
-      success: false,
-      error: error.message || 'Email send failure',
-      messageId: null,
-      info: null,
-      previewUrl: null,
-    };
-  }
+  return {
+    success: true,
+    messageId: `simulated-${Date.now()}`,
+    info: { status: 'simulated' },
+    previewUrl: null,
+  };
 }
+
+export default { sendEmail, renderTemplate, isEmailConfigured, maskRecipient };

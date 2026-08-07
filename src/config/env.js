@@ -33,9 +33,10 @@ const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z.string().optional().default(""),
   PAYSTACK_WEBHOOK_SECRET: z.string().optional().default(""),
 
-  BREVO_API_KEY: z.string().optional().default(""),
-  BREVO_SENDER_EMAIL: z.string().trim().optional().default(""),
-  BREVO_SENDER_NAME: z.string().trim().optional().default(""),
+  EMAIL_HOST: z.string().default("smtp.gmail.com"),
+  EMAIL_PORT: z.coerce.number().default(465),
+  EMAIL_HOST_USER: z.string().optional().default(""),
+  EMAIL_HOST_PASSWORD: z.string().optional().default(""),
 
   FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
@@ -47,23 +48,15 @@ const envSchema = z.object({
 
   SENTRY_DSN: z.string().optional().default(""),
 }).superRefine((env, ctx) => {
-  if (env.BREVO_API_KEY) {
-    if (!env.BREVO_SENDER_NAME) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "BREVO_SENDER_NAME is required and must not be blank when BREVO_API_KEY is set",
-        path: ["BREVO_SENDER_NAME"],
-      });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.BREVO_SENDER_EMAIL)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "BREVO_SENDER_EMAIL must be a valid email address when BREVO_API_KEY is set",
-        path: ["BREVO_SENDER_EMAIL"],
-      });
-    }
+  if (env.EMAIL_HOST_USER && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.EMAIL_HOST_USER)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "EMAIL_HOST_USER must be a valid email address (e.g., your-account@gmail.com)",
+      path: ["EMAIL_HOST_USER"],
+    });
   }
 });
+
 
 export function validateEnv() {
   const parsed = envSchema.safeParse(process.env);

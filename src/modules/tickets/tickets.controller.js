@@ -15,7 +15,7 @@ export const createTicketTypeController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
     const userId = req.user.sub;
-    const ticketType = await createTicketType(eventId, userId, req.body);
+    const ticketType = await createTicketType(eventId, userId, req.user.role, req.body);
     return created(res, ticketType, "Ticket type created successfully");
   } catch (error) {
     next(error);
@@ -26,7 +26,7 @@ export const getTicketTypesController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
     const userId = req.user.sub;
-    const ticketTypes = await getTicketTypes(eventId, userId);
+    const ticketTypes = await getTicketTypes(eventId, userId, req.user.role);
     return success(res, ticketTypes);
   } catch (error) {
     next(error);
@@ -37,7 +37,7 @@ export const updateTicketTypeController = async (req, res, next) => {
   try {
     const { eventId, id } = req.params;
     const userId = req.user.sub;
-    const ticketType = await updateTicketType(eventId, id, userId, req.body);
+    const ticketType = await updateTicketType(eventId, id, userId, req.user.role, req.body);
     return success(res, ticketType, "Ticket type updated successfully");
   } catch (error) {
     next(error);
@@ -48,7 +48,7 @@ export const deleteTicketTypeController = async (req, res, next) => {
   try {
     const { eventId, id } = req.params;
     const userId = req.user.sub;
-    await deleteTicketType(eventId, id, userId);
+    await deleteTicketType(eventId, id, userId, req.user.role);
     return success(res, null, "Ticket type deleted successfully");
   } catch (error) {
     next(error);
@@ -70,7 +70,7 @@ export const listTicketsController = async (req, res, next) => {
   try {
     const { eventId } = req.params;
     const userId = req.user.sub;
-    const result = await listEventTickets(eventId, userId, req.query);
+    const result = await listEventTickets(eventId, userId, req.user.role, req.query);
     return success(res, result);
   } catch (error) {
     next(error);
@@ -106,7 +106,7 @@ export const exportTicketsController = async (req, res, next) => {
     const { format } = req.body;
     const userId = req.user.sub;
 
-    const { contentType, data, extension } = await exportEventTickets(eventId, userId, format);
+    const { contentType, data, extension } = await exportEventTickets(eventId, userId, req.user.role, format);
 
     res.setHeader("Content-Type", contentType.includes("csv") ? "text/csv; charset=utf-8" : contentType);
     res.setHeader("Content-Disposition", `attachment; filename="tickets-export.${extension}"`);

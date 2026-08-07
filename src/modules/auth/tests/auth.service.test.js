@@ -34,6 +34,7 @@ vi.mock('../../../config/index.js', () => ({
         TOKEN_REFRESH_INVALID: 'Invalid or expired refresh token',
         ALREADY_EXISTS: 'Account already exists with this email',
         INVALID_CREDENTIALS: 'Invalid email or password',
+        ACCOUNT_SUSPENDED: 'Account has been suspended',
       },
     },
   },
@@ -70,6 +71,7 @@ describe('Auth Service Tests', () => {
     name: 'Lucas Nash',
     email: 'lucas@example.com',
     role: 'ORGANIZER',
+    status: 'ACTIVE',
     passwordHash: 'hashed_password'
   };
 
@@ -142,7 +144,19 @@ describe('Auth Service Tests', () => {
 
       prisma.user.findUnique.mockResolvedValue({ ...mockUser, deletedAt: new Date() });
       await expect(refreshToken(token)).rejects.toBeInstanceOf(UnauthorizedError);
-    });  });
+    });
+
+    test('should throw UnauthorizedError when the user is suspended or inactive', async () => {
+      const { refreshToken: token } = generateTokens(mockUser);
+      mRedisClient.get.mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, status: 'SUSPENDED' });
+
+      await expect(refreshToken(token)).rejects.toBeInstanceOf(UnauthorizedError);
+
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, status: 'INACTIVE' });
+      await expect(refreshToken(token)).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+  });
 
   describe('Password Hashing', () => {
     test('hashPassword should return hashed password', async () => {
@@ -241,6 +255,22 @@ describe('Auth Service Tests', () => {
         expect(err.message).toBe(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
       }
     });
+
+    test('should throw UnauthorizedError if account is suspended, inactive, or deleted', async () => {
+      bcrypt.compare.mockResolvedValue(true);
+
+      for (const status of ['SUSPENDED', 'INACTIVE']) {
+        prisma.user.findUnique.mockResolvedValue({ ...mockUser, status });
+        await expect(
+          authenticateUser('lucas@example.com', 'password123')
+        ).rejects.toBeInstanceOf(UnauthorizedError);
+      }
+
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, deletedAt: new Date() });
+      await expect(
+        authenticateUser('lucas@example.com', 'password123')
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    });
   });
 
   describe('Redis Token Blacklisting', () => {
@@ -305,10 +335,29 @@ describe('Auth Service Tests', () => {
 
     test('should attach user and call next if token is valid', async () => {
       const { accessToken } = generateTokens(mockUser);
+      prisma.user.findUnique.mockResolvedValue({ id: mockUser.id, status: 'ACTIVE', deletedAt: null });
       req.headers.authorization = `Bearer ${accessToken}`;
       await requireAuth(req, res, next);
       expect(req.user).toBeDefined();
       expect(next).toHaveBeenCalled();
+    });
+
+    test('should return 401 when the token is valid but the user is suspended', async () => {
+      const { accessToken } = generateTokens(mockUser);
+      prisma.user.findUnique.mockResolvedValue({ id: mockUser.id, status: 'SUSPENDED', deletedAt: null });
+      req.headers.authorization = `Bearer ${accessToken}`;
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should return 401 when the token is valid but the user is deleted', async () => {
+      const { accessToken } = generateTokens(mockUser);
+      prisma.user.findUnique.mockResolvedValue(null);
+      req.headers.authorization = `Bearer ${accessToken}`;
+      await requireAuth(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
     });
   });
 });

@@ -40,12 +40,9 @@ export async function refreshToken(token) {
 
   const decoded = verifyRefreshToken(token);
 
-  const user = await prisma.user.findUnique({
-    where: { id: decoded.sub },
-    select: { id: true, name: true, email: true, role: true, deletedAt: true },
-  });
+  const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
 
-  if (!user || user.deletedAt) {
+  if (!user || user.deletedAt || user.status !== 'ACTIVE') {
     throw new UnauthorizedError(systemMessages.ERROR.AUTH.UNAUTHORIZED);
   }
 
@@ -117,6 +114,10 @@ export async function authenticateUser(email, plainPassword) {
   const isMatch = await comparePassword(plainPassword, user.passwordHash);
   if (!isMatch) {
     throw new UnauthorizedError(systemMessages.ERROR.AUTH.INVALID_CREDENTIALS);
+  }
+
+  if (user.deletedAt || user.status !== 'ACTIVE') {
+    throw new UnauthorizedError(systemMessages.ERROR.AUTH.ACCOUNT_SUSPENDED);
   }
 
   writeAuditLog({
