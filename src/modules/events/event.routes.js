@@ -4,6 +4,7 @@ import {
   createEventController,
   getEventController,
   listEventsController,
+  listAssignedEventsController,
   updateEventController,
   deleteEventController,
   publishEventController,
@@ -330,6 +331,51 @@ router.get(
   requireRole("ORGANIZER", "ADMIN"),
   validateQuery(eventListQuerySchema),
   listEventsController
+);
+
+/**
+ * @openapi
+ * /api/v1/events/assigned:
+ *   get:
+ *     summary: List events the caller is assigned to as staff
+ *     description: |
+ *       Returns the events the authenticated user is actively assigned to as
+ *       staff (active EventStaffAssignment rows, excluding soft-deleted events).
+ *       Available to any authenticated user so staff can reach their assignments
+ *       from any device.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of assigned events
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     events:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/EventResponse'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// List assigned events (must be registered before /:id so "assigned"
+// is not captured as an event id)
+router.get(
+  "/assigned",
+  requireAuth,
+  listAssignedEventsController
 );
 
 /**

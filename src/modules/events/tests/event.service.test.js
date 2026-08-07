@@ -3,6 +3,7 @@ import {
   createEvent,
   getEvent,
   listEvents,
+  listAssignedEvents,
   updateEvent,
   deleteEvent,
   publishEvent,
@@ -34,6 +35,9 @@ vi.mock("../../../database/index.js", () => ({
       findMany: vi.fn(),
       count: vi.fn(),
       updateMany: vi.fn(),
+    },
+    eventStaffAssignment: {
+      findMany: vi.fn(),
     },
   },
 }));
@@ -221,6 +225,48 @@ describe("Event Service Tests", () => {
 
       expect(result.events).toEqual([]);
       expect(result.pagination.total).toBe(0);
+    });
+  });
+
+  describe("listAssignedEvents", () => {
+    const mockAssignment = {
+      permissionScope: "SCAN",
+      assignedAt: new Date("2026-08-01T10:00:00Z"),
+      event: { ...mockEvent, id: "event_1" },
+    };
+
+    test("should return events the caller is actively assigned to", async () => {
+      prisma.eventStaffAssignment.findMany.mockResolvedValue([mockAssignment]);
+
+      const result = await listAssignedEvents("staff_1");
+
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toEqual({
+        ...mockAssignment.event,
+        permissionScope: "SCAN",
+        assignedAt: mockAssignment.assignedAt,
+      });
+      expect(prisma.eventStaffAssignment.findMany).toHaveBeenCalledWith({
+        where: {
+          userId: "staff_1",
+          active: true,
+          event: { deletedAt: null },
+        },
+        select: {
+          permissionScope: true,
+          assignedAt: true,
+          event: true,
+        },
+        orderBy: { assignedAt: "desc" },
+      });
+    });
+
+    test("should exclude inactive assignments", async () => {
+      prisma.eventStaffAssignment.findMany.mockResolvedValue([]);
+
+      const result = await listAssignedEvents("staff_1");
+
+      expect(result.events).toEqual([]);
     });
   });
 
