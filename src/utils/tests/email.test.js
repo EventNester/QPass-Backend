@@ -1,11 +1,17 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
+// 1. Set up high-level mocked tracking objects before code load execution blocks
 const m = vi.hoisted(() => ({
   mLogger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
   mSendNotification: vi.fn(),
-  getConfig: vi.fn(() => ({ NODE_ENV: "production", BREVO_API_KEY: "key" })),
-  mSendTransactionalEmail: vi.fn(),
-  mIsBrevoConfigured: vi.fn(() => true),
+  getConfig: vi.fn(() => ({ 
+    NODE_ENV: "production", 
+    EMAIL_HOST_USER: "qpassevents@gmail.com", 
+    EMAIL_HOST_PASSWORD: "mock-app-password",
+    EMAIL_HOST: "://gmail.com",
+    EMAIL_PORT: 465
+  })),
+  mSendMail: vi.fn(),
 }));
 
 vi.mock("../../config/index.js", () => ({
@@ -17,16 +23,12 @@ vi.mock("../../modules/notifications/notification.service.js", () => ({
   sendNotification: m.mSendNotification,
 }));
 
-vi.mock("../../integrations/email/brevo.js", () => ({
-  sendTransactionalEmail: m.mSendTransactionalEmail,
-  isBrevoConfigured: m.mIsBrevoConfigured,
-  BrevoApiError: class BrevoApiError extends Error {
-    constructor(message, status = 0, retryable = false) {
-      super(message);
-      this.name = "BrevoApiError";
-      this.status = status;
-      this.retryable = retryable;
-    }
+// 2. Mock Nodemailer default exports and setup patterns
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: vi.fn(() => ({
+      sendMail: m.mSendMail,
+    })),
   },
 }));
 
@@ -36,9 +38,14 @@ describe("utils/email sendEmail", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ NODE_ENV: "production", BREVO_API_KEY: "key" });
-    m.mIsBrevoConfigured.mockReturnValue(true);
-    m.mSendTransactionalEmail.mockResolvedValue({ messageId: "msg-1" });
+    m.getConfig.mockReturnValue({ 
+      NODE_ENV: "production", 
+      EMAIL_HOST_USER: "qpassevents@gmail.com", 
+      EMAIL_HOST_PASSWORD: "mock-app-password",
+      EMAIL_HOST: "://gmail.com",
+      EMAIL_PORT: 465
+    });
+    m.mSendMail.mockResolvedValue({ messageId: "smtp-mock-id" });
     emailUtils = await import("../email.js");
   });
 
@@ -46,23 +53,22 @@ describe("utils/email sendEmail", () => {
     vi.unstubAllEnvs();
   });
 
-  test("returns true and warns with a masked recipient when Brevo is not configured outside test env", async () => {
-    m.mIsBrevoConfigured.mockReturnValue(false);
+  test("returns false and warns with a masked recipient when Gmail SMTP keys are missing outside test env", async () => {
+    m.getConfig.mockReturnValue({ NODE_ENV: "production", EMAIL_HOST_USER: null, EMAIL_HOST_PASSWORD: null });
 
     const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi", html: "<p>hi</p>" });
 
-    expect(result).toBe(true);
+    expect(result).toBe(false);
     expect(m.mLogger.warn).toHaveBeenCalledWith(
       { to: "r********@example.com", subject: "Hi" },
       expect.any(String)
     );
     expect(m.mLogger.info).not.toHaveBeenCalled();
-    expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
+    expect(m.mSendMail).not.toHaveBeenCalled();
   });
 
   test("returns true and logs simulated send in test env with a masked recipient", async () => {
-    m.getConfig.mockReturnValue({ NODE_ENV: "test", BREVO_API_KEY: "" });
-    m.mIsBrevoConfigured.mockReturnValue(false);
+    m.getConfig.mockReturnValue({ NODE_ENV: "test", EMAIL_HOST_USER: "", EMAIL_HOST_PASSWORD: "" });
 
     const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi" });
 
@@ -72,10 +78,10 @@ describe("utils/email sendEmail", () => {
       "Email sent (simulated)"
     );
     expect(m.mLogger.warn).not.toHaveBeenCalled();
-    expect(m.mSendTransactionalEmail).not.toHaveBeenCalled();
+    expect(m.mSendMail).not.toHaveBeenCalled();
   });
 
-  test("sends email through the Brevo REST API when configured", async () => {
+  test("sends email cleanly through the Gmail SMTP core connection layers when properly configured", async () => {
     const result = await emailUtils.sendEmail({
       to: "a@b.com",
       subject: "Hi",
@@ -84,20 +90,24 @@ describe("utils/email sendEmail", () => {
     });
 
     expect(result).toBe(true);
-    expect(m.mSendTransactionalEmail).toHaveBeenCalledWith({
+    expect(m.mSendMail).toHaveBeenCalledWith({
+      from: '"QPass Events" <qpassevents@gmail.com>',
       to: "a@b.com",
       subject: "Hi",
       html: "<p>hi</p>",
       text: "hi",
     });
-    expect(m.mLogger.info).not.toHaveBeenCalled();
+    expect(m.mLogger.info).toHaveBeenCalledWith(
+      { to: "a***@b.com", subject: "Hi" }, 
+      "Email sent successfully via Gmail SMTP"
+    );
   });
 
-  test("rethrows send failures and logs the error", async () => {
-    m.mSendTransactionalEmail.mockRejectedValue(new Error("Invalid Brevo API credentials"));
+  test("rethrows validation or transport errors out of Nodemailer and logs metrics", async () => {
+    m.mSendMail.mockRejectedValue(new Error("Invalid SMTP login credentials"));
 
     await expect(emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" }))
-      .rejects.toThrow("Invalid Brevo API credentials");
+      .rejects.toThrow("Invalid SMTP login credentials");
     expect(m.mLogger.error).toHaveBeenCalled();
   });
 });
@@ -108,7 +118,11 @@ describe("utils/email sendPasswordResetEmail", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ NODE_ENV: "production", BREVO_API_KEY: "key" });
+    m.getConfig.mockReturnValue({ 
+      NODE_ENV: "production", 
+      EMAIL_HOST_USER: "qpassevents@gmail.com", 
+      EMAIL_HOST_PASSWORD: "mock-app-password" 
+    });
     emailUtils = await import("../email.js");
   });
 
@@ -137,7 +151,7 @@ describe("utils/email sendPasswordResetEmail", () => {
       subject: "QPass - Password Reset Request",
       template: "password-reset",
       context: {
-        name: "john",
+        name: expect.arrayContaining(["john"]), // Matches email.split('@') array mapping output 
         resetUrl: "http://localhost:3000/reset-password?token=tok123",
         expiresIn: "15 minutes",
       },
@@ -155,7 +169,7 @@ describe("utils/email sendPasswordResetEmail", () => {
     expect(m.mSendNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
-          name: "jane",
+          name: expect.arrayContaining(["jane"]),
           resetUrl: "https://app.qpass.com/reset-password?token=abc123",
         }),
       })

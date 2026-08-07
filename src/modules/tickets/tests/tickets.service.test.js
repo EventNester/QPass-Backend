@@ -95,7 +95,7 @@ describe("TicketType Service (unit)", () => {
       prisma.ticketType.create.mockResolvedValue(mockTicketType);
 
       const { createTicketType } = await loadModule();
-      const result = await createTicketType(mockEventId, mockUserId, {
+      const result = await createTicketType(mockEventId, mockUserId, "ORGANIZER", {
         name: "VIP",
         price: 5000,
       });
@@ -116,7 +116,7 @@ describe("TicketType Service (unit)", () => {
       prisma.ticketType.create.mockResolvedValue(mockTicketType);
 
       const { createTicketType } = await loadModule();
-      await createTicketType(mockEventId, mockUserId, { name: "VIP", price: 5000 });
+      await createTicketType(mockEventId, mockUserId, "ORGANIZER", { name: "VIP", price: 5000 });
 
       expect(prisma.ticketType.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -133,7 +133,7 @@ describe("TicketType Service (unit)", () => {
         .mockResolvedValueOnce(mockTicketType);
 
       const { createTicketType } = await loadModule();
-      const result = await createTicketType(mockEventId, mockUserId, { name: "VIP", price: 5000 });
+      const result = await createTicketType(mockEventId, mockUserId, "ORGANIZER", { name: "VIP", price: 5000 });
 
       expect(result).toEqual(mockTicketType);
       expect(prisma.$transaction).toHaveBeenCalledTimes(3);
@@ -145,7 +145,7 @@ describe("TicketType Service (unit)", () => {
 
       const { createTicketType } = await loadModule();
       await expect(
-        createTicketType(mockEventId, mockUserId, { name: "VIP", price: 5000 })
+        createTicketType(mockEventId, mockUserId, "ORGANIZER", { name: "VIP", price: 5000 })
       ).rejects.toThrow("DB down");
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
@@ -155,8 +155,23 @@ describe("TicketType Service (unit)", () => {
 
       const { createTicketType } = await loadModule();
       await expect(
-        createTicketType(mockEventId, mockUserId, { name: "VIP", price: 5000 })
+        createTicketType(mockEventId, mockUserId, "ORGANIZER", { name: "VIP", price: 5000 })
       ).rejects.toThrow(ForbiddenError);
+    });
+
+    it("should allow an ADMIN to manage ticket types for events they do not own", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ...mockEvent, ownerId: "other_user" });
+      prisma.ticketType.aggregate.mockResolvedValue({ _max: { sortOrder: 0 } });
+      prisma.ticketType.create.mockResolvedValue(mockTicketType);
+      prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
+
+      const { createTicketType } = await loadModule();
+      const result = await createTicketType(mockEventId, "admin_1", "ADMIN", {
+        name: "VIP",
+        price: 5000,
+      });
+
+      expect(result).toEqual(mockTicketType);
     });
 
     it("should throw NotFoundError if event does not exist", async () => {
@@ -164,7 +179,7 @@ describe("TicketType Service (unit)", () => {
 
       const { createTicketType } = await loadModule();
       await expect(
-        createTicketType(mockEventId, mockUserId, { name: "VIP", price: 5000 })
+        createTicketType(mockEventId, mockUserId, "ORGANIZER", { name: "VIP", price: 5000 })
       ).rejects.toThrow("Event not found");
     });
   });
@@ -202,7 +217,7 @@ describe("TicketType Service (unit)", () => {
       prisma.ticketType.update.mockResolvedValue(updated);
 
       const { updateTicketType } = await loadModule();
-      const result = await updateTicketType(mockEventId, mockTicketTypeId, mockUserId, {
+      const result = await updateTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER", {
         name: "VVIP",
       });
 
@@ -218,7 +233,7 @@ describe("TicketType Service (unit)", () => {
 
       const { updateTicketType } = await loadModule();
       await expect(
-        updateTicketType(mockEventId, mockTicketTypeId, mockUserId, { name: "VVIP" })
+        updateTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER", { name: "VVIP" })
       ).rejects.toThrow("Resource not found");
     });
 
@@ -227,7 +242,7 @@ describe("TicketType Service (unit)", () => {
 
       const { updateTicketType } = await loadModule();
       await expect(
-        updateTicketType(mockEventId, mockTicketTypeId, mockUserId, { name: "VVIP" })
+        updateTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER", { name: "VVIP" })
       ).rejects.toThrow(ForbiddenError);
     });
   });
@@ -238,7 +253,7 @@ describe("TicketType Service (unit)", () => {
       prisma.$transaction.mockImplementation(async (fn) => fn(prisma));
 
       const { deleteTicketType } = await loadModule();
-      const result = await deleteTicketType(mockEventId, mockTicketTypeId, mockUserId);
+      const result = await deleteTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER");
 
       expect(result).toBe(true);
       expect(prisma.ticketType.delete).toHaveBeenCalledWith({
@@ -251,7 +266,7 @@ describe("TicketType Service (unit)", () => {
 
       const { deleteTicketType } = await loadModule();
       await expect(
-        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId)
+        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER")
       ).rejects.toThrow("Resource not found");
     });
 
@@ -261,7 +276,7 @@ describe("TicketType Service (unit)", () => {
 
       const { deleteTicketType } = await loadModule();
       await expect(
-        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId)
+        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER")
       ).rejects.toThrow("Cannot delete ticket type with existing registrations");
     });
 
@@ -270,7 +285,7 @@ describe("TicketType Service (unit)", () => {
 
       const { deleteTicketType } = await loadModule();
       await expect(
-        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId)
+        deleteTicketType(mockEventId, mockTicketTypeId, mockUserId, "ORGANIZER")
       ).rejects.toThrow(ForbiddenError);
     });
   });
@@ -326,7 +341,7 @@ describe("TicketType Service (unit)", () => {
 
     it("allows assigned staff", async () => {
       prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
-      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ eventId: mockEventId, userId: "staff" });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ eventId: mockEventId, userId: "staff", active: true });
       getRegistrationById.mockResolvedValue(registration);
 
       const { getTicketDetails } = await loadModule();
@@ -334,6 +349,20 @@ describe("TicketType Service (unit)", () => {
 
       expect(result.id).toBe("reg_1");
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.eventStaffAssignment.findUnique).toHaveBeenCalledWith({
+        where: { eventId_userId: { eventId: mockEventId, userId: "staff" } },
+        select: { active: true },
+      });
+    });
+
+    it("denies deactivated staff", async () => {
+      prisma.event.findUnique.mockResolvedValue({ ownerId: "other_user" });
+      prisma.eventStaffAssignment.findUnique.mockResolvedValue({ eventId: mockEventId, userId: "staff", active: false });
+      prisma.user.findUnique.mockResolvedValue({ id: "staff", email: "someone@example.com" });
+      getRegistrationById.mockResolvedValue(registration);
+
+      const { getTicketDetails } = await loadModule();
+      await expect(getTicketDetails("reg_1", "staff")).rejects.toThrow(ForbiddenError);
     });
 
     it("throws ForbiddenError for a stranger with no matching user", async () => {
@@ -366,7 +395,7 @@ describe("TicketType Service (unit)", () => {
       listRegistrationsByEvent.mockResolvedValue({ registrations: [{ id: "r1" }], pagination: {} });
 
       const { listEventTickets } = await loadModule();
-      const result = await listEventTickets(mockEventId, mockUserId, { page: 2, limit: 10 });
+      const result = await listEventTickets(mockEventId, mockUserId, "ORGANIZER", { page: 2, limit: 10 });
 
       expect(result.registrations).toEqual([{ id: "r1" }]);
       expect(listRegistrationsByEvent).toHaveBeenCalledWith(mockEventId, 2, 10, {
@@ -377,7 +406,7 @@ describe("TicketType Service (unit)", () => {
 
     it("passes empty filters when none are provided", async () => {
       const { listEventTickets } = await loadModule();
-      await listEventTickets(mockEventId, mockUserId);
+      await listEventTickets(mockEventId, mockUserId, "ORGANIZER");
 
       expect(listRegistrationsByEvent).toHaveBeenCalledWith(mockEventId, undefined, undefined, {});
     });
@@ -386,7 +415,7 @@ describe("TicketType Service (unit)", () => {
       prisma.event.findUnique.mockResolvedValue({ ...mockEvent, ownerId: "other_user" });
 
       const { listEventTickets } = await loadModule();
-      await expect(listEventTickets(mockEventId, mockUserId)).rejects.toThrow(ForbiddenError);
+      await expect(listEventTickets(mockEventId, mockUserId, "ORGANIZER")).rejects.toThrow(ForbiddenError);
     });
   });
 
@@ -414,7 +443,7 @@ describe("TicketType Service (unit)", () => {
       prisma.registration.findMany.mockResolvedValue(registrations);
 
       const { exportEventTickets } = await loadModule();
-      const result = await exportEventTickets(mockEventId, mockUserId, "csv");
+      const result = await exportEventTickets(mockEventId, mockUserId, "ORGANIZER", "csv");
 
       expect(result.contentType).toBe("text/csv");
       expect(result.extension).toBe("csv");
@@ -434,7 +463,7 @@ describe("TicketType Service (unit)", () => {
       generateTicketListPdf.mockResolvedValue(Buffer.from("pdf-bytes"));
 
       const { exportEventTickets } = await loadModule();
-      const result = await exportEventTickets(mockEventId, mockUserId, "pdf");
+      const result = await exportEventTickets(mockEventId, mockUserId, "ORGANIZER", "pdf");
 
       expect(result.contentType).toBe("application/pdf");
       expect(result.extension).toBe("pdf");
@@ -445,7 +474,7 @@ describe("TicketType Service (unit)", () => {
     it("throws BadRequestError for an unsupported format", async () => {
       const { exportEventTickets } = await loadModule();
       await expect(
-        exportEventTickets(mockEventId, mockUserId, "xml")
+        exportEventTickets(mockEventId, mockUserId, "ORGANIZER", "xml")
       ).rejects.toThrow("Unsupported export format");
     });
 
@@ -453,7 +482,7 @@ describe("TicketType Service (unit)", () => {
       prisma.event.findUnique.mockResolvedValue({ ...mockEvent, ownerId: "other_user" });
 
       const { exportEventTickets } = await loadModule();
-      await expect(exportEventTickets(mockEventId, mockUserId, "csv")).rejects.toThrow(
+      await expect(exportEventTickets(mockEventId, mockUserId, "ORGANIZER", "csv")).rejects.toThrow(
         ForbiddenError
       );
     });

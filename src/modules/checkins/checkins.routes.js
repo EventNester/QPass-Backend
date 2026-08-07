@@ -2,8 +2,14 @@ import { Router } from "express";
 import * as checkinController from "./checkins.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { requireRole } from "../../middlewares/rbac.middleware.js";
-import { validate, validateQuery } from "../../middlewares/validate.middleware.js";
-import { scanQrSchema, checkinStatsQuerySchema } from "./checkins.schema.js";
+import { validate, validateQuery, validateParams } from "../../middlewares/validate.middleware.js";
+import {
+  scanQrSchema,
+  checkinStatsQuerySchema,
+  scanEventIdParamsSchema,
+  checkinListParamsSchema,
+  undoCheckinParamsSchema,
+} from "./checkins.schema.js";
 
 const router = Router();
 
@@ -152,7 +158,7 @@ router.get("/stats", requireAuth, validateQuery(checkinStatsQuerySchema), checki
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), validate(scanQrSchema), checkinController.scanQr);
+router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), validateParams(scanEventIdParamsSchema), validate(scanQrSchema), checkinController.scanQr);
 
 /**
  * @openapi
@@ -199,7 +205,7 @@ router.post("/:eventId/scan", requireAuth, requireRole("STAFF", "ORGANIZER"), va
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.getCheckins);
+router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"), validateParams(checkinListParamsSchema), checkinController.getCheckins);
 
 /**
  * @openapi
@@ -257,6 +263,6 @@ router.get("/:eventId/checkins", requireAuth, requireRole("STAFF", "ORGANIZER"),
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("STAFF", "ORGANIZER"), checkinController.undoCheckin);
+router.post("/:eventId/checkins/:checkInId/undo", requireAuth, requireRole("STAFF", "ORGANIZER"), validateParams(undoCheckinParamsSchema), checkinController.undoCheckin);
 
 export default router;

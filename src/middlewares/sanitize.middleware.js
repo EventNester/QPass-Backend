@@ -1,4 +1,7 @@
-const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+// Only `__proto__` is a real prototype-pollution vector when copied onto a
+// plain object. `constructor`/`prototype` are legitimate own data keys (e.g.
+// custom registration metadata) and are safe to keep as ordinary properties.
+const DANGEROUS_KEYS = new Set(['__proto__']);
 
 function sanitizeValue(value) {
   if (Array.isArray(value)) {

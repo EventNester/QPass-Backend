@@ -1,26 +1,61 @@
+import nodemailer from 'nodemailer'; // Fixed incorrect curly brace syntax
 import { getConfig, logger } from '../config/index.js';
-import { sendTransactionalEmail, isBrevoConfigured } from '../integrations/email/brevo.js';
 import { maskRecipient } from '../modules/notifications/email.service.js';
 import { sendNotification } from '../modules/notifications/notification.service.js';
 
+// Initialize the Nodemailer transporter using Port 465 (SSL)
+let transporter = null;
+
+function getTransporter() {
+  if (!transporter) {
+    const config = getConfig();
+    transporter = nodemailer.createTransport({
+      host: config.EMAIL_HOST,
+      port: config.EMAIL_PORT,
+      secure: true, // true for port 465
+      auth: {
+        user: config.EMAIL_HOST_USER,
+        pass: config.EMAIL_HOST_PASSWORD,
+      },
+    });
+  }
+  return transporter;
+}
+
+/**
+ * Core engine function that sends the physical email via Gmail SMTP
+ */
 export async function sendEmail({ to, subject, html, text }) {
   const config = getConfig();
   const maskedTo = maskRecipient(to);
 
-  if (config.NODE_ENV === 'test' || !isBrevoConfigured()) {
-    if (config.NODE_ENV !== 'test') {
-      logger.warn({ to: maskedTo, subject }, 'Brevo API not configured — email not sent');
-    } else {
-      logger.info({ to: maskedTo, subject }, 'Email sent (simulated)');
-    }
+  // If in a testing environment, bypass sending completely
+  if (config.NODE_ENV === 'test') {
+    logger.info({ to: maskedTo, subject }, 'Email sent (simulated)');
     return true;
   }
 
+  // Ensure SMTP environment variables exist
+  if (!config.EMAIL_HOST_USER || !config.EMAIL_HOST_PASSWORD) {
+    logger.warn({ to: maskedTo, subject }, 'Gmail SMTP credentials not configured — email not sent');
+    return false;
+  }
+
   try {
-    await sendTransactionalEmail({ to, subject, html, text });
+    const smtp = getTransporter();
+    
+    await smtp.sendMail({
+      from: `"QPass Events" <${config.EMAIL_HOST_USER}>`, // Displays your app name cleanly
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    logger.info({ to: maskedTo, subject }, 'Email sent successfully via Gmail SMTP');
     return true;
   } catch (error) {
-    logger.error({ err: error, to: maskedTo, subject }, 'Failed to send email');
+    logger.error({ err: error, to: maskedTo, subject }, 'Failed to send email via SMTP');
     throw error;
   }
 }

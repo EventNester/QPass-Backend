@@ -15,12 +15,14 @@ describe('sanitizeBody', () => {
     expect(Object.hasOwn(body, '__proto__')).toBe(false);
   });
 
-  it('strips constructor and prototype keys recursively', () => {
+  it('preserves constructor and prototype data keys (only __proto__ is stripped)', () => {
     const body = run({ meta: { constructor: 1, prototype: 2, ok: true } });
 
     expect(body.meta.ok).toBe(true);
-    expect(Object.hasOwn(body.meta, 'constructor')).toBe(false);
-    expect(Object.hasOwn(body.meta, 'prototype')).toBe(false);
+    expect(body.meta.constructor).toBe(1);
+    expect(body.meta.prototype).toBe(2);
+    expect(Object.hasOwn(body.meta, 'constructor')).toBe(true);
+    expect(Object.hasOwn(body.meta, 'prototype')).toBe(true);
   });
 
   it('does not trim string values (passwords must stay intact)', () => {

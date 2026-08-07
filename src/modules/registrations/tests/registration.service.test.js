@@ -347,7 +347,7 @@ describe('Registration Service', () => {
     });
 
     it('does not fail when email sending fails (fire-and-forget)', async () => {
-      sendNotification.mockRejectedValue(new Error('Brevo API unavailable'));
+      sendNotification.mockRejectedValue(new Error('Email not sent'));
       const result = await registerFree({ slug: 'tech-summit', name: 'Ada', email: attendeeEmail });
       expect(result.registration).toBeDefined();
     });
