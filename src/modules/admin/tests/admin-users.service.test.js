@@ -3,9 +3,12 @@ import {
   sendAdminInvite,
   acceptAdminInvite,
   promoteToAdmin,
+  listUsers,
+  deactivateUser,
 } from "../admin-users.service.js";
 import prisma from "../../../database/index.js";
 import { sendAdminInviteEmail } from "../../../utils/email.js";
+import { writeAuditLog } from "../../../utils/audit-log.js";
 import {
   ConflictError,
   ForbiddenError,
@@ -14,7 +17,7 @@ import {
 } from "../../../utils/error.js";
 
 const mockPrisma = vi.hoisted(() => ({
-  user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  user: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   auditLog: { create: vi.fn() },
 }));
 
@@ -36,6 +39,11 @@ vi.mock("../../../config/index.js", () => ({
       ORGANIZER: "ORGANIZER",
       ADMIN: "ADMIN",
     },
+    PAGINATION: {
+      DEFAULT_PAGE: 1,
+      DEFAULT_LIMIT: 20,
+      MAX_LIMIT: 100,
+    },
   },
   systemMessages: {
     ERROR: {
@@ -43,6 +51,7 @@ vi.mock("../../../config/index.js", () => ({
         USER_NOT_FOUND: "User not found",
         USER_ALREADY_EXISTS: "A user with this email already exists",
         CANNOT_MODIFY_SELF: "You cannot change your own account role",
+        CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account",
         INVITE_INVALID: "Invalid or expired admin invitation",
         INVITE_ALREADY_ADMIN: "This user is already an admin",
       },
@@ -308,6 +317,139 @@ describe("Admin Users Service", () => {
       });
 
       await expect(promoteToAdmin(targetUserId, adminActorId)).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("listUsers", () => {
+    test("returns paginated non-deleted users", async () => {
+      prisma.user.findMany.mockResolvedValue([
+        { id: "u1", name: "Alice", email: "a@example.com", role: "ORGANIZER", status: "ACTIVE" },
+      ]);
+      prisma.user.count.mockResolvedValue(1);
+
+      const result = await listUsers({ page: 1, limit: 20 });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          skip: 0,
+          take: 20,
+        })
+      );
+      expect(prisma.user.count).toHaveBeenCalledWith({ where: { deletedAt: null } });
+      expect(result.users).toHaveLength(1);
+      expect(result.pagination.totalPages).toBe(1);
+    });
+
+    test("applies a case-insensitive name/email search filter", async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      prisma.user.count.mockResolvedValue(0);
+
+      await listUsers({ search: "alice" });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            deletedAt: null,
+            OR: [
+              { name: { contains: "alice", mode: "insensitive" } },
+              { email: { contains: "alice", mode: "insensitive" } },
+            ],
+          },
+          skip: 0,
+          take: 20,
+        })
+      );
+    });
+
+    test("caps the limit at the configured maximum", async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      prisma.user.count.mockResolvedValue(0);
+
+      await listUsers({ limit: 1000 });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 100 })
+      );
+    });
+  });
+
+  describe("deactivateUser", () => {
+    test("sets an active user to INACTIVE and audits it", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: targetUserId,
+        name: "Attendee",
+        email: "attendee@example.com",
+        role: "ATTENDEE",
+        status: "ACTIVE",
+        createdAt: new Date(),
+      });
+      prisma.user.update.mockResolvedValue({
+        id: targetUserId,
+        name: "Attendee",
+        email: "attendee@example.com",
+        role: "ATTENDEE",
+        status: "INACTIVE",
+        createdAt: new Date(),
+      });
+
+      const result = await deactivateUser({ userId: targetUserId }, adminActorId);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: targetUserId },
+        data: { status: "INACTIVE" },
+      });
+      expect(result.status).toBe("INACTIVE");
+      expect(writeAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: adminActorId,
+          action: "ADMIN_USER_DEACTIVATED",
+          entityId: targetUserId,
+          beforeSnapshot: { status: "ACTIVE" },
+          afterSnapshot: { status: "INACTIVE" },
+        })
+      );
+    });
+
+    test("is idempotent when the user is already INACTIVE", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: targetUserId,
+        role: "ATTENDEE",
+        status: "INACTIVE",
+      });
+
+      const result = await deactivateUser({ userId: targetUserId }, adminActorId);
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(result.status).toBe("INACTIVE");
+    });
+
+    test("throws ForbiddenError when an admin targets their own account", async () => {
+      await expect(deactivateUser({ userId: adminActorId }, adminActorId)).rejects.toThrow(
+        ForbiddenError
+      );
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    test("throws NotFoundError when the user does not exist (unknown/derived row)", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        deactivateUser({ userId: targetUserId }, adminActorId)
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    test("throws NotFoundError when the user is deleted", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: targetUserId,
+        role: "ATTENDEE",
+        deletedAt: new Date(),
+      });
+
+      await expect(
+        deactivateUser({ userId: targetUserId }, adminActorId)
+      ).rejects.toThrow(NotFoundError);
     });
   });
 });

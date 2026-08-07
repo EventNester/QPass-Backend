@@ -63,6 +63,8 @@ export default {
       INVITE_SENT: "Admin invitation sent successfully",
       INVITE_ACCEPTED: "Admin invitation accepted successfully",
       USER_PROMOTED: "User promoted to admin successfully",
+      USER_LISTED: "Users retrieved successfully",
+      USER_DEACTIVATED: "User deactivated successfully",
     },
     REPORT: {
       GENERATED: "Report generated successfully",
@@ -152,6 +154,7 @@ export default {
       USER_NOT_FOUND: "User not found",
       USER_ALREADY_EXISTS: "A user with this email already exists",
       CANNOT_MODIFY_SELF: "You cannot change your own account role",
+      CANNOT_DEACTIVATE_SELF: "You cannot deactivate your own account",
       INVITE_INVALID: "Invalid or expired admin invitation",
       INVITE_ALREADY_ADMIN: "This user is already an admin",
     },
