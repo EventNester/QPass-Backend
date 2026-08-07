@@ -8,7 +8,6 @@ const m = vi.hoisted(() => {
   const mockAdapter = vi.fn();
   const mockConnect = vi.fn().mockResolvedValue();
   const mockQuit = vi.fn().mockResolvedValue();
-  const mockDuplicate = vi.fn();
   const mockValidateToken = vi.fn();
   const mockGetSocketConfig = vi.fn();
   const mockLogger = { info: vi.fn(), debug: vi.fn(), error: vi.fn() };
@@ -27,7 +26,7 @@ const m = vi.hoisted(() => {
 
   return {
     mockOn, mockTo, mockUse, mockClose, mockAdapter,
-    mockConnect, mockQuit, mockDuplicate,
+    mockConnect, mockQuit,
     mockValidateToken, mockGetSocketConfig, mockLogger,
     mockEventFindFirst, mockStaffFindUnique,
     MockServer,
@@ -36,12 +35,11 @@ const m = vi.hoisted(() => {
 
 vi.mock("socket.io", () => ({ Server: m.MockServer }));
 vi.mock("@socket.io/redis-adapter", () => ({ createAdapter: vi.fn() }));
-vi.mock("redis", () => ({
-  createClient: vi.fn(() => ({
-    connect: m.mockConnect,
-    quit: m.mockQuit,
-    duplicate: m.mockDuplicate,
-  })),
+vi.mock("../../config/redis.js", () => ({
+  createPubSubClients: () => ({
+    pub: { connect: m.mockConnect, quit: m.mockQuit },
+    sub: { connect: m.mockConnect, quit: m.mockQuit },
+  }),
 }));
 vi.mock("../../modules/auth/auth.service.js", () => ({
   validateToken: m.mockValidateToken,
@@ -79,11 +77,6 @@ describe("Socket Handler", () => {
     await closeSocket();
     m.mockGetSocketConfig.mockReturnValue({
       corsOrigin: "*",
-      redis: { host: "localhost", port: 6379, password: "", database: 0 },
-    });
-    m.mockDuplicate.mockReturnValue({
-      connect: m.mockConnect,
-      quit: m.mockQuit,
     });
   });
 

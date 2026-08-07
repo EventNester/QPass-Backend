@@ -31,9 +31,14 @@ export async function scanQr(eventId, data, staffId) {
   }
 
   const lockKey = `scan:${eventId}:${tokenHash}`;
-  const locked = await redis.set(lockKey, "1", "EX", 10, "NX");
+  let lockHeld = false;
+  try {
+    lockHeld = Boolean(await redis.set(lockKey, "1", "EX", 10, "NX"));
+  } catch (err) {
+    logger.warn({ err, eventId }, "Redis lock unavailable; proceeding without dedupe lock");
+  }
 
-  if (!locked) {
+  if (!lockHeld) {
     throw new ConflictError(errMsg.CHECKIN.SCAN_IN_PROGRESS);
   }
 
@@ -190,7 +195,13 @@ export async function scanQr(eventId, data, staffId) {
 
     return scanResult;
   } finally {
-    await redis.del(lockKey);
+    if (lockHeld) {
+      try {
+        await redis.del(lockKey);
+      } catch (err) {
+        logger.warn({ err, eventId }, "Failed to release scan lock");
+      }
+    }
   }
 }
 

@@ -1,9 +1,10 @@
 import prisma from '../../database/index.js';
-import { logger } from '../../config/index.js';
+import { logger, constants } from '../../config/index.js';
 import crypto from 'crypto';
 import { BadRequestError, NotFoundError, ConflictError, ForbiddenError } from '../../utils/error.js';
 import { parseFile } from '../../utils/parsers/index.js';
 import { sendNotification } from '../../modules/notifications/notification.service.js';
+import { qrService } from '../tickets/qr.service.js';
 import { getIO } from '../../realtime/socket.js';
 import { emitRegistrationNew } from '../../realtime/rooms.js';
 
@@ -211,232 +212,6 @@ function generateTicketCode(eventId) {
 }
 
 /**
- * Process an import batch of registrations for an event.
- * Handles row-level validation, duplicate email detection, and error tracking.
- *
- * @param {Object} options - Import options
- * @param {string} options.eventId - Target event ID
- * @param {string} options.uploadedById - User ID uploading the file
- * @param {string|Buffer|Array<Object>} options.fileContent - File contents or parsed array
- * @param {string} [options.fileType='text/csv'] - MIME type of the file
- * @param {string} [options.filename='import.csv'] - Original filename
- * @param {boolean} [options.sendEmails=false] - Whether to send registration notifications
- * @returns {Promise<Object>} The completed ImportBatch record with errorReport
- */
-export async function importRegistrations({
-  eventId,
-  uploadedById,
-  fileContent,
-  fileType = 'text/csv',
-  filename = 'import.csv',
-  sendEmails = false,
-}) {
-  const rows = parseImportFile(fileContent);
-
-  const event = await prisma.event.findFirst({
-    where: { id: eventId, deletedAt: null },
-  });
-
-  if (!event) {
-    throw new NotFoundError('Event not found');
-  }
-
-  const batch = await prisma.importBatch.create({
-    data: {
-      eventId,
-      uploadedById,
-      originalFilename: filename,
-      fileType,
-      totalRows: rows.length,
-      status: 'PROCESSING',
-    },
-  });
-
-  const seenEmails = new Set();
-  const errorReport = [];
-  let successRows = 0;
-  let failedRows = 0;
-  const BATCH_SIZE = 50;
-
-  const validEntries = [];
-  for (let i = 0; i < rows.length; i++) {
-    const rowNumber = i + 2;
-    const row = rows[i];
-    const validation = validateRow(row, rowNumber, seenEmails);
-
-    if (!validation.valid) {
-      failedRows++;
-      errorReport.push({
-        row: rowNumber,
-        email: validation.email,
-        error: validation.error,
-      });
-    } else {
-      validEntries.push({ rowNumber, validation });
-    }
-  }
-
-  if (validEntries.length > 0) {
-    const emails = validEntries.map((e) => e.validation.email);
-    const existingRegs = await prisma.registration.findMany({
-      where: { eventId, attendeeEmail: { in: emails } },
-      select: { attendeeEmail: true },
-    });
-    const existingEmailSet = new Set(existingRegs.map((r) => r.attendeeEmail));
-
-    const toCreate = [];
-    for (const entry of validEntries) {
-      if (existingEmailSet.has(entry.validation.email)) {
-        failedRows++;
-        errorReport.push({
-          row: entry.rowNumber,
-          email: entry.validation.email,
-          error: 'Attendee is already registered for this event',
-        });
-      } else {
-        toCreate.push(entry);
-      }
-    }
-
-    const ticketTypeIds = [...new Set(toCreate.map((e) => e.validation.ticketTypeId).filter(Boolean))];
-    if (ticketTypeIds.length > 0) {
-      const validTicketTypes = await prisma.ticketType.findMany({
-        where: { id: { in: ticketTypeIds }, eventId, active: true },
-        select: { id: true, capacity: true, quantitySold: true },
-      });
-      const validTtMap = new Map(validTicketTypes.map((tt) => [tt.id, tt]));
-
-      const filtered = [];
-      for (const entry of toCreate) {
-        const ttId = entry.validation.ticketTypeId;
-        if (!ttId) {
-          filtered.push(entry);
-          continue;
-        }
-        const tt = validTtMap.get(ttId);
-        if (!tt) {
-          failedRows++;
-          errorReport.push({
-            row: entry.rowNumber,
-            email: entry.validation.email,
-            error: 'Invalid or inactive ticket type',
-          });
-          continue;
-        }
-        if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
-          failedRows++;
-          errorReport.push({
-            row: entry.rowNumber,
-            email: entry.validation.email,
-            error: 'Ticket type has reached capacity',
-          });
-          continue;
-        }
-        filtered.push(entry);
-      }
-      toCreate.length = 0;
-      toCreate.push(...filtered);
-    }
-
-    for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
-      const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
-      const createdRegistrations = [];
-
-      try {
-        await prisma.$transaction(async (tx) => {
-          for (const entry of currentBatch) {
-            const ticketCode = await tx.ticketCode.create({
-              data: {
-                eventId,
-                code: generateTicketCode(eventId),
-                status: 'USED',
-                attendeeEmail: entry.validation.email,
-                attendeeName: entry.validation.name,
-              },
-            });
-
-            const registration = await tx.registration.create({
-              data: {
-                eventId,
-                ticketCodeId: ticketCode.id,
-                attendeeEmail: entry.validation.email,
-                attendeeName: entry.validation.name,
-                phone: entry.validation.phone || null,
-                ticketTypeId: entry.validation.ticketTypeId || null,
-                source: 'IMPORT',
-                status: 'CONFIRMED',
-              },
-            });
-            createdRegistrations.push(registration);
-          }
-        });
-
-        successRows += currentBatch.length;
-
-        for (const registration of createdRegistrations) {
-          try {
-            emitRegistrationNew(getIO(), eventId, {
-              registrationId: registration.id,
-              attendeeName: registration.attendeeName,
-              attendeeEmail: registration.attendeeEmail,
-              ticketTypeId: registration.ticketTypeId || null,
-            });
-          } catch (err) {
-            logger.warn({ err, eventId, registrationId: registration.id }, 'failed to emit registration:new');
-          }
-        }
-
-        if (sendEmails) {
-          await Promise.all(
-            currentBatch.map((entry) =>
-              sendNotification({
-                recipient: entry.validation.email,
-                subject: `Registration Confirmed: ${event.title}`,
-                template: 'registration',
-                context: {
-                  name: entry.validation.name,
-                  eventTitle: event.title,
-                  email: entry.validation.email,
-                },
-                userId: uploadedById,
-                eventId,
-              }).catch((err) => {
-                logger.warn({ err: err.message, email: entry.validation.email }, 'Failed to send import registration notification');
-              })
-            )
-          );
-        }
-      } catch (error) {
-        logger.error({ err: error, batchStart: i }, 'Batch processing failed');
-        for (const entry of currentBatch) {
-          failedRows++;
-          errorReport.push({
-            row: entry.rowNumber,
-            email: entry.validation.email,
-            error: 'Database error during batch processing',
-          });
-        }
-      }
-    }
-  }
-
-  const finalStatus = failedRows === rows.length ? 'FAILED' : 'COMPLETED';
-
-  const updatedBatch = await prisma.importBatch.update({
-    where: { id: batch.id },
-    data: {
-      successRows,
-      failedRows,
-      status: finalStatus,
-      errorReport: errorReport.length > 0 ? errorReport : null,
-      completedAt: new Date(),
-    },
-  });
-
-  return updatedBatch;
-}
-
-/**
  * Handle public registration via public link with strict edge-case validation.
  * Enforces non-empty name, valid email format, and RFC 5321 length limits.
  *
@@ -566,8 +341,9 @@ export async function listImportBatchesByEvent(eventId) {
  * 2. Validate each row (email format, required fields, batch-level dupes).
  * 3. De-duplicate against existing registrations for the event.
  * 4. Create TicketCode + Registration + QrToken per valid row in batches.
- * 5. Send a batch summary email with success/failure counts.
- * 6. Create an audit log entry.
+ * 5. Send each attendee a QR ticket email (qr-issued) with their raw token.
+ * 6. Send a batch summary email with success/failure counts.
+ * 7. Create an audit log entry.
  *
  * @param {Object} options
  * @param {string} options.eventId - Target event ID
@@ -588,7 +364,7 @@ export async function processImportFile({
 }) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { id: true, title: true, endTime: true, ownerId: true, deletedAt: true },
+    select: { id: true, title: true, startTime: true, endTime: true, ownerId: true, deletedAt: true },
   });
 
   if (!event || event.deletedAt) {
@@ -717,68 +493,116 @@ export async function processImportFile({
   let failedRows = parseErrors.length + validationErrors.length;
 
   const allErrors = [...parseErrors, ...validationErrors];
+  const createdAttendees = [];
+  const MAX_TICKET_CODE_ATTEMPTS = 3;
+
   for (let i = 0; i < toCreate.length; i += BATCH_SIZE) {
     const currentBatch = toCreate.slice(i, i + BATCH_SIZE);
-    const createdRegistrations = [];
+    const batchAttendees = [];
 
     try {
       await prisma.$transaction(async (tx) => {
         for (const entry of currentBatch) {
           const ttId = entry.validation.ticketTypeId;
-          if (ttId && claimsByTicketType.has(ttId)) {
-            const tt = await tx.ticketType.findUnique({
-              where: { id: ttId },
-              select: { id: true, capacity: true, quantitySold: true },
-            });
-            if (tt.capacity !== null && tt.quantitySold >= tt.capacity) {
-              throw new Error('Ticket type has reached capacity');
+          const tt =
+            ttId && claimsByTicketType.has(ttId)
+              ? await tx.ticketType.findUnique({
+                  where: { id: ttId },
+                  select: { id: true, capacity: true },
+                })
+              : null;
+
+          let claimedCapacity = false;
+          let ticketCodeId = null;
+
+          try {
+            if (tt) {
+              const capacityClaim = await tx.ticketType.updateMany({
+                where: {
+                  id: tt.id,
+                  OR: [{ capacity: null }, { quantitySold: { lt: tt.capacity } }],
+                },
+                data: { quantitySold: { increment: 1 } },
+              });
+              if (capacityClaim.count === 0) {
+                throw new Error('Ticket type has reached capacity');
+              }
+              claimedCapacity = true;
             }
-            await tx.ticketType.update({
-              where: { id: ttId },
-              data: { quantitySold: { increment: 1 } },
+
+            let ticketCode = null;
+            for (let attempt = 0; attempt < MAX_TICKET_CODE_ATTEMPTS; attempt++) {
+              try {
+                ticketCode = await tx.ticketCode.create({
+                  data: {
+                    eventId,
+                    code: generateTicketCode(eventId),
+                    status: 'USED',
+                    attendeeEmail: entry.validation.email,
+                    attendeeName: entry.validation.name,
+                  },
+                });
+                break;
+              } catch (err) {
+                if (err.code !== 'P2002' || attempt === MAX_TICKET_CODE_ATTEMPTS - 1) {
+                  throw err;
+                }
+              }
+            }
+            ticketCodeId = ticketCode.id;
+
+            const registration = await tx.registration.create({
+              data: {
+                eventId,
+                ticketCodeId: ticketCode.id,
+                attendeeEmail: entry.validation.email,
+                attendeeName: entry.validation.name,
+                phone: entry.validation.phone || null,
+                ticketTypeId: ttId || null,
+                source: 'IMPORT',
+                status: 'CONFIRMED',
+                qrIssued: true,
+                qrIssuedAt: new Date(),
+              },
+            });
+
+            const rawToken = crypto.randomBytes(32).toString('hex');
+            await tx.qrToken.create({
+              data: {
+                registrationId: registration.id,
+                tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+                expiresAt: new Date(
+                  new Date(event.endTime).getTime() + constants.QR.EXPIRY_HOURS * 60 * 60 * 1000
+                ),
+              },
+            });
+
+            batchAttendees.push({ registration, rawToken });
+          } catch (err) {
+            if (claimedCapacity) {
+              await tx.ticketType
+                .update({ where: { id: tt.id }, data: { quantitySold: { decrement: 1 } } })
+                .catch(() => {});
+            }
+            if (ticketCodeId) {
+              await tx.ticketCode
+                .delete({ where: { id: ticketCodeId } })
+                .catch(() => {});
+            }
+            failedRows++;
+            allErrors.push({
+              row: entry.rowNumber,
+              email: entry.validation.email,
+              error: err && err.message ? err.message : 'Database error during batch processing',
             });
           }
-
-          const ticketCode = await tx.ticketCode.create({
-            data: {
-              eventId,
-              code: generateTicketCode(eventId),
-              status: 'USED',
-              attendeeEmail: entry.validation.email,
-              attendeeName: entry.validation.name,
-            },
-          });
-
-          const registration = await tx.registration.create({
-            data: {
-              eventId,
-              ticketCodeId: ticketCode.id,
-              attendeeEmail: entry.validation.email,
-              attendeeName: entry.validation.name,
-              phone: entry.validation.phone || null,
-              ticketTypeId: entry.validation.ticketTypeId || null,
-              source: 'IMPORT',
-              status: 'CONFIRMED',
-              qrIssued: true,
-              qrIssuedAt: new Date(),
-            },
-          });
-          createdRegistrations.push(registration);
-
-          const rawToken = crypto.randomBytes(32).toString('hex');
-          await tx.qrToken.create({
-            data: {
-              registrationId: registration.id,
-              tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
-              expiresAt: event.endTime,
-            },
-          });
         }
       });
 
-      successRows += currentBatch.length;
+      createdAttendees.push(...batchAttendees);
+      successRows += batchAttendees.length;
 
-      for (const registration of createdRegistrations) {
+      for (const { registration } of batchAttendees) {
         try {
           emitRegistrationNew(getIO(), eventId, {
             registrationId: registration.id,
@@ -817,6 +641,14 @@ export async function processImportFile({
   });
 
   if (sendEmails) {
+    if (createdAttendees.length > 0) {
+      await Promise.all(
+        createdAttendees.map(({ registration, rawToken }) =>
+          sendQrIssuedEmail({ registration, rawToken, event })
+        )
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: uploadedById },
       select: { email: true },
@@ -860,6 +692,39 @@ export async function processImportFile({
   }
 
   return updatedBatch;
+}
+
+/**
+ * Send the per-attendee QR ticket email after a successful import.
+ * Fire-and-forget: email failures must never fail the import.
+ *
+ * @param {Object} options - { registration, rawToken, event }
+ */
+async function sendQrIssuedEmail({ registration, rawToken, event }) {
+  try {
+    const qrImage = await qrService.createQrImage(rawToken);
+    const qrCodeUrl = `data:image/png;base64,${qrImage.toString('base64')}`;
+
+    await sendNotification({
+      recipient: registration.attendeeEmail,
+      subject: `Your QR Ticket: ${event.title}`,
+      template: 'qr-issued',
+      context: {
+        name: registration.attendeeName,
+        eventName: event.title,
+        eventDate: new Date(event.startTime).toLocaleString(),
+        qrCodeUrl,
+        qrData: rawToken,
+      },
+      eventId: event.id,
+      registrationId: registration.id,
+    });
+  } catch (err) {
+    logger.warn(
+      { err: err.message, email: registration.attendeeEmail, registrationId: registration.id },
+      'Failed to send import QR ticket email'
+    );
+  }
 }
 
 /**

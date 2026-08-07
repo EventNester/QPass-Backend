@@ -107,11 +107,11 @@ describe('Password Service', () => {
       mRedisClient.set.mockResolvedValue('OK');
       mRedisClient.del.mockResolvedValue(1);
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
-      sendPasswordResetEmail.mockRejectedValue(new Error('Brevo API unavailable'));
+      sendPasswordResetEmail.mockRejectedValue(new Error('SMTP connection timeout'));
 
       const result = await forgotPassword(mockUser.email);
 
-      expect(result).toEqual({ success: false, error: 'Brevo API unavailable' });
+      expect(result).toEqual({ success: false, error: 'SMTP connection timeout' });
       expect(result.resetToken).toBeUndefined();
       const tokenKey = mRedisClient.set.mock.calls[0][0];
       await vi.waitFor(() => {
