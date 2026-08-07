@@ -131,22 +131,20 @@ describe('Email Service', () => {
     });
   });
 
-  describe('sendEmail', () => {
+  describe('sendEmail (MVP simulated no-op)', () => {
     test('should throw when the recipient is missing', async () => {
       await expect(
         sendEmail({ subject: 'No To', html: '<p>x</p>' })
       ).rejects.toThrow('Recipient (to) and content (template, html, or text) are required');
-      expect(m.mExecuteSmtpSend).not.toHaveBeenCalled();
     });
 
     test('should throw when no content is provided', async () => {
       await expect(
         sendEmail({ to: 'a@b.com', subject: 'No content' })
       ).rejects.toThrow('Recipient (to) and content (template, html, or text) are required');
-      expect(m.mExecuteSmtpSend).not.toHaveBeenCalled();
     });
 
-    test('should send email successfully on first attempt', async () => {
+    test('should report a simulated success without sending anything', async () => {
       const result = await sendEmail({
         to: 'test@example.com',
         subject: 'Welcome',
@@ -155,46 +153,12 @@ describe('Email Service', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.messageId).toContain('smtp-');
-      expect(m.mExecuteSmtpSend).toHaveBeenCalledTimes(1);
-      expect(m.mExecuteSmtpSend).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'test@example.com', subject: 'Welcome' })
-      );
+      expect(result.messageId).toMatch(/^simulated-/);
+      expect(result.previewUrl).toBeNull();
+      expect(m.mExecuteSmtpSend).not.toHaveBeenCalled();
     });
 
-    test('should retry on transient network failures and succeed', async () => {
-      m.mExecuteSmtpSend
-        .mockRejectedValueOnce(new m.MockSmtpError('Timeout error', 'ETIMEDOUT'))
-        .mockRejectedValueOnce(new m.MockSmtpError('Reset error', 'ECONNRESET'))
-        .mockResolvedValueOnce(true);
-
-      const result = await sendEmail({
-        to: 'retry@example.com',
-        subject: 'Retry Test',
-        html: '<p>Test</p>',
-      });
-
-      expect(result.success).toBe(true);
-      expect(m.mExecuteSmtpSend).toHaveBeenCalledTimes(3);
-    });
-
-    test('should not retry on terminal application auth/credential logic issues', async () => {
-      m.mExecuteSmtpSend.mockRejectedValue(
-        new m.MockSmtpError('Invalid SMTP Credentials', 'EAUTH', 535)
-      );
-
-      const res = await sendEmail({
-        to: 'fail@example.com',
-        subject: 'Fail Test',
-        html: '<p>Test</p>',
-      });
-
-      expect(res.success).toBe(false);
-      expect(res.error).toBe('Invalid SMTP Credentials');
-      expect(m.mExecuteSmtpSend).toHaveBeenCalledTimes(1);
-    });
-
-    test('should fail safely when SMTP credentials are not configured', async () => {
+    test('should succeed even when SMTP credentials are not configured', async () => {
       m.mGetConfig.mockReturnValue({ EMAIL_HOST_USER: null, EMAIL_HOST_PASSWORD: null });
 
       const res = await sendEmail({
@@ -203,9 +167,8 @@ describe('Email Service', () => {
         html: '<p>Test</p>',
       });
 
-      expect(res.success).toBe(false);
-      expect(res.error).toBe('Email not sent: Gmail SMTP is not configured');
-      expect(m.mExecuteSmtpSend).not.toHaveBeenCalled();
+      expect(res.success).toBe(true);
+      expect(res.messageId).toMatch(/^simulated-/);
     });
   });
 });

@@ -35,9 +35,8 @@ const envSchema = z.object({
 
   EMAIL_HOST: z.string().default("smtp.gmail.com"),
   EMAIL_PORT: z.coerce.number().default(465),
-  EMAIL_HOST_USER: z.string().email("Invalid SMTP email config user"),
-  EMAIL_HOST_PASSWORD: z.string().min(1, "SMTP App Password is required for production email operations"),
-  
+  EMAIL_HOST_USER: z.string().optional().default(""),
+  EMAIL_HOST_PASSWORD: z.string().optional().default(""),
 
   FRONTEND_URL: z.string().optional().default("http://localhost:3000"),
 
@@ -55,25 +54,6 @@ const envSchema = z.object({
       message: "EMAIL_HOST_USER must be a valid email address (e.g., your-account@gmail.com)",
       path: ["EMAIL_HOST_USER"],
     });
-  }
-
-  if (env.NODE_ENV === "production") {
-    if (!env.EMAIL_HOST_USER) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "EMAIL_HOST_USER is required in production environments",
-        path: ["EMAIL_HOST_USER"],
-      });
-    }
-    
-    // Checks that a password exists and isn't just an empty string
-    if (!env.EMAIL_HOST_PASSWORD || env.EMAIL_HOST_PASSWORD.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "EMAIL_HOST_PASSWORD (Google App Password) is required in production environments",
-        path: ["EMAIL_HOST_PASSWORD"],
-      });
-    }
   }
 });
 

@@ -520,7 +520,9 @@ export async function processImportFile({
               const capacityClaim = await tx.ticketType.updateMany({
                 where: {
                   id: tt.id,
-                  OR: [{ capacity: null }, { quantitySold: { lt: tt.capacity } }],
+                  ...(tt.capacity === null
+                    ? { capacity: null }
+                    : { OR: [{ capacity: null }, { quantitySold: { lt: tt.capacity } }] }),
                 },
                 data: { quantitySold: { increment: 1 } },
               });

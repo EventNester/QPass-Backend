@@ -89,14 +89,15 @@ describe('Password Service', () => {
       expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockUser.email, result.resetToken);
     });
 
-    test('should not return the reset token in production', async () => {
+    test('should return the reset token in production (MVP has no email delivery)', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       prisma.user.findUnique.mockResolvedValue(mockUser);
       mRedisClient.set.mockResolvedValue('OK');
 
       const result = await forgotPassword(mockUser.email);
 
-      expect(result).toEqual({});
+      expect(result.resetToken).toBeDefined();
+      expect(typeof result.resetToken).toBe('string');
       expect(mRedisClient.set).toHaveBeenCalled();
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
       expect(sendPasswordResetEmail).toHaveBeenCalled();
