@@ -138,6 +138,113 @@ export async function acceptAdminInvite({ token, name, password }) {
 }
 
 /**
+ * List registered users for the admin "users directory".
+ *
+ * Only returns real accounts from the `users` table (soft-deleted users are
+ * excluded). "Derived" rows — actors inferred from audit logs or event owners
+ * that do not correspond to a registered account — are never produced here, so
+ * only real, deactivatable users are listed. ADMIN role enforced at the route.
+ *
+ * @param {Object} [query] - { page, limit, search }
+ * @returns {Promise<{users: Object[], pagination: Object}>}
+ */
+export async function listUsers({
+  page,
+  limit,
+  search,
+} = {}) {
+  const pageNum = page ?? constants.PAGINATION.DEFAULT_PAGE;
+  const limitNum = Math.min(
+    limit ?? constants.PAGINATION.DEFAULT_LIMIT,
+    constants.PAGINATION.MAX_LIMIT
+  );
+  const skip = (pageNum - 1) * limitNum;
+
+  const where = {
+    deletedAt: null,
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limitNum,
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    users,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+    },
+  };
+}
+
+/**
+ * Deactivate a user's account (set status to INACTIVE) so they can no longer
+ * sign in or act. Only a real, non-deleted account can be deactivated — an id
+ * that references no user (e.g. a frontend "derived" row) yields 404. Idempotent:
+ * deactivating an already-INACTIVE user succeeds without changes. Cannot be used
+ * on your own account. ADMIN role enforced at the route.
+ *
+ * @param {Object} params - { userId }
+ * @param {string} actorId - ADMIN performing the action
+ * @returns {Promise<Object>} Updated public user fields
+ */
+export async function deactivateUser({ userId }, actorId) {
+  if (userId === actorId) {
+    throw new ForbiddenError(msg.ADMIN.CANNOT_DEACTIVATE_SELF);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.deletedAt) {
+    throw new NotFoundError(msg.ADMIN.USER_NOT_FOUND);
+  }
+
+  if (user.status === "INACTIVE") {
+    return toPublicUser(user);
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { status: "INACTIVE" },
+  });
+
+  writeAuditLog({
+    actorId,
+    action: "ADMIN_USER_DEACTIVATED",
+    entity: "User",
+    entityId: userId,
+    beforeSnapshot: { status: user.status },
+    afterSnapshot: { status: updated.status },
+  });
+
+  return toPublicUser(updated);
+}
+
+/**
  * Promote an existing (non-deleted) user to ADMIN. Idempotent — promoting a
  * user who is already an ADMIN succeeds without changes. Only callable by an
  * existing ADMIN (enforced at the route layer).
