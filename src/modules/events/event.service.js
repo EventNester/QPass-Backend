@@ -65,6 +65,33 @@ export const createEvent = async (eventData, ownerId) => {
   }
 };
 
+// List all events the caller is assigned to as active staff.
+// Returns a flat list of events regardless of ownership, so staff can
+// reach their assignments from any device.
+export const listAssignedEvents = async (userId) => {
+  const assignments = await prisma.eventStaffAssignment.findMany({
+    where: {
+      userId,
+      active: true,
+      event: { deletedAt: null },
+    },
+    select: {
+      permissionScope: true,
+      assignedAt: true,
+      event: true,
+    },
+    orderBy: { assignedAt: "desc" },
+  });
+
+  return {
+    events: assignments.map(({ permissionScope, assignedAt, event }) => ({
+      ...event,
+      permissionScope,
+      assignedAt,
+    })),
+  };
+};
+
 // Get one event (owner or admin only)
 export const getEvent = async (eventId, userId, userRole) => {
   const event = await prisma.event.findFirst({

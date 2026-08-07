@@ -2,6 +2,7 @@ import {
   createEvent,
   getEvent,
   listEvents,
+  listAssignedEvents,
   updateEvent,
   deleteEvent,
   publishEvent,
@@ -63,6 +64,17 @@ export const getEventController = async (req, res, next) => {
     const event = await getEvent(id, req.user.id, req.user.role);
 
     return success(res, event);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// List events the caller is assigned to as staff
+export const listAssignedEventsController = async (req, res, next) => {
+  try {
+    const result = await listAssignedEvents(req.user.sub);
+
+    return success(res, result);
   } catch (error) {
     next(error);
   }
