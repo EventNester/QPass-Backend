@@ -1,3 +1,7 @@
+process.env.DATABASE_URL ||= "postgresql://postgres:postgres@localhost:5432/qpass_test?schema=public";
+process.env.JWT_SECRET ||= "test_secret_key_min_32_bytes_long_here";
+process.env.JWT_REFRESH_SECRET ||= "test_refresh_secret_key_min_32_bytes";
+
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
@@ -12,6 +16,26 @@ const mService = vi.hoisted(() => ({
 }));
 
 vi.mock("../checkins.service.js", () => mService);
+
+vi.mock("../../auth/auth.middleware.js", async () => {
+  const { verifyAccessToken } = await import("../../../utils/jwt.utils.js");
+  return {
+    requireAuth: async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ status: "error", message: "Unauthorized" });
+      }
+      try {
+        const token = authHeader.split(" ")[1];
+        const decoded = verifyAccessToken(token);
+        req.user = { ...decoded, id: decoded.sub };
+        next();
+      } catch {
+        return res.status(401).json({ status: "error", message: "Unauthorized" });
+      }
+    },
+  };
+});
 
 const EVENT_ID = "11111111-1111-1111-1111-111111111111";
 

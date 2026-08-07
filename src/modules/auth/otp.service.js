@@ -26,9 +26,7 @@ export async function sendOtp({ email }) {
 
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (!user || user.deletedAt || user.emailVerifiedAt) {
-    return process.env.NODE_ENV === 'production'
-      ? { success: true }
-      : { success: true, sent: false };
+    return { success: true, sent: false };
   }
 
   const code = generateOtp();
@@ -47,12 +45,10 @@ export async function sendOtp({ email }) {
       await redis.del(`${REDIS_PREFIX}${normalizedEmail}`);
     } catch { /* ignore cleanup error */ }
     logger.error({ err: emailResult.error || 'unknown', email: normalizedEmail }, 'OTP email failed to send');
-    return process.env.NODE_ENV === 'production'
-      ? { success: true }
-      : { success: false, error: emailResult.error || 'Failed to send verification code' };
+    return { success: false, error: emailResult.error || 'Failed to send verification code' };
   }
 
-  return process.env.NODE_ENV === 'production' ? { success: true } : { success: true, code };
+  return { success: true, code };
 }
 
 /**

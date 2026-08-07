@@ -2,7 +2,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import ejs from 'ejs';
 import { logger, getConfig } from '../../config/index.js';
-import { sendEmail as executeSmtpSend } from '../../utils/email.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +23,8 @@ const TEMPLATE_MAP = {
 };
 
 /**
- * @returns {boolean} True when the Gmail SMTP server environment details are configured
+ * @returns {boolean} True when SMTP credentials are configured. Email delivery is
+ * disabled for the MVP, so this only reflects whether stage-two config exists.
  */
 export function isEmailConfigured() {
   const config = getConfig();
@@ -37,56 +37,11 @@ export async function renderTemplate(templateName, variables = {}) {
   const templatePath = path.join(templatesDir, fileName);
 
   const html = await ejs.renderFile(templatePath, {
-    appName: 'QPass', 
+    appName: 'QPass',
     year: new Date().getFullYear(),
     ...variables,
   });
   return html;
-}
-
-// Rewritten to accurately catch transient Nodemailer connection / network drops 
-function isRetryableError(error) {
-  const code = error?.code;
-  const responseCode = error?.responseCode;
-
-  // Catch network drops or transient 4xx / SMTP busy statuses
-  return Boolean(
-    code === "ECONNRESET" ||
-    code === "ECONNABORTED" ||
-    code === "ETIMEDOUT" ||
-    code === "ECONNREFUSED" ||
-    code === "ENOTFOUND" ||
-    code === "EAPI" ||
-    (responseCode && responseCode >= 400 && responseCode < 500)
-  );
-}
-
-async function sendWithRetry(payload, maxAttempts = 3) {
-  let lastError;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      // Proxies directly out through your new Nodemailer engine
-      const info = await executeSmtpSend(payload);
-      return info;
-    } catch (error) {
-      lastError = error;
-      logger.warn({ attempt, maxAttempts, err: error.message }, `Email send attempt ${attempt} failed`);
-      if (!isRetryableError(error) || attempt >= maxAttempts) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
-    }
-  }
-  throw lastError;
-}
-
-function htmlToPlainText(html) {
-  return html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /**
@@ -97,56 +52,29 @@ export function maskRecipient(to) {
 }
 
 /**
- * Main wrapper called globally by your notifications system architecture
+ * Email delivery is deferred to stage two for the MVP. This is a simulated no-op
+ * that always reports success so the product flow (endpoints and UI) can complete
+ * without sending verification emails. Notification records are still created and
+ * marked as SENT by the notification service.
  */
-export async function sendEmail({ to, subject, template, context = {}, text, html, maxAttempts = 3 }) {
+export async function sendEmail({ to, subject, template, text, html }) {
   if (!to || (!template && !html && !text)) {
     throw new Error('Recipient (to) and content (template, html, or text) are required');
   }
 
   const maskedTo = maskRecipient(to);
 
-  if (!isEmailConfigured()) {
-    logger.error(
-      { to: maskedTo, subject },
-      'Email NOT sent — SMTP Credentials are missing; notification marked as failed'
-    );
-    return {
-      success: false,
-      error: 'Email not sent: Gmail SMTP is not configured',
-      messageId: null,
-      info: null,
-      previewUrl: null,
-    };
-  }
+  logger.info(
+    { to: maskedTo, subject, template },
+    'Email delivery disabled in MVP — simulated successful send'
+  );
 
-  try {
-    let renderedHtml = html;
-    if (template && !renderedHtml) {
-      renderedHtml = await renderTemplate(template, { ...context, subject });
-    }
-
-    const plainText = text || (renderedHtml ? htmlToPlainText(renderedHtml) : undefined);
-
-    // Triggers the delivery workflow
-    await sendWithRetry({ to, subject, html: renderedHtml, text: plainText }, maxAttempts);
-
-    logger.info({ to: maskedTo, subject }, 'Email sent successfully via Gmail SMTP Gateway');
-
-    return {
-      success: true,
-      messageId: `smtp-${Date.now()}`, // Generates consistent transaction hash schema fallback
-      info: { status: 'delivered' },
-      previewUrl: null,
-    };
-  } catch (error) {
-    logger.error({ err: error, to: maskedTo, subject }, 'Email send failed (non-blocking)');
-    return {
-      success: false,
-      error: error.message || 'Email send failure',
-      messageId: null,
-      info: null,
-      previewUrl: null,
-    };
-  }
+  return {
+    success: true,
+    messageId: `simulated-${Date.now()}`,
+    info: { status: 'simulated' },
+    previewUrl: null,
+  };
 }
+
+export default { sendEmail, renderTemplate, isEmailConfigured, maskRecipient };

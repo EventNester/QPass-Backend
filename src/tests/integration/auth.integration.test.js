@@ -4,31 +4,14 @@ import app from '../../app.js';
 import prisma from '../../database/index.js';
 import { hashToken } from '../../utils/crypto.js';
 
+process.env.DATABASE_URL ||= 'postgresql://postgres:postgres@localhost:5432/qpass_test?schema=public';
+process.env.JWT_SECRET ||= 'test_secret_key_min_32_bytes_long_here';
+process.env.JWT_REFRESH_SECRET ||= 'test_refresh_secret_key_min_32_bytes';
+
 // Intercept rate limiting behaviors during testing
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   globalLimiter: (_req, _res, next) => next(),
   authLimiter: (_req, _res, next) => next(),
-}));
-
-// Mock the new config object state
-vi.mock('../../config/index.js', () => ({
-  getConfig: vi.fn(() => ({
-    EMAIL_HOST_USER: 'qpassevents@gmail.com',
-    EMAIL_HOST_PASSWORD: 'mock-app-password',
-    EMAIL_HOST: '://gmail.com',
-    EMAIL_PORT: 465,
-    NODE_ENV: 'production'
-  })),
-  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
-}));
-
-// Mock Nodemailer to trap API verification emails
-vi.mock('nodemailer', () => ({
-  default: {
-    createTransport: vi.fn(() => ({
-      sendMail: vi.fn(() => Promise.resolve({ messageId: 'smtp-auth-integration-msg' })),
-    })),
-  },
 }));
 
 vi.mock('../../utils/email.js', async (importOriginal) => {

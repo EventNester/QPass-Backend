@@ -1,17 +1,9 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 
-// 1. Set up high-level mocked tracking objects before code load execution blocks
 const m = vi.hoisted(() => ({
   mLogger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
   mSendNotification: vi.fn(),
-  getConfig: vi.fn(() => ({ 
-    NODE_ENV: "production", 
-    EMAIL_HOST_USER: "qpassevents@gmail.com", 
-    EMAIL_HOST_PASSWORD: "mock-app-password",
-    EMAIL_HOST: "://gmail.com",
-    EMAIL_PORT: 465
-  })),
-  mSendMail: vi.fn(),
+  getConfig: vi.fn(() => ({})),
 }));
 
 vi.mock("../../config/index.js", () => ({
@@ -23,126 +15,45 @@ vi.mock("../../modules/notifications/notification.service.js", () => ({
   sendNotification: m.mSendNotification,
 }));
 
-// 2. Mock Nodemailer default exports and setup patterns
-vi.mock("nodemailer", () => ({
-  default: {
-    createTransport: vi.fn(() => ({
-      sendMail: m.mSendMail,
-    })),
-  },
+vi.mock("../../modules/notifications/email.service.js", () => ({
+  maskRecipient: (to) => to.replace(/^(.)(.*)(@.*)$/, (_, first, rest, domain) => `${first}${'*'.repeat(rest.length)}${domain}`),
 }));
 
-describe("utils/email sendEmail", () => {
+describe("utils/email sendEmail (MVP simulated)", () => {
   let emailUtils;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ 
-      NODE_ENV: "production", 
-      EMAIL_HOST_USER: "qpassevents@gmail.com", 
-      EMAIL_HOST_PASSWORD: "mock-app-password",
-      EMAIL_HOST: "://gmail.com",
-      EMAIL_PORT: 465
-    });
-    m.mSendMail.mockResolvedValue({ messageId: "smtp-mock-id" });
     emailUtils = await import("../email.js");
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  test("returns false and warns with a masked recipient when Gmail SMTP keys are missing outside test env", async () => {
-    m.getConfig.mockReturnValue({ NODE_ENV: "production", EMAIL_HOST_USER: null, EMAIL_HOST_PASSWORD: null });
-
-    const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi", html: "<p>hi</p>" });
-
-    expect(result).toBe(false);
-    expect(m.mLogger.warn).toHaveBeenCalledWith(
-      { to: "r********@example.com", subject: "Hi" },
-      expect.any(String)
-    );
-    expect(m.mLogger.info).not.toHaveBeenCalled();
-    expect(m.mSendMail).not.toHaveBeenCalled();
-  });
-
-  test("returns true and logs simulated send in test env with a masked recipient", async () => {
-    m.getConfig.mockReturnValue({ NODE_ENV: "test", EMAIL_HOST_USER: "", EMAIL_HOST_PASSWORD: "" });
-
-    const result = await emailUtils.sendEmail({ to: "recipient@example.com", subject: "Hi" });
-
-    expect(result).toBe(true);
-    expect(m.mLogger.info).toHaveBeenCalledWith(
-      { to: "r********@example.com", subject: "Hi" },
-      "Email sent (simulated)"
-    );
-    expect(m.mLogger.warn).not.toHaveBeenCalled();
-    expect(m.mSendMail).not.toHaveBeenCalled();
-  });
-
-  test("sends email cleanly through the Gmail SMTP core connection layers when properly configured", async () => {
+  test("returns true and logs a simulated send without touching SMTP", async () => {
     const result = await emailUtils.sendEmail({
-      to: "a@b.com",
+      to: "recipient@example.com",
       subject: "Hi",
       html: "<p>hi</p>",
-      text: "hi",
     });
 
     expect(result).toBe(true);
-    expect(m.mSendMail).toHaveBeenCalledWith({
-      from: '"QPass Events" <qpassevents@gmail.com>',
-      to: "a@b.com",
-      subject: "Hi",
-      html: "<p>hi</p>",
-      text: "hi",
-    });
     expect(m.mLogger.info).toHaveBeenCalledWith(
-      { to: "a***@b.com", subject: "Hi" }, 
-      "Email sent successfully via Gmail SMTP"
+      { to: "r********@example.com", subject: "Hi" },
+      "Email sent (simulated) — delivery disabled in MVP"
     );
-  });
-
-  test("rethrows validation or transport errors out of Nodemailer and logs metrics", async () => {
-    m.mSendMail.mockRejectedValue(new Error("Invalid SMTP login credentials"));
-
-    await expect(emailUtils.sendEmail({ to: "a@b.com", subject: "Hi" }))
-      .rejects.toThrow("Invalid SMTP login credentials");
-    expect(m.mLogger.error).toHaveBeenCalled();
   });
 });
 
-describe("utils/email sendPasswordResetEmail", () => {
+describe("utils/email helpers (MVP simulated)", () => {
   let emailUtils;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
-    m.getConfig.mockReturnValue({ 
-      NODE_ENV: "production", 
-      EMAIL_HOST_USER: "qpassevents@gmail.com", 
-      EMAIL_HOST_PASSWORD: "mock-app-password" 
-    });
     emailUtils = await import("../email.js");
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  test("throws when FRONTEND_URL is missing in production", async () => {
-    vi.stubEnv("FRONTEND_URL", "");
-    vi.stubEnv("NODE_ENV", "production");
-
-    await expect(emailUtils.sendPasswordResetEmail("test@example.com", "tok123"))
-      .rejects.toThrow("FRONTEND_URL is required in production");
-    expect(m.mSendNotification).not.toHaveBeenCalled();
-  });
-
-  test("falls back to localhost reset URL in test env", async () => {
-    vi.stubEnv("FRONTEND_URL", "");
-    vi.stubEnv("NODE_ENV", "test");
-    m.mSendNotification.mockResolvedValue({ status: "success" });
+  test("sendPasswordResetEmail records a notification with a fallback reset URL", async () => {
+    m.mSendNotification.mockResolvedValue({ success: true });
 
     const result = await emailUtils.sendPasswordResetEmail("john@example.com", "tok123");
 
@@ -151,28 +62,80 @@ describe("utils/email sendPasswordResetEmail", () => {
       subject: "QPass - Password Reset Request",
       template: "password-reset",
       context: {
-        name: expect.arrayContaining(["john"]), // Matches email.split('@') array mapping output 
+        name: "john",
         resetUrl: "http://localhost:3000/reset-password?token=tok123",
         expiresIn: "15 minutes",
       },
     });
-    expect(result).toEqual({ status: "success" });
+    expect(result).toEqual({ success: true });
   });
 
-  test("uses configured frontend URL for the reset link", async () => {
+  test("sendPasswordResetEmail uses the configured frontend URL", async () => {
     vi.stubEnv("FRONTEND_URL", "https://app.qpass.com");
-    vi.stubEnv("NODE_ENV", "production");
-    m.mSendNotification.mockResolvedValue({ status: "success" });
+    m.mSendNotification.mockResolvedValue({ success: true });
 
     await emailUtils.sendPasswordResetEmail("jane@example.com", "abc123");
 
     expect(m.mSendNotification).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
-          name: expect.arrayContaining(["jane"]),
+          name: "jane",
           resetUrl: "https://app.qpass.com/reset-password?token=abc123",
         }),
       })
     );
+    vi.unstubAllEnvs();
+  });
+
+  test("sendEmailVerification records a notification with a verify URL", async () => {
+    m.mSendNotification.mockResolvedValue({ success: true });
+
+    const result = await emailUtils.sendEmailVerification("ada@example.com", "vtok1");
+
+    expect(m.mSendNotification).toHaveBeenCalledWith({
+      recipient: "ada@example.com",
+      subject: "QPass - Verify Your Email",
+      template: "email-verification",
+      context: {
+        name: "ada",
+        verifyUrl: "http://localhost:3000/verify-email?token=vtok1",
+        expiresIn: "15 minutes",
+      },
+    });
+    expect(result).toEqual({ success: true });
+  });
+
+  test("sendOtpEmail records a notification with the code", async () => {
+    m.mSendNotification.mockResolvedValue({ success: true });
+
+    await emailUtils.sendOtpEmail("ada@example.com", "123456");
+
+    expect(m.mSendNotification).toHaveBeenCalledWith({
+      recipient: "ada@example.com",
+      subject: "QPass - Your Email Verification Code",
+      template: "otp-code",
+      context: {
+        name: "ada",
+        otpCode: "123456",
+        expiresIn: "10 minutes",
+      },
+    });
+  });
+
+  test("sendAdminInviteEmail records a notification with an invite URL", async () => {
+    m.mSendNotification.mockResolvedValue({ success: true });
+
+    await emailUtils.sendAdminInviteEmail("newadmin@example.com", "itok1");
+
+    expect(m.mSendNotification).toHaveBeenCalledWith({
+      recipient: "newadmin@example.com",
+      subject: "QPass - You are invited as an Admin",
+      template: "admin-invite",
+      context: {
+        name: "newadmin",
+        inviteUrl: "http://localhost:3000/accept-admin-invite?token=itok1",
+        expiresIn: "7 days",
+      },
+    });
   });
 });

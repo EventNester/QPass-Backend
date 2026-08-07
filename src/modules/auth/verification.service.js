@@ -33,12 +33,10 @@ export async function requestEmailVerification(user) {
       await redis.del(`${REDIS_PREFIX}${verifyToken}`);
     } catch { /* ignore cleanup error */ }
     logger.error({ err: emailResult.error || 'unknown' }, 'Verification email failed to send');
-    return process.env.NODE_ENV === 'production'
-      ? { success: false }
-      : { success: false, error: emailResult.error || 'Failed to send verification email' };
+    return { success: false, error: emailResult.error || 'Failed to send verification email' };
   }
 
-  return process.env.NODE_ENV === 'production' ? { success: true } : { success: true, verifyToken };
+  return { success: true, verifyToken };
 }
 
 /**
