@@ -1,8 +1,8 @@
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
-import { createClient } from "redis";
 import { validateToken } from "../modules/auth/auth.service.js";
 import { getSocketConfig } from "../config/socket.config.js";
+import { createPubSubClients } from "../config/redis.js";
 import { logger, systemMessages } from "../config/index.js";
 import { dashboardRoom, scanRoom } from "./rooms.js";
 import prisma from "../database/index.js";
@@ -40,15 +40,9 @@ export async function initSocket(server) {
   });
 
   try {
-    const { host, port, password, database } = socketConfig.redis;
-    const redisOpts = {
-      socket: { host, port },
-      password: password || undefined,
-      database,
-    };
-
-    pubClient = createClient(redisOpts);
-    subClient = pubClient.duplicate();
+    const { pub, sub } = createPubSubClients();
+    pubClient = pub;
+    subClient = sub;
 
     const results = await Promise.allSettled([pubClient.connect(), subClient.connect()]);
     const failed = results.some((r) => r.status === "rejected");

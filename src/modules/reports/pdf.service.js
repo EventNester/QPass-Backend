@@ -1,5 +1,8 @@
 import PDFDocument from "pdfkit";
 
+const MIN_COL_WIDTH = 30;
+const MAX_COL_WIDTH = 220;
+
 export function generateTablePdf({ title, headers, rows }) {
   return new Promise((resolve, reject) => {
     try {
@@ -11,16 +14,42 @@ export function generateTablePdf({ title, headers, rows }) {
       doc.on("error", reject);
 
       const margin = 40;
-      const pageWidth = 842;
+      const pageWidth = doc.page.width;
       const usableWidth = pageWidth - margin * 2;
+      const pageBottomLimit = doc.page.height - margin;
 
-      const totalWeight = headers.reduce(
-        (sum, header) => sum + Math.max(header.length, 8),
-        0
+      const cellTexts = rows.map((row) =>
+        headers.map((_, index) => {
+          const value = row[index];
+          const str = value === null || value === undefined ? "" : String(value);
+          return str || "-";
+        })
       );
-      const colWidths = headers.map((header) =>
-        Math.floor((usableWidth * Math.max(header.length, 8)) / totalWeight)
+
+      doc.font("Helvetica").fontSize(9);
+      const contentWidths = headers.map((header, index) => {
+        let max = doc.widthOfString(header);
+        for (const cells of cellTexts) {
+          const w = doc.widthOfString(cells[index]);
+          if (w > max) max = w;
+        }
+        return max;
+      });
+
+      const weighted = contentWidths.map((w) =>
+        Math.min(Math.max(w + 8, MIN_COL_WIDTH), MAX_COL_WIDTH)
       );
+      const totalWeight = weighted.reduce((sum, w) => sum + w, 0);
+      const colWidths = weighted.map((w) =>
+        Math.floor((usableWidth * w) / totalWeight)
+      );
+
+      const remainder = usableWidth - colWidths.reduce((sum, w) => sum + w, 0);
+      if (remainder > 0) {
+        const widestIndex = colWidths.indexOf(Math.max(...colWidths));
+        colWidths[widestIndex] += remainder;
+      }
+
       const colX = [];
       let acc = margin;
       for (const width of colWidths) {
@@ -35,8 +64,6 @@ export function generateTablePdf({ title, headers, rows }) {
       );
       doc.moveDown(2);
 
-      const pageBottomLimit = 535;
-
       function drawTableHeader(y) {
         doc.font("Helvetica-Bold").fontSize(10);
         for (let i = 0; i < headers.length; i++) {
@@ -49,13 +76,7 @@ export function generateTablePdf({ title, headers, rows }) {
       let currentY = drawTableHeader(doc.y);
 
       doc.font("Helvetica").fontSize(9);
-      for (const row of rows) {
-        const cells = headers.map((_, index) => {
-          const value = row[index];
-          const str = value === null || value === undefined ? "" : String(value);
-          return str || "-";
-        });
-
+      for (const cells of cellTexts) {
         let maxHeight = 0;
         for (let i = 0; i < cells.length; i++) {
           const height = doc.heightOfString(cells[i], {

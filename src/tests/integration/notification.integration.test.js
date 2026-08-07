@@ -6,16 +6,24 @@ import {
   getNotificationById,
 } from '../../modules/notifications/notification.service.js';
 
-vi.mock('../../integrations/email/brevo.js', () => ({
-  sendTransactionalEmail: vi.fn(() => Promise.resolve({ messageId: 'integration-msg' })),
-  isBrevoConfigured: vi.fn(() => true),
-  BrevoApiError: class BrevoApiError extends Error {
-    constructor(message, status = 0, retryable = false) {
-      super(message);
-      this.name = 'BrevoApiError';
-      this.status = status;
-      this.retryable = retryable;
-    }
+// Mock the new config object so the tests think SMTP credentials are ready
+vi.mock('../../config/index.js', () => ({
+  getConfig: vi.fn(() => ({
+    EMAIL_HOST_USER: 'qpassevents@gmail.com',
+    EMAIL_HOST_PASSWORD: 'mock-app-password',
+    EMAIL_HOST: '://gmail.com',
+    EMAIL_PORT: 465,
+    NODE_ENV: 'production'
+  })),
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
+
+// Mock Nodemailer default exports to intercept downstream outbound emails cleanly
+vi.mock('nodemailer', () => ({
+  default: {
+    createTransport: vi.fn(() => ({
+      sendMail: vi.fn(() => Promise.resolve({ messageId: 'smtp-integration-msg' })),
+    })),
   },
 }));
 
@@ -142,4 +150,5 @@ describe('Notification Service Integration Tests', () => {
         )
       )
     );
-  });});
+  });
+});

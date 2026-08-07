@@ -89,14 +89,15 @@ describe('Password Service', () => {
       expect(sendPasswordResetEmail).toHaveBeenCalledWith(mockUser.email, result.resetToken);
     });
 
-    test('should not return the reset token in production', async () => {
+    test('should return the reset token in production (MVP has no email delivery)', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       prisma.user.findUnique.mockResolvedValue(mockUser);
       mRedisClient.set.mockResolvedValue('OK');
 
       const result = await forgotPassword(mockUser.email);
 
-      expect(result).toEqual({});
+      expect(result.resetToken).toBeDefined();
+      expect(typeof result.resetToken).toBe('string');
       expect(mRedisClient.set).toHaveBeenCalled();
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
       expect(sendPasswordResetEmail).toHaveBeenCalled();
@@ -107,11 +108,11 @@ describe('Password Service', () => {
       mRedisClient.set.mockResolvedValue('OK');
       mRedisClient.del.mockResolvedValue(1);
       const { sendPasswordResetEmail } = await import('../../../utils/email.js');
-      sendPasswordResetEmail.mockRejectedValue(new Error('Brevo API unavailable'));
+      sendPasswordResetEmail.mockRejectedValue(new Error('SMTP connection timeout'));
 
       const result = await forgotPassword(mockUser.email);
 
-      expect(result).toEqual({ success: false, error: 'Brevo API unavailable' });
+      expect(result).toEqual({ success: false, error: 'SMTP connection timeout' });
       expect(result.resetToken).toBeUndefined();
       const tokenKey = mRedisClient.set.mock.calls[0][0];
       await vi.waitFor(() => {

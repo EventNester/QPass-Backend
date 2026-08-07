@@ -1,5 +1,5 @@
 import { processImportFile, getImportBatchById, listImportBatchesByEvent, generateImportTemplate } from './import.service.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import { success } from '../../utils/response.js';
 import prisma from '../../database/index.js';
 import { ForbiddenError, NotFoundError } from '../../utils/error.js';
@@ -21,6 +21,7 @@ async function assertEventOwner(req, eventId) {
 }
 
 export const importAttendeesController = async (req, res, next) => {
+  const filePath = req.file?.path;
   try {
     const { eventId } = req.params;
     const file = req.file;
@@ -46,6 +47,10 @@ export const importAttendeesController = async (req, res, next) => {
     }, systemMessages.SUCCESS.IMPORT.COMPLETED);
   } catch (error) {
     next(error);
+  } finally {
+    if (filePath) {
+      await unlink(filePath).catch(() => {});
+    }
   }
 };
 

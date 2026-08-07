@@ -22,6 +22,7 @@ function countDistinctAttendees(ownScope, userId) {
     FROM registrations r
     INNER JOIN events e ON e.id = r.event_id
     WHERE e.deleted_at IS NULL
+      AND r.status <> 'CANCELLED'
     ${ownerClause}
   `;
 }
@@ -85,7 +86,7 @@ export async function getOverviewStats(userId, userRole, { scope } = {}) {
     await Promise.all([
       prisma.event.count({ where: eventWhere }),
       prisma.event.count({ where: { ...eventWhere, status: constants.EVENT_STATUS.PUBLISHED } }),
-      prisma.registration.count({ where: { event: eventWhere } }),
+      prisma.registration.count({ where: { event: eventWhere, status: { not: "CANCELLED" } } }),
       countDistinctAttendees(ownScope, userId),
       countRegisteredUsers(ownScope, userId),
     ]);

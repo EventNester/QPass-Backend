@@ -12,11 +12,13 @@ import { AppError } from "./utils/error.js";
 const config = getConfig();
 const app = express();
 
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: false }));
 const corsOrigins = parseCorsOrigins(config.CORS_ORIGIN);
-app.use(cors({ origin: corsOrigins, credentials: corsOrigins !== "*" }));app.use(globalLimiter);
+app.use(cors({ origin: corsOrigins, credentials: corsOrigins !== "*" }));
+app.use(globalLimiter);
 app.use(httpLogger);
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(sanitizeBody);
 
 app.use(router);

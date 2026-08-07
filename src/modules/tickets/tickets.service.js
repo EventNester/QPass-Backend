@@ -8,9 +8,10 @@ const MAX_PAGE_SIZE = 100;
 const msg = systemMessages.ERROR;
 
 /**
- * Helper to ensure the event exists and the user is its owner
+ * Helper to ensure the event exists and the user is its owner.
+ * Platform admins (ADMIN) are allowed through regardless of ownership.
  */
-async function checkEventOwnership(eventId, userId) {
+async function checkEventOwnership(eventId, userId, userRole) {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: { ownerId: true, deletedAt: true },
@@ -20,13 +21,13 @@ async function checkEventOwnership(eventId, userId) {
     throw new NotFoundError(msg.EVENT.NOT_FOUND);
   }
 
-  if (event.ownerId !== userId) {
+  if (event.ownerId !== userId && userRole !== constants.ROLES.ADMIN) {
     throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
   }
 }
 
-export async function createTicketType(eventId, userId, data) {
-  await checkEventOwnership(eventId, userId);
+export async function createTicketType(eventId, userId, userRole, data) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const MAX_RETRIES = 3;
 
@@ -67,8 +68,8 @@ export async function createTicketType(eventId, userId, data) {
   }
 }
 
-export async function getTicketTypes(eventId, userId) {
-  await checkEventOwnership(eventId, userId);
+export async function getTicketTypes(eventId, userId, userRole) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const ticketTypes = await prisma.ticketType.findMany({
     where: { eventId },
@@ -78,8 +79,8 @@ export async function getTicketTypes(eventId, userId) {
   return ticketTypes;
 }
 
-export async function updateTicketType(eventId, ticketTypeId, userId, data) {
-  await checkEventOwnership(eventId, userId);
+export async function updateTicketType(eventId, ticketTypeId, userId, userRole, data) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const ticketType = await prisma.ticketType.findFirst({
     where: { id: ticketTypeId, eventId },
@@ -106,8 +107,8 @@ export async function updateTicketType(eventId, ticketTypeId, userId, data) {
   return updated;
 }
 
-export async function deleteTicketType(eventId, ticketTypeId, userId) {
-  await checkEventOwnership(eventId, userId);
+export async function deleteTicketType(eventId, ticketTypeId, userId, userRole) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const deletedTicketType = await prisma.$transaction(async (tx) => {
     const ticketType = await tx.ticketType.findFirst({
@@ -158,9 +159,10 @@ export async function getTicketDetails(ticketId, userId) {
   if (!isOwner) {
     const isStaff = await prisma.eventStaffAssignment.findUnique({
       where: { eventId_userId: { eventId: registration.eventId, userId } },
+      select: { active: true },
     });
 
-    if (!isStaff) {
+    if (!isStaff?.active) {
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user || user.email.toLowerCase() !== registration.attendeeEmail.toLowerCase()) {
         throw new ForbiddenError(msg.EVENT.UNAUTHORIZED);
@@ -178,15 +180,15 @@ export async function getTicketDetails(ticketId, userId) {
   return { ...registration, qrDataUrl };
 }
 
-export async function listEventTickets(eventId, userId, filters = {}) {
-  await checkEventOwnership(eventId, userId);
+export async function listEventTickets(eventId, userId, userRole, filters = {}) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const { listRegistrationsByEvent } = await import("../registrations/registration.service.js");
   return listRegistrationsByEvent(eventId, filters.page, filters.limit, filters);
 }
 
-export async function exportEventTickets(eventId, userId, format) {
-  await checkEventOwnership(eventId, userId);
+export async function exportEventTickets(eventId, userId, userRole, format) {
+  await checkEventOwnership(eventId, userId, userRole);
 
   const registrations = await prisma.registration.findMany({
     where: { eventId },

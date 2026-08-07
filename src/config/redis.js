@@ -1,33 +1,59 @@
 import Redis from "ioredis";
 import logger from "./logger.js";
+import { getConfig } from "./index.js";
 
 let redis;
 
-export function createRedisClient() {
-  if (redis) return redis;
-
-  redis = new Redis({
-    host: process.env.REDIS_HOST || "localhost",
-    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
-    password: process.env.REDIS_PASSWORD || undefined,
-    db: parseInt(process.env.REDIS_DATABASE, 10) || 0,
+function getRedisOptions() {
+  const config = getConfig();
+  return {
+    host: config.REDIS_HOST || "localhost",
+    port: config.REDIS_PORT || 6379,
+    password: config.REDIS_PASSWORD || undefined,
+    db: config.REDIS_DATABASE || 0,
     retryStrategy(times) {
       return Math.min(times * 50, 2000);
     },
     maxRetriesPerRequest: 3,
-  });
+  };
+}
 
-  redis.on("connect", () => logger.info("Redis client connected"));
-  redis.on("ready", () => logger.info("Redis client ready"));
-  redis.on("error", (err) => logger.error("Redis client error:", err.message));
-  redis.on("close", () => logger.warn("Redis client connection closed"));
+function attachHandlers(client) {
+  client.on("connect", () => logger.info("Redis client connected"));
+  client.on("ready", () => logger.info("Redis client ready"));
+  client.on("error", (err) => logger.error("Redis client error:", err.message));
+  client.on("close", () => logger.warn("Redis client connection closed"));
+  return client;
+}
 
+function buildRedisClient(options = getRedisOptions()) {
+  return attachHandlers(new Redis(options));
+}
+
+export function createRedisClient() {
+  if (redis) return redis;
+
+  redis = buildRedisClient();
   return redis;
 }
 
 export function getRedisClient() {
   if (!redis) redis = createRedisClient();
   return redis;
+}
+
+/**
+ * Create a dedicated pub/sub client pair for the Socket.IO Redis adapter.
+ * ioredis requires two distinct connections (publish + subscribe), so this
+ * always returns fresh clients — never the shared singleton — and the socket
+ * layer is free to close them without affecting other Redis consumers.
+ *
+ * @returns {{ pub: import("ioredis").Redis, sub: import("ioredis").Redis }}
+ */
+export function createPubSubClients() {
+  const pub = buildRedisClient();
+  const sub = pub.duplicate();
+  return { pub, sub };
 }
 
 export async function closeRedisClient() {

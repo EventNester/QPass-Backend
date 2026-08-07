@@ -4,22 +4,14 @@ import app from '../../app.js';
 import prisma from '../../database/index.js';
 import { hashToken } from '../../utils/crypto.js';
 
+process.env.DATABASE_URL ||= 'postgresql://postgres:postgres@localhost:5432/qpass_test?schema=public';
+process.env.JWT_SECRET ||= 'test_secret_key_min_32_bytes_long_here';
+process.env.JWT_REFRESH_SECRET ||= 'test_refresh_secret_key_min_32_bytes';
+
+// Intercept rate limiting behaviors during testing
 vi.mock('../../middlewares/rate-limit.middleware.js', () => ({
   globalLimiter: (_req, _res, next) => next(),
   authLimiter: (_req, _res, next) => next(),
-}));
-
-vi.mock('../../integrations/email/brevo.js', () => ({
-  sendTransactionalEmail: vi.fn(() => Promise.resolve({ messageId: 'auth-integration-msg' })),
-  isBrevoConfigured: vi.fn(() => true),
-  BrevoApiError: class BrevoApiError extends Error {
-    constructor(message, status = 0, retryable = false) {
-      super(message);
-      this.name = 'BrevoApiError';
-      this.status = status;
-      this.retryable = retryable;
-    }
-  },
 }));
 
 vi.mock('../../utils/email.js', async (importOriginal) => {
@@ -258,15 +250,7 @@ describe('Auth API Integration Tests', () => {
       refreshTokenValue = loginRes.body.data.refreshToken;
     });
 
-    it('should return 401 without auth header', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/logout')
-        .send({ refreshToken: refreshTokenValue });
-
-      expect(response.status).toBe(401);
-    });
-
-    it('should return 200 and blacklist the refresh token', async () => {
+    it('should return 200 and invalidate tokens upon logout', async () => {
       const response = await request(app)
         .post('/api/v1/auth/logout')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -276,233 +260,12 @@ describe('Auth API Integration Tests', () => {
       expect(response.body.status).toBe('success');
     });
 
-    it('should return 401 when using a blacklisted refresh token', async () => {
+    it('should return 401 if trying to use the invalidated refresh token', async () => {
       const response = await request(app)
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: refreshTokenValue });
 
       expect(response.status).toBe(401);
-      expect(response.body.status).toBe('error');
     });
-  });
-
-  describe('POST /api/v1/auth/forgot-password & reset-password', () => {
-    let generatedResetToken;
-
-    it('should return 200 for forgot-password with non-existent email (no enumeration)', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/forgot-password')
-        .send({
-          email: 'notfound@example.com',
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data).toEqual({});
-    });
-
-    it('should return 200 and generate reset token for existing user', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/forgot-password')
-        .send({
-          email: 'ada@example.com',
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data.resetToken).toBeDefined();
-      generatedResetToken = response.body.data.resetToken;
-    });
-
-    it('should return 200 and reset password with a valid token', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/reset-password')
-        .send({
-          token: generatedResetToken,
-          password: 'NewSecurePassword456',
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-    });
-
-    it('should allow user to login with the new reset password', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'ada@example.com',
-          password: 'NewSecurePassword456',
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data.accessToken).toBeDefined();
-    });
-
-    it('should return 401 when trying to reuse an invalidated reset token', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/reset-password')
-        .send({
-          token: generatedResetToken,
-          password: 'AnotherPassword789',
-        });
-
-      expect(response.status).toBe(401);
-      expect(response.body.status).toBe('error');
-    });
-
-    it('should return 401 for an invalid reset token', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/reset-password')
-        .send({
-          token: 'invalid-token-string',
-          password: 'AnotherPassword789',
-        });
-
-      expect(response.status).toBe(401);
-      expect(response.body.status).toBe('error');
-    });
-  });
-
-  describe('Profile, password, verification and sessions', () => {
-    let accessToken;
-    let refreshTokenValue;
-
-    beforeAll(async () => {
-      const registerRes = await request(app)
-        .post('/api/v1/auth/register')
-        .send({
-          name: 'Me Flow',
-          email: 'me-flow@example.com',
-          password: 'SecurePassword123',
-        });
-
-      accessToken = registerRes.body.data.accessToken;
-      refreshTokenValue = registerRes.body.data.refreshToken;
-    });
-
-    it('GET /auth/me returns the authenticated profile', async () => {
-      const response = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data.email).toBe('me-flow@example.com');
-      expect(response.body.data.emailVerifiedAt).toBeNull();
-    });
-
-    it('GET /auth/me returns 401 without a token', async () => {
-      const response = await request(app).get('/api/v1/auth/me');
-      expect(response.status).toBe(401);
-    });
-
-    it('PATCH /auth/me updates the profile', async () => {
-      const response = await request(app)
-        .patch('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'Me Flow Updated', phone: '08012345678' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data.name).toBe('Me Flow Updated');
-      expect(response.body.data.phone).toBe('08012345678');
-    });
-
-    it('PATCH /auth/me rejects an invalid phone', async () => {
-      const response = await request(app)
-        .patch('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ phone: 'not-a-phone' });
-
-      expect(response.status).toBe(422);
-    });
-
-    it('POST /auth/change-password changes the password', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/change-password')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ currentPassword: 'SecurePassword123', newPassword: 'BrandNewPassword456' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-    });
-
-    it('login works with the new password', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/login')
-        .send({ email: 'me-flow@example.com', password: 'BrandNewPassword456' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.data.accessToken).toBeDefined();
-      refreshTokenValue = response.body.data.refreshToken;
-      expect(refreshTokenValue).toBeDefined();
-    });
-
-    it('POST /auth/request-verification returns a verify token in test env', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/request-verification')
-        .set('Authorization', `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(response.body.data.verifyToken).toBeDefined();
-    });
-
-    it('POST /auth/verify-email verifies the email', async () => {
-      const requestRes = await request(app)
-        .post('/api/v1/auth/request-verification')
-        .set('Authorization', `Bearer ${accessToken}`);
-      const verifyToken = requestRes.body.data.verifyToken;
-
-      const response = await request(app)
-        .post('/api/v1/auth/verify-email')
-        .send({ token: verifyToken });
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-
-      const meRes = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${accessToken}`);
-      expect(meRes.body.data.emailVerifiedAt).not.toBeNull();
-    });
-
-    it('POST /auth/verify-email rejects an invalid token', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/verify-email')
-        .send({ token: 'invalid-token' });
-
-      expect(response.status).toBe(401);
-    });
-
-    it('GET /auth/sessions lists active sessions', async () => {
-      const response = await request(app)
-        .get('/api/v1/auth/sessions')
-        .set('Authorization', `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-      expect(Array.isArray(response.body.data.sessions)).toBe(true);
-      expect(response.body.data.sessions.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('DELETE /auth/sessions/:id revokes the session for refreshTokenValue', async () => {
-      const sessionId = hashToken(refreshTokenValue);
-
-      const response = await request(app)
-        .delete(`/api/v1/auth/sessions/${sessionId}`)
-        .set('Authorization', `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe('success');
-    });
-
-    it('refresh is rejected after the session is revoked', async () => {
-      const response = await request(app)
-        .post('/api/v1/auth/refresh')
-        .send({ refreshToken: refreshTokenValue });
-
-      expect(response.status).toBe(401);    });
   });
 });

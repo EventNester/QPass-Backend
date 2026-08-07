@@ -59,7 +59,7 @@ describe("Analytics Service Tests", () => {
       where: { deletedAt: null, ownerId: mockOrganizerId },
     });
     expect(prisma.registration.count).toHaveBeenCalledWith({
-      where: { event: { deletedAt: null, ownerId: mockOrganizerId } },
+      where: { event: { deletedAt: null, ownerId: mockOrganizerId }, status: { not: "CANCELLED" } },
     });
     expect(result.totalAttendees).toBe(7);
     expect(result.registeredUsers).toBe(5);
