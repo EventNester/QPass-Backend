@@ -26,3 +26,9 @@ export const acceptAdminInviteSchema = z.object({
 export const adminUserParamsSchema = z.object({
   userId: z.string().uuid("Invalid user ID format"),
 });
+
+export const listUsersQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+  search: z.string().trim().min(1).max(100).optional(),
+});

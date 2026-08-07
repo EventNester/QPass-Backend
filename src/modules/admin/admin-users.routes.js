@@ -4,17 +4,20 @@ import {
   sendAdminInviteController,
   acceptAdminInviteController,
   promoteAdminController,
+  listUsersController,
+  deactivateUserController,
 } from "./admin-users.controller.js";
 
 import { requireAuth } from "../auth/auth.middleware.js";
 import { requireRole } from "../../middlewares/rbac.middleware.js";
 import { authLimiter } from "../../middlewares/rate-limit.middleware.js";
-import { validate, validateParams } from "../../middlewares/validate.middleware.js";
+import { validate, validateParams, validateQuery } from "../../middlewares/validate.middleware.js";
 import {
   adminInviteSchema,
   adminInviteParamsSchema,
   acceptAdminInviteSchema,
   adminUserParamsSchema,
+  listUsersQuerySchema,
 } from "./admin-users.schema.js";
 
 const router = Router();
@@ -196,6 +199,104 @@ router.patch(
   requireRole("ADMIN"),
   validateParams(adminUserParamsSchema),
   promoteAdminController
+);
+
+/**
+ * @openapi
+ * /api/v1/admin/users:
+ *   get:
+ *     summary: List users for the directory
+ *     description: |
+ *       Returns the registered users directory (paginated, optional search).
+ *       Only real accounts from the users table are returned; "derived" rows
+ *       (actors inferred from audit logs / event owners) are never produced, so
+ *       every listed user can be deactivated. ADMIN role only.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Page number (default 1)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Results per page (default 20, max 100)
+ *       - in: query
+ *         name: search
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filter by name or email (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *       403:
+ *         description: Forbidden — caller must be an ADMIN
+ *       422:
+ *         description: "Validation error. Possible message: Invalid page, limit, or search parameter"
+ */
+router.get(
+  "/users",
+  requireAuth,
+  requireRole("ADMIN"),
+  validateQuery(listUsersQuerySchema),
+  listUsersController
+);
+
+/**
+ * @openapi
+ * /api/v1/admin/users/{userId}/deactivate:
+ *   post:
+ *     summary: Deactivate a user account
+ *     description: |
+ *       Sets a user's status to INACTIVE so they can no longer sign in or act.
+ *       Cannot be used on your own account. Idempotent — deactivating an already
+ *       INACTIVE user succeeds without changes. Failed for any id that references
+ *       no real account (e.g. a frontend "derived" row) with 404. ADMIN role only.
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: User ID to deactivate
+ *     responses:
+ *       200:
+ *         description: User deactivated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UserResponse'
+ *       401:
+ *         description: Unauthorized — missing or invalid Bearer token
+ *       403:
+ *         description: Forbidden — caller must be an ADMIN, or cannot deactivate your own account
+ *       404:
+ *         description: User not found
+ *       422:
+ *         description: "Validation error. Possible message: Invalid user ID format"
+ */
+router.post(
+  "/users/:userId/deactivate",
+  requireAuth,
+  requireRole("ADMIN"),
+  validateParams(adminUserParamsSchema),
+  deactivateUserController
 );
 
 export default router;
