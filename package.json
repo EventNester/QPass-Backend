@@ -4,8 +4,8 @@
   "description": "QR Code-Based Event Attendance & Ticket Verification System",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
+    "dev": "node api.js && nodemon src/server.js",
+    "start": "node api.js && node src/server.js",
     "test": "vitest",
     "test:run": "vitest run",
     "test:unit": "vitest run src/modules src/utils src/middlewares src/realtime",
@@ -20,7 +20,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "docs": "swagger-jsdoc -d swagger.json -o docs/swagger.yaml \"./src/routes/*.js\" \"./src/modules/*/*.routes.js\"",
-    "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('./src/database/schema.prisma'))require('child_process').execSync('prisma generate --schema=./src/database/schema.prisma',{stdio:'inherit'});\""
+    "prepare": "node scripts/prepare-prisma.cjs"
   },
   "repository": {
     "type": "git",
